@@ -1,6 +1,6 @@
 # Recetario personal para Android — Diseño
 
-Fecha: 2026-11-13 · Estado: borrador para aprobación
+Fecha: 2026-11-13 · Estado: listo para aprobación (revisado por un constructor)
 
 Bocetos aprobados (abrir en el navegador): `docs/superpowers/specs/2026-11-13-recetario-bocetos/`
 - `estilo-visual.html`: los tres temas sobre la pantalla de Inicio.
@@ -63,6 +63,7 @@ Por qué: el usuario quiere un lugar propio, agradable de usar, donde sus receta
 | Modo cocina | A) Un paso por pantalla · B) Lista con el paso actual resaltado | **B** (usuario; Claude recomendaba A) | El usuario prefiere ver todos los pasos a la vez. |
 | Apariencia | Un solo tema · tres temas | **Tres temas + Automático** (usuario) | Cálido y Fresco son claros; Nocturno es el modo oscuro. |
 | Cómo llega la app | A) GitHub Actions construye y publica el APK firmado · B) APK enviado por el chat | **A** (usuario) | Con B la llave de firma se perdería al cerrar la sesión y cada actualización obligaría a desinstalar y restaurar. |
+| Copia automática | A) Solo en el teléfono · B) Teléfono + un archivo en Drive sobrescrito cada semana · C) Drive con historial (cuenta de Google y proyecto en Google Cloud) | **B** (usuario) | A no protege si se pierde el teléfono. C exige configurar un proyecto en Google Cloud, justo lo que se evitó al no usar cuentas. Android no permite elegir una carpeta de Drive, pero sí un archivo. |
 
 ## 5. Etapas de entrega
 
@@ -216,10 +217,15 @@ Base de datos local (Room/SQLite) más archivos de imagen en el almacenamiento i
 ### 8.5 Copias de seguridad (etapa 1)
 - **Exportar:** un único `.zip` (por ejemplo `Recetario-2026-11-13.zip`) con un JSON de todos los datos, con versión de esquema, y la carpeta de imágenes. El usuario elige dónde guardarlo (Google Drive, Descargas…).
 - **Importar:** «Reemplazar todo» (con confirmación, y después de una copia automática de lo actual) o «Combinar» (sin duplicar; identificadores estables, UUID). Al combinar, si hay conflicto gana la edición más reciente y nunca se borra nada (decisión de Claude).
-- **Copia automática semanal** a una carpeta elegida por el usuario. Si falla, la app avisa (decisión de Claude).
-- **Recordatorio** en Inicio si la última copia tiene más de 30 días (decisión de Claude).
-- La clave de la IA **nunca** se incluye en las copias.
-- La copia automática de Android excluye la clave. Si se activa para la base de datos y las preferencias, lo decide quien construye la app.
+- **Copia automática semanal (opción B, elegida por el usuario):**
+  - **En el teléfono:** cada semana se guarda un `.zip` en el almacenamiento interno de la app y se conservan las **4 últimas**.
+  - **En Google Drive:** en Ajustes › Copias de seguridad, el usuario crea **una vez** un archivo en su Drive con el selector del sistema (crear documento). La app guarda el permiso persistente y **sobrescribe ese archivo** cada semana con la copia más reciente.
+    - Se escribe primero la copia local completa y se verifica (que el zip abra y el JSON se lea). Solo entonces se copia a Drive, para no subir nunca una copia rota.
+    - Si la escritura en Drive falla o se pierde el permiso, la app lo muestra en Inicio y en Ajustes con un botón para reintentar o volver a elegir el archivo.
+    - Ajustes muestra la fecha de la última copia local y de la última subida a Drive.
+  - **Copia de seguridad de Android** (la del sistema, con la cuenta de Google del teléfono): activada solo para la base de datos y las preferencias, **sin fotos** (no caben en su límite de 25 MB) y **sin la clave de la IA**. Es un refuerzo gratuito para los textos.
+- **Recordatorio** en Inicio si la última copia que salió del teléfono (Drive o exportación manual) tiene más de 30 días (decisión de Claude).
+- La clave de la IA **nunca** se incluye en ninguna copia.
 
 ### 8.6 Hoy (etapa 2; «Algo nuevo» con IA en la etapa 3)
 
