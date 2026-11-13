@@ -18,20 +18,20 @@ class DraftStore(private val dir: File) {
         val target = file(key)
         val tmp = File(dir, "$key.json.tmp")
         tmp.writeText(json.encodeToString(EditorState.serializer(), state.copy(errors = emptyMap())))
-        if (!tmp.renameTo(target)) {
-            target.delete()
-            if (!tmp.renameTo(target)) throw IOException("No se pudo guardar el borrador")
-        }
+        // rename sustituye el destino de forma atómica; si falla, el borrador anterior se conserva.
+        if (!tmp.renameTo(target)) throw IOException("No se pudo guardar el borrador")
     }
 
-    /** Null si no hay borrador o está dañado (en ese caso se borra). */
+    /** Null si no hay borrador o está dañado (en ese caso se aparta como `<key>.bad`, nunca se borra). */
     fun load(key: String): EditorState? {
         val f = file(key)
         if (!f.isFile) return null
         return try {
             json.decodeFromString(EditorState.serializer(), f.readText())
         } catch (_: Exception) {
-            f.delete()
+            val bad = File(dir, "$key.bad")
+            bad.delete()
+            f.renameTo(bad)
             null
         }
     }

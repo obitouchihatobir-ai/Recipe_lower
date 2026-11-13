@@ -99,7 +99,10 @@ class EditorViewModel(
 ) : ViewModel() {
 
     private val editingId: String? = savedStateHandle[RECIPE_ID_ARG]
-    private val draftKey = editingId ?: DraftStore.NEW_KEY
+    private val presetCategoryId: String? = savedStateHandle[CATEGORY_ID_ARG]
+
+    /** `new` mientras la receta es nueva; tras el primer guardado pasa a ser el ID de la receta. */
+    private var draftKey = editingId ?: DraftStore.NEW_KEY
 
     /** Estado de partida (receta guardada o formulario en blanco); el borrador solo existe si difiere de él. */
     private var baseline = EditorState(recipeId = editingId ?: newId())
@@ -129,6 +132,15 @@ class EditorViewModel(
                     _state.value = baseline
                 }
             }
+            if (editingId == null && presetCategoryId != null) {
+                val base = repo.observeCategories().first().firstOrNull { it.id == presetCategoryId }?.baseType
+                baseline = baseline.copy(categoryId = presetCategoryId)
+                if (base != null) {
+                    val (moments, temp) = defaultsFor(base)
+                    baseline = baseline.copy(moments = moments, serveTemp = temp, defaultsSuggested = true)
+                }
+                _state.value = baseline
+            }
             val draft = withContext(ioDispatcher) { draftStore.load(draftKey) }
             if (draft != null) {
                 if (draft == baseline) withContext(ioDispatcher) { draftStore.clear(draftKey) }
@@ -149,7 +161,7 @@ class EditorViewModel(
                 } else next
             }
             is EditorEvent.SetDescription -> update { it.copy(description = e.value) }
-            is EditorEvent.SetCookingMinutes -> update { it.copy(cookingMinutesText = e.text) }
+            is EditorEvent.SetCookingMinutes -> update { it.copy(cookingMinutesText = e.text, errors = it.errors - Field.MINUTES) }
             is EditorEvent.SetServings -> update { it.copy(servings = e.value.coerceIn(1, 99)) }
             is EditorEvent.SetDifficulty -> update { it.copy(difficulty = e.value) }
             is EditorEvent.SetFlavor -> update { it.withFlavor(e.value) }
@@ -170,7 +182,8 @@ class EditorViewModel(
 
             EditorEvent.AddIngredient -> update { it.copy(ingredients = it.ingredients + IngredientDraft(id = newId())) }
             is EditorEvent.UpdateIngredient -> update { s ->
-                s.copy(ingredients = s.ingredients.map { if (it.id == e.value.id) e.value else it })
+                s.withoutRowErrorsOf(e.value.id)
+                    .copy(ingredients = s.ingredients.map { if (it.id == e.value.id) e.value else it })
             }
             is EditorEvent.RemoveIngredient -> update { s ->
                 s.copy(
@@ -181,18 +194,7 @@ class EditorViewModel(
             is EditorEvent.MoveIngredient -> update { it.copy(ingredients = it.ingredients.moved(e.from, e.to)) }
 
             EditorEvent.AddStep -> update { it.copy(steps = it.steps + StepDraft(id = newId())) }
-            is EditorEvent.SetStepText -> update { s ->
-                s.copy(
-                    steps = s.steps.map { step ->
-                        if (step.id != e.id) step
-                        else {
-                            // El tiempo se sigue al texto mientras sea el detectado; si la persona lo cambió a mano, se respeta.
-                            val follows = step.timerSeconds == null || step.timerSeconds == detectDurationSeconds(step.text)
-                            step.copy(text = e.text, timerSeconds = if (follows) detectDurationSeconds(e.text) else step.timerSeconds)
-                        }
-                    },
-                )
-            }
+            is EditorEvent.SetStepText -> updateStep(e.id) { it.copy(text = e.text) }
             is EditorEvent.SetStepTimer -> updateStep(e.id) { it.copy(timerSeconds = e.seconds) }
             is EditorEvent.SetStepIngredients -> updateStep(e.id) { it.copy(ingredientIds = e.ingredientIds) }
             is EditorEvent.RemoveStep -> update { s -> s.copy(steps = s.steps.filterNot { it.id == e.id }) }
@@ -213,6 +215,11 @@ class EditorViewModel(
 
     /** Coloca una foto ya guardada en el PhotoStore y la anota como de esta sesión (se borra si se descarta). */
     fun attachImportedPhoto(fileName: String, target: PhotoTarget) {
+        if (_pendingDraft.value != null) {
+            // Con un borrador sin resolver no se edita: la foto recién importada no la usará nadie.
+            photoStore.delete(fileName)
+            return
+        }
         importedPhotos += fileName
         when (target) {
             PhotoTarget.Cover -> update { it.copy(coverPhoto = fileName) }
@@ -223,27 +230,27 @@ class EditorViewModel(
     /** Valida y guarda. Devuelve el ID de la receta, o null si hay errores (quedan en `state.errors`). */
     suspend fun save(): String? {
         if (!_ready.value) return null
+        if (_pendingDraft.value != null) return null
         val s = _state.value
-        val errors = buildMap {
-            if (s.title.isBlank()) put(Field.TITLE, "Ponle un nombre a la receta")
-            if (s.categoryId == null) put(Field.CATEGORY, "Elige una categoría")
-        }
-        if (errors.isNotEmpty()) {
-            _state.update { it.copy(errors = errors) }
+        val (errors, rowErrors) = s.validate()
+        if (errors.isNotEmpty() || rowErrors.isNotEmpty()) {
+            _state.update { it.copy(errors = errors, rowErrors = rowErrors) }
             return null
         }
         val recipe = s.toRecipe(clock)
         repo.save(recipe)
         persistJob?.cancelAndJoin()
         dirty = false
-        baseline = s.copy(errors = emptyMap())
-        _state.update { it.copy(errors = emptyMap()) }
+        val createdMillis = recipe.createdAt.toEpochMilli()
+        baseline = s.withoutErrors().copy(createdAtMillis = createdMillis)
+        _state.update { it.withoutErrors().copy(createdAtMillis = createdMillis) }
         val kept = (listOfNotNull(recipe.coverPhoto) + recipe.steps.flatMap { it.photos }).toSet()
         withContext(ioDispatcher) {
             draftStore.clear(draftKey)
             (importedPhotos - kept).forEach(photoStore::delete)
         }
         importedPhotos.clear()
+        draftKey = recipe.id // las siguientes ediciones ya son de una receta existente
         return recipe.id
     }
 
@@ -256,7 +263,7 @@ class EditorViewModel(
         importedPhotos.clear()
         withContext(ioDispatcher) {
             draftStore.clear(draftKey)
-            orphans.forEach(photoStore::delete)
+            orphans.forEach { deleteIfUnreferenced(it) }
         }
     }
 
@@ -273,7 +280,7 @@ class EditorViewModel(
         _pendingDraft.value = null
         withContext(ioDispatcher) {
             draftStore.clear(draftKey)
-            (draft.photoFiles - baseline.photoFiles).forEach(photoStore::delete)
+            (draft.photoFiles - baseline.photoFiles).forEach { deleteIfUnreferenced(it) }
         }
     }
 
@@ -282,8 +289,13 @@ class EditorViewModel(
         if (dirty) writeDraft()
     }
 
+    private suspend fun deleteIfUnreferenced(name: String) {
+        if (!repo.isPhotoReferenced(name)) photoStore.delete(name)
+    }
+
     private fun update(transform: (EditorState) -> EditorState) {
-        if (!_ready.value) return
+        // Mientras haya un borrador sin resolver (recuperar o descartar) no se edita nada.
+        if (!_ready.value || _pendingDraft.value != null) return
         _state.update(transform)
         dirty = true
         persistJob?.cancel()
@@ -294,11 +306,11 @@ class EditorViewModel(
     }
 
     private fun updateStep(id: String, transform: (StepDraft) -> StepDraft) =
-        update { s -> s.copy(steps = s.steps.map { if (it.id == id) transform(it) else it }) }
+        update { s -> s.withoutRowErrorsOf(id).copy(steps = s.steps.map { if (it.id == id) transform(it) else it }) }
 
     private fun writeDraft() {
         if (_pendingDraft.value != null) return // todavía no se ha decidido qué hacer con el borrador anterior
-        val current = _state.value.copy(errors = emptyMap())
+        val current = _state.value.withoutErrors()
         try {
             if (current == baseline) draftStore.clear(draftKey) else draftStore.save(draftKey, current)
         } catch (_: IOException) {
@@ -307,7 +319,9 @@ class EditorViewModel(
     }
 
     companion object {
-        const val RECIPE_ID_ARG = "recipeId"
+        /** Argumentos de la ruta `RecipeEditor(id, categoryId)`. */
+        const val RECIPE_ID_ARG = "id"
+        const val CATEGORY_ID_ARG = "categoryId"
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -385,7 +399,7 @@ internal fun EditorState.toRecipe(clock: Clock): Recipe {
         categoryId = requireNotNull(categoryId),
         coverPhoto = coverPhoto,
         description = description.trim(),
-        totalMinutes = cookingMinutesText.trim().toIntOrNull()?.takeIf { it > 0 },
+        totalMinutes = parseMinutes(cookingMinutesText),
         servings = servings.coerceAtLeast(1),
         difficulty = difficulty,
         flavor = flavor,
@@ -394,7 +408,7 @@ internal fun EditorState.toRecipe(clock: Clock): Recipe {
         alcoholic = alcoholic,
         course = course,
         ingredients = ingredientList,
-        steps = steps.filter { it.text.isNotBlank() || it.photos.isNotEmpty() }.map {
+        steps = steps.filter { it.text.isNotBlank() }.map {
             Step(it.id, it.text.trim(), it.photos, it.timerSeconds, it.ingredientIds.filterTo(LinkedHashSet()) { id -> id in ids })
         },
         tags = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
@@ -405,4 +419,43 @@ internal fun EditorState.toRecipe(clock: Clock): Recipe {
         createdAt = createdAtMillis?.let(Instant::ofEpochMilli) ?: now,
         updatedAt = now,
     )
+}
+
+/** Minutos de un texto como «35», «45 min» o «1 h 30 min»; null si está vacío o no se entiende. */
+internal fun parseMinutes(text: String): Int? {
+    val t = text.trim()
+    t.toIntOrNull()?.let { return it.takeIf { m -> m > 0 } }
+    if (t.isEmpty()) return null
+    return detectDurationSeconds(t)?.let { (it + 59) / 60 }
+}
+
+/** Errores del formulario: los de campo y los de fila. Las filas totalmente vacías no dan error (se descartan al guardar). */
+internal fun EditorState.validate(): Pair<Map<Field, String>, Map<String, String>> {
+    val errors = buildMap {
+        if (title.isBlank()) put(Field.TITLE, "Ponle un nombre a la receta")
+        if (categoryId == null) put(Field.CATEGORY, "Elige una categoría")
+        if (cookingMinutesText.isNotBlank() && parseMinutes(cookingMinutesText) == null) {
+            put(Field.MINUTES, "Escribe el tiempo en minutos, por ejemplo 35.")
+        }
+    }
+    val rows = buildMap {
+        for (i in ingredients) {
+            val hasQuantity = i.quantityText.isNotBlank()
+            if (i.name.isBlank()) {
+                if (hasQuantity || i.note.isNotBlank()) put(ingredientNameErrorKey(i.id), "Ponle nombre a este ingrediente.")
+            }
+            if (hasQuantity && parseQuantity(i.quantityText) == null) {
+                put(
+                    ingredientQuantityErrorKey(i.id),
+                    "No entiendo esta cantidad. Escribe, por ejemplo, 1,5 o ½, o déjala vacía y explícalo en la nota.",
+                )
+            }
+        }
+        for (st in steps) {
+            if (st.text.isBlank() && (st.photos.isNotEmpty() || st.timerSeconds != null)) {
+                put(stepTextErrorKey(st.id), "Escribe qué hay que hacer en este paso.")
+            }
+        }
+    }
+    return errors to rows
 }

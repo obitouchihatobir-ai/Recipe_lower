@@ -34,6 +34,9 @@ interface RecipeRepository {
     fun observeTags(): Flow<List<String>>
     suspend fun renameTag(old: String, new: String)
     suspend fun deleteTag(name: String)
+
+    /** True si alguna receta (portada o paso) usa ese archivo de foto. */
+    suspend fun isPhotoReferenced(name: String): Boolean
 }
 
 class RoomRecipeRepository(
@@ -143,6 +146,8 @@ class RoomRecipeRepository(
     override suspend fun deleteTag(name: String) {
         tags.findByNormalized(normalize(name))?.let { tags.delete(it.id) }
     }
+
+    override suspend fun isPhotoReferenced(name: String): Boolean = recipes.isPhotoReferenced(name)
 }
 
 private fun Recipe.toEntity(updatedAt: java.time.Instant) = RecipeEntity(

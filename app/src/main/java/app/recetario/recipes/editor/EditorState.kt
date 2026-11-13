@@ -9,7 +9,12 @@ import app.recetario.recipes.model.ServeTemp
 import app.recetario.recipes.quantity.MeasureUnit
 import kotlinx.serialization.Serializable
 
-enum class Field { TITLE, CATEGORY }
+enum class Field { TITLE, CATEGORY, MINUTES }
+
+/** Claves de `EditorState.rowErrors`: cada error cuelga de una fila concreta. */
+fun ingredientNameErrorKey(ingredientId: String) = "ingredient-name:$ingredientId"
+fun ingredientQuantityErrorKey(ingredientId: String) = "ingredient-quantity:$ingredientId"
+fun stepTextErrorKey(stepId: String) = "step-text:$stepId"
 
 @Serializable
 data class IngredientDraft(
@@ -66,7 +71,13 @@ data class EditorState(
     val sourceUrl: String = "",
     val aiGenerated: Boolean = false,
     val errors: Map<Field, String> = emptyMap(),
+    /** Errores por fila, con las claves de [ingredientNameErrorKey], [ingredientQuantityErrorKey] y [stepTextErrorKey]. */
+    val rowErrors: Map<String, String> = emptyMap(),
 ) {
+    fun withoutErrors() = copy(errors = emptyMap(), rowErrors = emptyMap())
+
+    fun withoutRowErrorsOf(rowId: String) = copy(rowErrors = rowErrors.filterKeys { !it.endsWith(":$rowId") })
+
     val flavor: FlavorProfile
         get() = FlavorProfile(sweet, salty, sour, bitter, spicy, intensity, rich)
 
