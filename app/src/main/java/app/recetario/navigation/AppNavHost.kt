@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -77,7 +78,7 @@ fun AppNavHost(
             }
         },
     ) { padding ->
-        SharedTransitionLayout(Modifier.padding(padding)) {
+        SharedTransitionLayout(Modifier.padding(padding).consumeWindowInsets(padding)) {
             CompositionLocalProvider(LocalSharedTransitionScope provides this, LocalSharePhotos provides sharePhotos) {
                 NavHost(
                     navController = navController,

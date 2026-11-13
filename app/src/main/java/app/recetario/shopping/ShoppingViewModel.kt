@@ -38,8 +38,11 @@ class ShoppingViewModel(private val repo: ShoppingRepository) : ViewModel() {
         viewModelScope.launch { repo.toggle(id) }
     }
 
-    fun delete(id: String) {
-        viewModelScope.launch { repo.delete(id) }
+    /** Borra y entrega el artículo tal como estaba justo antes, para ofrecer «Deshacer». */
+    suspend fun delete(id: String): ShoppingItem? = repo.delete(id)
+
+    fun setSection(id: String, section: ShopSection) {
+        viewModelScope.launch { repo.setSection(id, section) }
     }
 
     fun add(name: String, quantity: Double?, unit: MeasureUnit) {

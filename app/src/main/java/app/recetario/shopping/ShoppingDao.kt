@@ -41,8 +41,14 @@ interface ShoppingDao {
     @Query("UPDATE shopping_items SET checked = NOT checked WHERE id = :id")
     suspend fun toggle(id: String)
 
+    @Query("SELECT * FROM shopping_items WHERE id = :id")
+    suspend fun get(id: String): ShoppingItemEntity?
+
     @Query("DELETE FROM shopping_items WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("UPDATE shopping_items SET section = :section WHERE id = :id")
+    suspend fun setSection(id: String, section: ShopSection)
 
     @Query("DELETE FROM shopping_items WHERE checked = 1")
     suspend fun deleteChecked()

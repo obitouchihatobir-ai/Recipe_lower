@@ -19,7 +19,12 @@ interface ShoppingRepository {
     suspend fun addFromRecipe(recipe: Recipe, servings: Int, excludeIngredientIds: Set<String>): Int
     suspend fun addManual(name: String, quantity: Double?, unit: MeasureUnit)
     suspend fun toggle(id: String)
-    suspend fun delete(id: String)
+
+    /** Borra el artículo y devuelve su estado actual (leído en la misma transacción) para poder deshacerlo. */
+    suspend fun delete(id: String): ShoppingItem?
+
+    /** Cambia el artículo a otra sección del súper. */
+    suspend fun setSection(id: String, section: ShopSection)
 
     /** Borra los marcados y los devuelve, para poder deshacerlo con [restore]. */
     suspend fun clearChecked(): List<ShoppingItem>
@@ -88,7 +93,13 @@ class RoomShoppingRepository(
 
     override suspend fun toggle(id: String) = dao.toggle(id)
 
-    override suspend fun delete(id: String) = dao.delete(id)
+    override suspend fun delete(id: String): ShoppingItem? = db.withTransaction {
+        val row = dao.get(id)?.toModel()
+        dao.delete(id)
+        row
+    }
+
+    override suspend fun setSection(id: String, section: ShopSection) = dao.setSection(id, section)
 
     override suspend fun clearChecked(): List<ShoppingItem> = db.withTransaction {
         val checked = dao.getAll().filter { it.checked }.map { it.toModel() }

@@ -24,7 +24,16 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -39,7 +48,11 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,10 +109,12 @@ fun ShoppingRoute(container: AppContainer) {
         state = state,
         snackbar = snackbar,
         onToggle = vm::toggle,
-        onDelete = { item ->
-            vm.delete(item.id)
-            offerUndo("Se eliminó «${item.name}»", listOf(item))
+        onDelete = { id ->
+            scope.launch {
+                vm.delete(id)?.let { removed -> offerUndo("Se eliminó «${removed.name}»", listOf(removed)) }
+            }
         },
+        onSetSection = vm::setSection,
         onClearChecked = {
             scope.launch {
                 val removed = vm.clearChecked()
@@ -131,7 +146,8 @@ fun ShoppingContent(
     state: ShoppingState,
     snackbar: SnackbarHostState,
     onToggle: (String) -> Unit,
-    onDelete: (ShoppingItem) -> Unit,
+    onDelete: (String) -> Unit,
+    onSetSection: (String, ShopSection) -> Unit,
     onClearChecked: () -> Unit,
     onShare: () -> Unit,
     onAdd: (name: String, quantity: Double?, unit: MeasureUnit) -> Unit,
@@ -184,7 +200,8 @@ fun ShoppingContent(
                             ShoppingRow(
                                 item = item,
                                 onToggle = { onToggle(item.id) },
-                                onDelete = { onDelete(item) },
+                                onDelete = { onDelete(item.id) },
+                                onSetSection = { onSetSection(item.id, it) },
                                 modifier = Modifier
                                     .animateItem(
                                         fadeInSpec = if (reduced) null else spring(stiffness = 600f),
@@ -245,18 +262,23 @@ private fun EmptyShopping() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ShoppingRow(
     item: ShoppingItem,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
+    onSetSection: (ShopSection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val c = LocalRecetarioColors.current
+    // El estado del deslizar conserva su primera lambda: siempre se llama a la última.
+    val latestDelete by rememberUpdatedState(onDelete)
+    var menu by remember { mutableStateOf(false) }
     val dismiss = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
+                latestDelete()
                 true
             } else {
                 false
@@ -277,27 +299,55 @@ private fun ShoppingRow(
         },
     ) {
         val quantity = formatQuantity(item.quantity, item.unit, item.customUnit)
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .background(c.bg)
-                .heightIn(min = 48.dp)
-                .toggleable(value = item.checked, role = Role.Checkbox, onValueChange = { onToggle() })
-                .testTag("shopping-item-${item.id}")
-                .padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            AnimatedCheck(item.checked)
-            Text(
-                item.name,
-                modifier = Modifier.weight(1f),
-                color = if (item.checked) c.muted else c.ink,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
-                ),
-            )
-            if (quantity.isNotEmpty()) MutedText(quantity, fontSizeSp = 14)
+        Box(Modifier.background(c.bg)) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .combinedClickable(
+                        role = Role.Checkbox,
+                        onClickLabel = if (item.checked) "Desmarcar" else "Marcar",
+                        onLongClickLabel = "Cambiar de sección",
+                        onClick = onToggle,
+                        onLongClick = { menu = true },
+                    )
+                    .semantics {
+                        toggleableState = ToggleableState(item.checked)
+                        customActions = listOf(
+                            CustomAccessibilityAction("Borrar") { latestDelete(); true },
+                            CustomAccessibilityAction("Cambiar de sección") { menu = true; true },
+                        )
+                    }
+                    .testTag("shopping-item-${item.id}")
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AnimatedCheck(item.checked)
+                Text(
+                    item.name,
+                    modifier = Modifier.weight(1f),
+                    color = if (item.checked) c.muted else c.ink,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
+                    ),
+                )
+                if (quantity.isNotEmpty()) MutedText(quantity, fontSizeSp = 14)
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                for (section in ShopSection.entries) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(section.label, color = if (section == item.section) c.accent else c.ink)
+                        },
+                        onClick = {
+                            menu = false
+                            if (section != item.section) onSetSection(section)
+                        },
+                        modifier = Modifier.testTag("section-option-${section.name}"),
+                    )
+                }
+            }
         }
     }
 }
@@ -322,6 +372,10 @@ private fun AddItemPanel(
     var quantityText by rememberSaveable { mutableStateOf("") }
     var unitName by rememberSaveable { mutableStateOf(MeasureUnit.PIECE.name) }
     val unit = MeasureUnit.valueOf(unitName)
+    val nameFocus = remember { FocusRequester() }
+    // Atrás cierra el panel (lo escrito se conserva) en vez de salir de la pestaña.
+    BackHandler(onBack = onDismiss)
+    LaunchedEffect(Unit) { nameFocus.requestFocus() }
     val quantity = parseQuantity(quantityText)
     val quantityInvalid = quantityText.isNotBlank() && quantity == null
     Column(
@@ -338,7 +392,7 @@ private fun AddItemPanel(
             value = name,
             onValueChange = { name = it },
             label = "Nombre",
-            modifier = Modifier.fillMaxWidth().testTag("shopping-add-name"),
+            modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).testTag("shopping-add-name"),
         )
         AppTextField(
             value = quantityText,
