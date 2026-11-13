@@ -40,6 +40,18 @@ jobs:
 
       # Sin RECETARIO_KEYSTORE, el APK release sale sin firmar. Su versión debe
       # salir de app/version.properties: versionCode = major*10000 + minor*100 + patch.
+      # Room regenera el esquema en cada compilación: si cambia y no está commiteado, falla
+      # e imprime el JSON para poder versionarlo.
+      - name: Comprobar que el esquema de Room está versionado
+        run: |
+          if [ -n "$(git status --porcelain app/schemas)" ]; then
+            git status --short app/schemas
+            for f in $(git status --porcelain app/schemas | awk '{print $2}'); do
+              if [ -d "$f" ]; then find "$f" -type f -name '*.json' -exec sh -c 'echo "=== $1"; cat "$1"' _ {} \; ; else echo "=== $f"; cat "$f"; fi
+            done
+            exit 1
+          fi
+
       - name: Comprobar el APK release sin firmar y su versión
         run: |
           dir=app/build/outputs/apk/release
