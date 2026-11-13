@@ -102,6 +102,8 @@ class EditorScreenTest {
         rule.onNodeWithTag("step-text").performTextInput("Cuece 20 minutos a fuego medio")
 
         rule.waitFor(hasText("⏱ Añadir temporizador de 20 min"))
+        // El chip queda debajo del campo: hay que traerlo a la vista antes de tocarlo.
+        scrollToText("⏱ Añadir temporizador de 20 min")
         rule.onNodeWithText("⏱ Añadir temporizador de 20 min").performClick()
 
         rule.waitFor(hasText("⏱ 20 min"))

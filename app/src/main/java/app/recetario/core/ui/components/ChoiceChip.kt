@@ -16,6 +16,8 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwitchColors
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -86,4 +88,18 @@ fun ChoiceChip(
             }
         }
     }
+}
+
+/** Colores del interruptor con los tokens del tema (apagado: borde y bolita en gris secundario). */
+@Composable
+fun appSwitchColors(): SwitchColors {
+    val c = LocalRecetarioColors.current
+    return SwitchDefaults.colors(
+        checkedThumbColor = c.onAccent,
+        checkedTrackColor = c.accent,
+        checkedBorderColor = c.accent,
+        uncheckedThumbColor = c.muted,
+        uncheckedTrackColor = c.surface,
+        uncheckedBorderColor = c.muted,
+    )
 }

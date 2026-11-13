@@ -15,6 +15,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.Lifecycle
@@ -29,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.recetario.AppContainer
 import app.recetario.core.ui.components.LocalNavAnimatedVisibilityScope
+import app.recetario.core.ui.components.LocalSharePhotos
 import app.recetario.core.ui.components.LocalSharedTransitionScope
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
@@ -56,6 +58,8 @@ fun AppNavHost(
     val currentTab = Tab.entries.firstOrNull { tab ->
         entry?.destination?.hierarchy?.any { it.hasRoute(tab.routeClass) } == true
     }
+    val detailTracker = remember { DetailTransitionTracker() }
+    val sharePhotos = detailTracker.involvesDetail(entry?.id, entry?.destination?.hasRoute(RecipeDetail::class) == true)
     Scaffold(
         modifier = modifier,
         containerColor = LocalRecetarioColors.current.bg,
@@ -75,7 +79,7 @@ fun AppNavHost(
         },
     ) { padding ->
         SharedTransitionLayout(Modifier.padding(padding)) {
-            CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+            CompositionLocalProvider(LocalSharedTransitionScope provides this, LocalSharePhotos provides sharePhotos) {
                 NavHost(
                     navController = navController,
                     startDestination = Home,
@@ -138,6 +142,22 @@ fun AppNavHost(
                 }
             }
         }
+    }
+}
+
+/** Recuerda si el destino anterior era el detalle, para saber si la última navegación entra o sale de él. */
+private class DetailTransitionTracker {
+    private var lastId: String? = null
+    private var lastIsDetail = false
+    private var previousIsDetail = false
+
+    fun involvesDetail(entryId: String?, isDetail: Boolean): Boolean {
+        if (entryId != lastId) {
+            previousIsDetail = lastIsDetail
+            lastIsDetail = isDetail
+            lastId = entryId
+        }
+        return lastIsDetail || previousIsDetail
     }
 }
 

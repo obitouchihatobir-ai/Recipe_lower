@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.recetario.core.ui.components.ChoiceChip
+import app.recetario.core.ui.components.appSwitchColors
 import app.recetario.core.ui.components.FlavorWheel
 import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.theme.LocalRecetarioColors
@@ -109,7 +109,7 @@ internal fun FlavorSection(state: EditorState, onEvent: (EditorEvent) -> Unit, m
             Switch(
                 checked = flavor.rich,
                 onCheckedChange = null,
-                colors = SwitchDefaults.colors(checkedTrackColor = c.accent, checkedThumbColor = c.onAccent),
+                colors = appSwitchColors(),
             )
         }
     }

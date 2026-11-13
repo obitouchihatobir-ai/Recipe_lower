@@ -20,7 +20,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -30,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.recetario.core.ui.components.ChoiceChip
+import app.recetario.core.ui.components.appSwitchColors
 import app.recetario.core.ui.components.FieldLabel
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.recipes.model.Category
@@ -116,7 +116,7 @@ fun FiltersSheet(
                 Switch(
                     checked = filter.favoritesOnly,
                     onCheckedChange = null,
-                    colors = SwitchDefaults.colors(checkedTrackColor = c.accent, checkedThumbColor = c.onAccent),
+                    colors = appSwitchColors(),
                 )
             }
             Group("Orden") {

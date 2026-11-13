@@ -92,6 +92,8 @@ class CapturasTest {
     }
 
     private fun save(name: String) {
+        // La entrada escalonada espera con delay(): se adelanta el reloj para capturar el estado final.
+        rule.mainClock.advanceTimeBy(1_500)
         rule.waitForIdle()
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
         val dir = File(System.getProperty("user.dir"), "build/capturas").apply { mkdirs() }

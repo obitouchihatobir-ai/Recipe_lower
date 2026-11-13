@@ -126,9 +126,11 @@ internal fun IngredientRow(
                         Icon(AppIcons.Close, contentDescription = "Quitar el ingrediente", tint = c.muted)
                     }
                 }
+                var extras by rememberSaveable(draft.id) { mutableStateOf(draft.note.isNotEmpty() || draft.section.isNotEmpty()) }
                 Row(
-                    Modifier.padding(start = 40.dp, end = 10.dp),
+                    Modifier.padding(start = 40.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top,
                 ) {
                     AppTextField(
                         value = draft.quantityText,
@@ -137,7 +139,7 @@ internal fun IngredientRow(
                         placeholder = "1,5 o ½",
                         error = quantityError,
                         showErrorText = false,
-                        modifier = Modifier.weight(1f).testTag("ingredient-quantity"),
+                        modifier = Modifier.weight(0.85f).testTag("ingredient-quantity"),
                     )
                     UnitPicker(
                         unit = draft.unit,
@@ -145,22 +147,29 @@ internal fun IngredientRow(
                             // La unidad propia solo se guarda con «Otra…»: al cambiar de unidad se borra.
                             onChange(draft.copy(unit = unit, customUnit = if (unit == MeasureUnit.CUSTOM) draft.customUnit else ""))
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1.15f),
                     )
+                    // Alineado con el botón de quitar de la fila del nombre.
+                    Box(Modifier.padding(top = 8.dp).size(48.dp), contentAlignment = Alignment.Center) {
+                        if (!extras) {
+                            IconButton(onClick = { extras = true }) {
+                                Icon(AppIcons.Note, contentDescription = "Añadir nota o sección", tint = c.accent)
+                            }
+                        }
+                    }
                 }
-                if (quantityError != null) ErrorText(quantityError, Modifier.padding(start = 40.dp, end = 10.dp))
+                if (quantityError != null) ErrorText(quantityError, Modifier.padding(start = 40.dp, end = 48.dp))
                 if (draft.unit == MeasureUnit.CUSTOM) {
                     AppTextField(
                         value = draft.customUnit,
                         onValueChange = { onChange(draft.copy(customUnit = it)) },
                         label = "Unidad propia",
                         placeholder = "Por ejemplo, vaso",
-                        modifier = Modifier.padding(start = 40.dp, end = 10.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(start = 40.dp, end = 48.dp).fillMaxWidth(),
                     )
                 }
-                var extras by rememberSaveable(draft.id) { mutableStateOf(draft.note.isNotEmpty() || draft.section.isNotEmpty()) }
                 if (extras) {
-                    Column(Modifier.padding(start = 40.dp, end = 10.dp)) {
+                    Column(Modifier.padding(start = 40.dp, end = 48.dp)) {
                         AppTextField(
                             value = draft.note,
                             onValueChange = { onChange(draft.copy(note = it)) },
@@ -175,10 +184,6 @@ internal fun IngredientRow(
                             placeholder = "Por ejemplo, Para la salsa",
                             modifier = Modifier.fillMaxWidth(),
                         )
-                    }
-                } else {
-                    TextButton(onClick = { extras = true }, modifier = Modifier.padding(start = 32.dp)) {
-                        Text("Añadir nota o sección", color = c.accent, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -208,7 +213,7 @@ private fun UnitPicker(unit: MeasureUnit, onChange: (MeasureUnit) -> Unit, modif
                     Text(
                         unitLabel(unit),
                         color = c.ink,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

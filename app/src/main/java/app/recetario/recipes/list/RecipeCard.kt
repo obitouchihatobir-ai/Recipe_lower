@@ -93,7 +93,7 @@ private fun MetaLine(card: RecipeCardData) {
     val c = LocalRecetarioColors.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         tasteColor(card.taste)?.let { dot ->
-            Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
+            Box(Modifier.size(7.dp).background(dot, CircleShape))
             Spacer(Modifier.width(5.dp))
         }
         Text(

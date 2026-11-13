@@ -12,6 +12,12 @@ val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { nu
 /** Ámbito de animación del destino actual del NavHost. */
 val LocalNavAnimatedVisibilityScope = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
+/**
+ * True solo si la navegación en curso entra o sale del detalle. Así la foto no salta entre Inicio y
+ * Recetas al cambiar de pestaña (las dos tarjetas tienen la misma clave).
+ */
+val LocalSharePhotos = compositionLocalOf { false }
+
 fun sharedPhotoKey(recipeId: String) = "photo-$recipeId"
 
 /** La foto de la receta viaja de la tarjeta a la cabecera del detalle (clave `photo-$recipeId`). */
@@ -19,7 +25,7 @@ fun sharedPhotoKey(recipeId: String) = "photo-$recipeId"
 fun Modifier.sharedRecipePhoto(recipeId: String, enabled: Boolean = true): Modifier {
     val shared = LocalSharedTransitionScope.current
     val visibility = LocalNavAnimatedVisibilityScope.current
-    if (!enabled || shared == null || visibility == null) return this
+    if (!enabled || !LocalSharePhotos.current || shared == null || visibility == null) return this
     return with(shared) {
         this@sharedRecipePhoto.sharedElement(
             sharedContentState = rememberSharedContentState(sharedPhotoKey(recipeId)),

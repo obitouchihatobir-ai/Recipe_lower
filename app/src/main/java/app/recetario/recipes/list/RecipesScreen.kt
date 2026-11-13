@@ -213,7 +213,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
             onQuery(it)
         },
         modifier = modifier.testTag("recipes-search"),
-        placeholder = { Text("Busca por nombre, ingrediente o etiqueta", maxLines = 1) },
+        placeholder = { Text("Buscar recetas", maxLines = 1) },
         leadingIcon = { Icon(AppIcons.Search, contentDescription = null, tint = c.muted) },
         trailingIcon = if (text.isEmpty()) null else ({
             IconButton(onClick = {

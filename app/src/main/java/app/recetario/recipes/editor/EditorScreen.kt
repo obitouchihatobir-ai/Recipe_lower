@@ -73,7 +73,7 @@ fun EditorRoute(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var saving by remember { mutableStateOf(false) }
-    var saveFailures by rememberSaveable { mutableIntStateOf(0) }
+    var saveFailures by remember { mutableIntStateOf(0) }
     val requestPhoto = rememberPhotoRequester(
         onPicked = { stream, target -> vm.onEvent(EditorEvent.ImportPhoto(stream, target)) },
         onError = { message -> scope.launch { snackbar.showSnackbar(message) } },

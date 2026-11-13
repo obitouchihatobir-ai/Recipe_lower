@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,7 +94,7 @@ fun HomeContent(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 items(state.categories, key = { it.id }) { cat ->
-                                    ChoiceChip(cat.name, selected = false, onClick = { onCategory(cat.id) }, leading = cat.emoji)
+                                    ChoiceChip(cat.name, selected = false, onClick = { onCategory(cat.id) }, role = Role.Button, leading = cat.emoji)
                                 }
                             }
                         }
