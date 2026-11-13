@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -39,6 +40,7 @@ import app.recetario.recipes.model.ServeTemp
 import app.recetario.recipes.search.RecipeFilter
 import app.recetario.recipes.search.SortOrder
 import app.recetario.recipes.search.Taste
+import kotlinx.coroutines.launch
 
 private val maxMinuteOptions = listOf(15, 30, 45, 60, 90, 120)
 
@@ -54,9 +56,11 @@ fun FiltersSheet(
     onDismiss: () -> Unit,
 ) {
     val c = LocalRecetarioColors.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
         containerColor = c.surface,
         contentColor = c.ink,
     ) {
@@ -136,7 +140,8 @@ fun FiltersSheet(
                 }
                 Spacer(Modifier.weight(1f))
                 Button(
-                    onClick = onDismiss,
+                    // Primero baja la hoja con su animación y después se quita.
+                    onClick = { scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() } },
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
                 ) { Text("Ver ${resultsLabel(resultCount)}") }
             }

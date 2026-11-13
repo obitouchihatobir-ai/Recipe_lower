@@ -2,6 +2,7 @@ package app.recetario.recipes.list
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -93,7 +94,7 @@ private fun MetaLine(card: RecipeCardData) {
     val c = LocalRecetarioColors.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         tasteColor(card.taste)?.let { dot ->
-            Box(Modifier.size(7.dp).background(dot, CircleShape))
+            Canvas(Modifier.size(7.dp)) { drawCircle(dot) }
             Spacer(Modifier.width(5.dp))
         }
         Text(
