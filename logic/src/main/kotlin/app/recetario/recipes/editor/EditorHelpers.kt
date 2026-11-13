@@ -64,3 +64,28 @@ fun defaultsFor(base: BaseType): Pair<Set<Moment>, ServeTemp> = when (base) {
 fun FlavorProfile.markSweet(): FlavorProfile = copy(sweet = maxOf(sweet, 2), salty = minOf(salty, 1))
 
 fun FlavorProfile.markSalty(): FlavorProfile = copy(salty = maxOf(salty, 2), sweet = minOf(sweet, 1))
+
+private val minuteTerm = Regex("""(\d+(?:[.,]\d+)?)\s*(horas?|hrs?|h|minutos?|mins?)(?![a-z0-9])""")
+private val termSeparator = Regex("""\s*(?:y\s+)?""")
+
+/**
+ * Minutos de un texto que es EXACTAMENTE un entero («35») o una secuencia de términos de horas y minutos
+ * («1 h 30 min», «90 minutos»). Cualquier otra cosa («1 hora y media», «20-30 min», «1 h 30») da null.
+ */
+fun parseDurationMinutes(text: String): Int? {
+    val t = normalize(text)
+    if (t.isEmpty()) return null
+    if (t.all { it.isDigit() }) return t.toIntOrNull()
+    var pos = 0
+    var total = 0.0
+    while (true) {
+        val m = minuteTerm.matchAt(t, pos) ?: return null
+        val amount = m.groupValues[1].replace(',', '.').toDouble()
+        total += if (m.groupValues[2].startsWith("h")) amount * 60 else amount
+        pos = m.range.last + 1
+        if (pos == t.length) break
+        pos = termSeparator.matchAt(t, pos)!!.range.last + 1
+        if (pos >= t.length) return null
+    }
+    return total.roundToInt().takeIf { it > 0 }
+}

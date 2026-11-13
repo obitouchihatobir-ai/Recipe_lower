@@ -133,13 +133,15 @@ class EditorViewModel(
                 }
             }
             if (editingId == null && presetCategoryId != null) {
-                val base = repo.observeCategories().first().firstOrNull { it.id == presetCategoryId }?.baseType
-                baseline = baseline.copy(categoryId = presetCategoryId)
-                if (base != null) {
-                    val (moments, temp) = defaultsFor(base)
-                    baseline = baseline.copy(moments = moments, serveTemp = temp, defaultsSuggested = true)
+                // Solo se preselecciona una categoría que existe (si no, guardar chocaría con la clave foránea).
+                val category = repo.observeCategories().first().firstOrNull { it.id == presetCategoryId }
+                if (category != null) {
+                    val (moments, temp) = defaultsFor(category.baseType)
+                    baseline = baseline.copy(
+                        categoryId = category.id, moments = moments, serveTemp = temp, defaultsSuggested = true,
+                    )
+                    _state.value = baseline
                 }
-                _state.value = baseline
             }
             val draft = withContext(ioDispatcher) { draftStore.load(draftKey) }
             if (draft != null) {
@@ -256,6 +258,7 @@ class EditorViewModel(
 
     /** «Descartar»: vuelve al estado de partida, borra el borrador y las fotos importadas que no son de la receta guardada. */
     suspend fun discard() {
+        if (_pendingDraft.value != null) return
         persistJob?.cancelAndJoin()
         dirty = false
         val orphans = importedPhotos + (_state.value.photoFiles - baseline.photoFiles)
@@ -422,12 +425,7 @@ internal fun EditorState.toRecipe(clock: Clock): Recipe {
 }
 
 /** Minutos de un texto como «35», «45 min» o «1 h 30 min»; null si está vacío o no se entiende. */
-internal fun parseMinutes(text: String): Int? {
-    val t = text.trim()
-    t.toIntOrNull()?.let { return it.takeIf { m -> m > 0 } }
-    if (t.isEmpty()) return null
-    return detectDurationSeconds(t)?.let { (it + 59) / 60 }
-}
+internal fun parseMinutes(text: String): Int? = parseDurationMinutes(text)?.takeIf { it > 0 }
 
 /** Errores del formulario: los de campo y los de fila. Las filas totalmente vacías no dan error (se descartan al guardar). */
 internal fun EditorState.validate(): Pair<Map<Field, String>, Map<String, String>> {
@@ -442,7 +440,7 @@ internal fun EditorState.validate(): Pair<Map<Field, String>, Map<String, String
         for (i in ingredients) {
             val hasQuantity = i.quantityText.isNotBlank()
             if (i.name.isBlank()) {
-                if (hasQuantity || i.note.isNotBlank()) put(ingredientNameErrorKey(i.id), "Ponle nombre a este ingrediente.")
+                if (hasQuantity || i.note.isNotBlank() || i.section.isNotBlank() || i.customUnit.isNotBlank()) put(ingredientNameErrorKey(i.id), "Ponle nombre a este ingrediente.")
             }
             if (hasQuantity && parseQuantity(i.quantityText) == null) {
                 put(
