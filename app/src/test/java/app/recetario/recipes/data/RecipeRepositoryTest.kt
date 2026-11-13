@@ -85,7 +85,7 @@ class RecipeRepositoryTest {
         db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM $table").use { it.moveToFirst(); it.getInt(0) }
 
     @Test
-    fun defaultCategories_existOnCreate() = runBlocking {
+    fun defaultCategories_existOnCreate() = runBlocking<Unit> {
         val categories = repo.observeCategories().first().associateBy { it.id }
         assertThat(categories.keys).containsExactly("cat-comidas", "cat-bebidas", "cat-postres")
         assertThat(categories.getValue("cat-comidas").baseType).isEqualTo(BaseType.FOOD)
@@ -95,7 +95,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun save_thenObserve_roundTripsWholeAggregate() = runBlocking {
+    fun save_thenObserve_roundTripsWholeAggregate() = runBlocking<Unit> {
         val original = recipe()
         repo.save(original)
 
@@ -109,7 +109,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun observeSummaries_listsIngredientNamesAndTags() = runBlocking {
+    fun observeSummaries_listsIngredientNamesAndTags() = runBlocking<Unit> {
         repo.save(recipe())
         val summary = repo.observeSummaries().first().single()
         assertThat(summary.id).isEqualTo("r1")
@@ -119,7 +119,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun save_update_replacesChildren() = runBlocking {
+    fun save_update_replacesChildren() = runBlocking<Unit> {
         repo.save(recipe())
         repo.save(recipe(ingredients = listOf(ingredient(1)), steps = listOf(Step("s9", "Servir", emptyList(), null, setOf("ing-1")))))
 
@@ -133,13 +133,13 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun save_ignoresLinksToIngredientsOfOtherRecipes() = runBlocking {
+    fun save_ignoresLinksToIngredientsOfOtherRecipes() = runBlocking<Unit> {
         repo.save(recipe(steps = listOf(Step("s1", "Mezclar", emptyList(), null, setOf("ing-1", "no-existe")))))
         assertThat(repo.observeRecipe("r1").first()!!.steps.single().ingredientIds).containsExactly("ing-1")
     }
 
     @Test
-    fun delete_cascades_and_deletesPhotoFiles() = runBlocking {
+    fun delete_cascades_and_deletesPhotoFiles() = runBlocking<Unit> {
         listOf("cover.jpg", "a.jpg", "b.jpg", "keep.jpg").forEach { photos.file(it).writeText("x") }
         repo.save(recipe())
         repo.save(recipe(id = "r2", ingredients = emptyList(), steps = listOf(Step("s-other", "Otro", listOf("keep.jpg"), null, emptySet())), tags = emptyList(), cover = null))
@@ -159,7 +159,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun deleteCategory_reassignsRecipes() = runBlocking {
+    fun deleteCategory_reassignsRecipes() = runBlocking<Unit> {
         repo.saveCategory(Category("cat-salsas", "Salsas", "🥫", "#AA3322", BaseType.FOOD, 3, false))
         repo.save(recipe(categoryId = "cat-salsas"))
 
@@ -178,7 +178,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun tags_areDedupedByNormalizedName() = runBlocking {
+    fun tags_areDedupedByNormalizedName() = runBlocking<Unit> {
         repo.save(recipe(id = "r1", tags = listOf("Rápido", "rapido", " RÁPIDO ")))
         repo.save(recipe(id = "r2", tags = listOf("rapido")))
 
@@ -188,7 +188,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun renameTag_mergesWithExistingTag() = runBlocking {
+    fun renameTag_mergesWithExistingTag() = runBlocking<Unit> {
         repo.save(recipe(id = "r1", tags = listOf("Fácil")))
         repo.save(recipe(id = "r2", tags = listOf("Sencillo")))
 
@@ -199,7 +199,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun renameAndDeleteTag() = runBlocking {
+    fun renameAndDeleteTag() = runBlocking<Unit> {
         repo.save(recipe(tags = listOf("Rápido", "Cena")))
 
         repo.renameTag("rapido", "Express")
@@ -210,7 +210,7 @@ class RecipeRepositoryTest {
     }
 
     @Test
-    fun setFavorite_updatesFlag() = runBlocking {
+    fun setFavorite_updatesFlag() = runBlocking<Unit> {
         repo.save(recipe())
         repo.setFavorite("r1", true)
         assertThat(repo.observeRecipe("r1").first()!!.favorite).isTrue()
