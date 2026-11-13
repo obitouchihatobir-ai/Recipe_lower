@@ -52,7 +52,7 @@ class ShoppingRepositoryTest {
     )
 
     @Test
-    fun addFromRecipe_scalesAndExcludes() = runBlocking {
+    fun addFromRecipe_scalesAndExcludes() = runBlocking<Unit> {
         // La receta es para 4; se pide para 6 y se excluye «Nata».
         val added = repo.addFromRecipe(recipe, servings = 6, excludeIngredientIds = setOf("i8"))
         assertThat(added).isEqualTo(7)
@@ -69,7 +69,7 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun addFromRecipe_twiceMergesLines_butReturnsIngredientsAdded() = runBlocking {
+    fun addFromRecipe_twiceMergesLines_butReturnsIngredientsAdded() = runBlocking<Unit> {
         repo.addFromRecipe(recipe, 4, emptySet())
         val added = repo.addFromRecipe(recipe, 4, emptySet())
         assertThat(added).isEqualTo(8)
@@ -80,7 +80,7 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun observe_groupsBySectionInOrder() = runBlocking {
+    fun observe_groupsBySectionInOrder() = runBlocking<Unit> {
         repo.addFromRecipe(recipe, 4, emptySet())
         val groups = repo.observe().first()
         assertThat(groups.keys.toList()).containsExactly(
@@ -90,7 +90,7 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun addManual_classifiesAndMerges() = runBlocking {
+    fun addManual_classifiesAndMerges() = runBlocking<Unit> {
         repo.addManual("Leche", 1.0, MeasureUnit.CUP)
         repo.addManual("leche", 200.0, MeasureUnit.MILLILITER)
         val items = all()
@@ -100,13 +100,13 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun addManual_ignoresBlankName() = runBlocking {
+    fun addManual_ignoresBlankName() = runBlocking<Unit> {
         repo.addManual("   ", 1.0, MeasureUnit.PIECE)
         assertThat(all()).isEmpty()
     }
 
     @Test
-    fun toggle_marksAndUnmarks_checkedGoLastInSection() = runBlocking {
+    fun toggle_marksAndUnmarks_checkedGoLastInSection() = runBlocking<Unit> {
         repo.addManual("Cebolla", 1.0, MeasureUnit.PIECE)
         repo.addManual("Calabaza", 1.0, MeasureUnit.PIECE)
         val first = all().first { it.name == "Cebolla" }
@@ -119,7 +119,7 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun newAdditionNeverMergesIntoCheckedLine() = runBlocking {
+    fun newAdditionNeverMergesIntoCheckedLine() = runBlocking<Unit> {
         repo.addManual("Leche", 1.0, MeasureUnit.LITER)
         repo.toggle(all().single().id)
         repo.addManual("Leche", 1.0, MeasureUnit.LITER)
@@ -127,7 +127,7 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun delete_andRestore_bringTheItemBack() = runBlocking {
+    fun delete_andRestore_bringTheItemBack() = runBlocking<Unit> {
         repo.addManual("Pan", null, MeasureUnit.PIECE)
         val item = all().single()
         repo.delete(item.id)
@@ -137,7 +137,7 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun clearChecked_removesOnlyChecked_andRestoreReturnsThem() = runBlocking {
+    fun clearChecked_removesOnlyChecked_andRestoreReturnsThem() = runBlocking<Unit> {
         repo.addManual("Pan", null, MeasureUnit.PIECE)
         repo.addManual("Leche", 1.0, MeasureUnit.LITER)
         val pan = all().first { it.name == "Pan" }
@@ -150,7 +150,7 @@ class ShoppingRepositoryTest {
     }
 
     @Test
-    fun cupSizeComesFromTheSetting() = runBlocking {
+    fun cupSizeComesFromTheSetting() = runBlocking<Unit> {
         val big = RoomShoppingRepository(db, Clock.systemUTC(), flowOf(250))
         big.addManual("Leche", 1.0, MeasureUnit.CUP)
         big.addManual("Leche", 0.0, MeasureUnit.MILLILITER)

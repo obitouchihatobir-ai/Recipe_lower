@@ -15,17 +15,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -52,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
@@ -62,7 +60,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.recetario.AppContainer
 import app.recetario.core.ui.components.AnimatedCheck
 import app.recetario.core.ui.components.AppTextField
-import app.recetario.core.ui.components.FieldLabel
+import app.recetario.core.ui.components.ChoiceChip
 import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.ScreenTitle
 import app.recetario.core.ui.components.SectionTitle
@@ -201,25 +199,28 @@ fun ShoppingContent(
             }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 92.dp))
-        FloatingActionButton(
-            onClick = { adding = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp).testTag("shopping-add"),
-            shape = RoundedCornerShape(LocalRecetarioShapes.current.radius),
-            containerColor = c.accent,
-            contentColor = c.onAccent,
-            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp, pressedElevation = 2.dp),
-        ) {
-            Icon(AppIcons.Plus, contentDescription = "Añadir un artículo", modifier = Modifier.size(26.dp))
+        if (!adding) {
+            FloatingActionButton(
+                onClick = { adding = true },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp).testTag("shopping-add"),
+                shape = RoundedCornerShape(LocalRecetarioShapes.current.radius),
+                containerColor = c.accent,
+                contentColor = c.onAccent,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp, pressedElevation = 2.dp),
+            ) {
+                Icon(AppIcons.Plus, contentDescription = "Añadir un artículo", modifier = Modifier.size(26.dp))
+            }
         }
-    }
-    if (adding) {
-        AddItemDialog(
-            onDismiss = { adding = false },
-            onConfirm = { name, quantity, unit ->
-                onAdd(name, quantity, unit)
-                adding = false
-            },
-        )
+        if (adding) {
+            AddItemPanel(
+                onDismiss = { adding = false },
+                onConfirm = { name, quantity, unit ->
+                    onAdd(name, quantity, unit)
+                    adding = false
+                },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 }
 
@@ -309,59 +310,55 @@ private val manualUnits = listOf(
 
 private fun unitLabel(unit: MeasureUnit) = if (unit == MeasureUnit.PIECE) "unidades" else unit.singular
 
+/** Panel para añadir a mano: nombre, cantidad (admite 1,5 · 1/2 · 1 1/2 · ½) y unidad. */
 @Composable
-private fun AddItemDialog(onDismiss: () -> Unit, onConfirm: (String, Double?, MeasureUnit) -> Unit) {
+private fun AddItemPanel(
+    onDismiss: () -> Unit,
+    onConfirm: (String, Double?, MeasureUnit) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val c = LocalRecetarioColors.current
     var name by rememberSaveable { mutableStateOf("") }
     var quantityText by rememberSaveable { mutableStateOf("") }
-    var unit by rememberSaveable { mutableStateOf(MeasureUnit.PIECE) }
-    var menu by remember { mutableStateOf(false) }
+    var unitName by rememberSaveable { mutableStateOf(MeasureUnit.PIECE.name) }
+    val unit = MeasureUnit.valueOf(unitName)
     val quantity = parseQuantity(quantityText)
     val quantityInvalid = quantityText.isNotBlank() && quantity == null
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = c.surface,
-        title = { Text("Añadir artículo", color = c.ink) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = "Nombre",
-                    modifier = Modifier.fillMaxWidth().testTag("shopping-add-name"),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                    AppTextField(
-                        value = quantityText,
-                        onValueChange = { quantityText = it },
-                        label = "Cantidad",
-                        modifier = Modifier.weight(1f).testTag("shopping-add-quantity"),
-                        error = if (quantityInvalid) "No se entiende" else null,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                    )
-                    Box(Modifier.padding(top = 8.dp)) {
-                        TextButton(onClick = { menu = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("shopping-add-unit")) {
-                            Text(unitLabel(unit), color = c.accent)
-                        }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            for (u in manualUnits) {
-                                DropdownMenuItem(text = { Text(unitLabel(u)) }, onClick = { unit = u; menu = false })
-                            }
-                        }
-                    }
-                }
-                FieldLabel("Admite 1,5 · 1/2 · 1 1/2 · ½")
+    Column(
+        modifier
+            .fillMaxWidth()
+            .imePadding()
+            .background(c.surface, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+            .padding(horizontal = 18.dp, vertical = 14.dp)
+            .testTag("shopping-add-panel"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SectionTitle("Añadir artículo")
+        AppTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = "Nombre",
+            modifier = Modifier.fillMaxWidth().testTag("shopping-add-name"),
+        )
+        AppTextField(
+            value = quantityText,
+            onValueChange = { quantityText = it },
+            label = "Cantidad (opcional)",
+            modifier = Modifier.fillMaxWidth().testTag("shopping-add-quantity"),
+            error = if (quantityInvalid) "No se entiende la cantidad" else null,
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(manualUnits) { u ->
+                ChoiceChip(unitLabel(u), selected = u == unit, onClick = { unitName = u.name }, role = Role.RadioButton)
             }
-        },
-        confirmButton = {
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancelar", color = c.muted) }
             TextButton(
                 onClick = { onConfirm(name, quantity, unit) },
                 enabled = name.isNotBlank() && !quantityInvalid,
                 modifier = Modifier.heightIn(min = 48.dp).testTag("shopping-add-confirm"),
-            ) { Text("Añadir") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancelar") }
-        },
-    )
+            ) { Text("Añadir", color = if (name.isNotBlank() && !quantityInvalid) c.accent else c.muted) }
+        }
+    }
 }
