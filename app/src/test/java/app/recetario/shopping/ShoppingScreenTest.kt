@@ -129,11 +129,15 @@ class ShoppingScreenTest {
 
     @Test
     fun back_closesThePanel_andKeepsTheTypedText() {
-        launch()
+        var dispatcher: androidx.activity.OnBackPressedDispatcher? = null
+        rule.setContent {
+            dispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            RecetarioTheme(ThemeChoice.CALIDO) { ShoppingRoute(container) }
+        }
         rule.waitFor(hasText("Tu lista está vacía. Desde una receta, pulsa «Lo que necesito»."))
         rule.onNodeWithTag("shopping-add").performClick()
         rule.onNodeWithTag("shopping-add-name").performTextInput("Tomates")
-        androidx.test.espresso.Espresso.pressBack()
+        rule.runOnUiThread { dispatcher!!.onBackPressed() }
         rule.waitForGone(hasTestTag("shopping-add-panel"))
         rule.onNodeWithTag("shopping-add").performClick()
         rule.onNodeWithText("Tomates").assertIsDisplayed()
