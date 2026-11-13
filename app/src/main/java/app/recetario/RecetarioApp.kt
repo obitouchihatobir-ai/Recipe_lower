@@ -8,6 +8,7 @@ import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.data.RoomRecipeRepository
 import java.io.File
 import java.time.Clock
+
 class RecetarioApp : Application() {
     lateinit var container: AppContainer
 
@@ -17,10 +18,15 @@ class RecetarioApp : Application() {
     }
 }
 
-/** Dependencias de la app, creadas a mano. Cada tarea registra aquí lo que crea. */
-class AppContainer(context: Context) {
-    val clock: Clock = Clock.systemDefaultZone()
-    val database: AppDatabase = AppDatabase.create(context)
+/**
+ * Dependencias de la app, creadas a mano. Cada tarea registra aquí lo que crea.
+ * Las pruebas pasan su propio reloj y una base de datos en memoria.
+ */
+class AppContainer(
+    context: Context,
+    val clock: Clock = Clock.systemDefaultZone(),
+    val database: AppDatabase = AppDatabase.create(context),
+) {
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")
     val recipeRepository: RecipeRepository = RoomRecipeRepository(database, photoStore, clock)

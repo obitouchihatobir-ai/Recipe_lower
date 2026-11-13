@@ -38,6 +38,15 @@ jobs:
       - name: Pruebas de la app y APK de depuración y release
         run: ./gradlew testDebugUnitTest assembleDebug assembleRelease
 
+      # Capturas de Inicio, Recetas y el editor en los tres temas (CapturasTest), para revisarlas a ojo.
+      - name: Subir capturas de pantalla
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: capturas
+          path: app/build/capturas/
+          if-no-files-found: ignore
+
       # Sin RECETARIO_KEYSTORE, el APK release sale sin firmar. Su versión debe
       # salir de app/version.properties: versionCode = major*10000 + minor*100 + patch.
       # Room regenera el esquema en cada compilación: si cambia y no está commiteado, falla
