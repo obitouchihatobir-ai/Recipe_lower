@@ -13,7 +13,9 @@ El diseño aprobado está en `docs/superpowers/specs/2026-11-13-recetario-design
 ## Estructura
 ```
 app/                      Módulo Android :app (Compose, Room, DataStore…), paquete app.recetario
-  src/main/java/app/recetario/   RecetarioApp (con AppContainer) y MainActivity; paquetes por función
+  src/main/java/app/recetario/   RecetarioApp (con AppContainer) y MainActivity; paquetes por función:
+                                 navigation/ (Routes, AppNavHost, BottomBar), home/, recipes/{list,editor,detail,data},
+                                 pairing/, core/ui/{theme,components,icons,motion}
   src/test/                      Pruebas en la JVM con Robolectric (sdk 35, robolectric.properties)
 logic/                    Build incluido, Kotlin/JVM sin Android: lógica pura y sus pruebas
                           (artefacto app.recetario:logic, que :app consume)
@@ -29,6 +31,11 @@ docs/superpowers/specs/   Diseños aprobados y sus bocetos
 docs/superpowers/plans/   Planes de implementación
 .superpowers/             Bocetos temporales de las sesiones (ignorado por git)
 ```
+
+## Navegación y pantallas
+- Rutas tipadas `@Serializable` en `navigation/Routes.kt`. `AppNavHost(container)` registra los destinos (cada tarea añade los suyos) dentro de un `SharedTransitionLayout`: la foto de una tarjeta viaja al detalle con la clave `photo-$recipeId` (solo cuando la navegación entra o sale del detalle).
+- Las pantallas se parten en `XxxRoute` (ViewModel y contenedor) y `XxxContent` (sin estado), que es lo que usan las capturas.
+- Iconos propios de trazo en `core/ui/icons/AppIcons.kt` (no se usa material-icons).
 
 ## Editor de recetas
 El borrador se guarda en `filesDir/drafts/` (`new.json` o `<idReceta>.json`) con 500 ms de espera y se borra al guardar o descartar (`EditorViewModel`, `DraftStore`).
@@ -54,6 +61,7 @@ Usa siempre el wrapper (`./gradlew`, Gradle 9.9.1) con JDK 21.
 - `bash scripts/signing/test-signing-scripts.sh`: pruebas de los scripts de firma (necesita `openssl` y `keytool`, no el SDK).
 - `./gradlew assembleRelease`: sin la variable `RECETARIO_KEYSTORE` genera `app-release-unsigned.apk` (sin firmar ni minificar).
 - **CI** (`.github/workflows/ci.yml`): en cada push y pull request ejecuta las pruebas de `logic/`, de los scripts de firma y de `:app`, compila los APK debug y release, comprueba que el release sale sin firmar y con la versión de `app/version.properties`, y ensaya la firma con una llave desechable (comprobada con `apksigner`). Si algo falla, sube los informes de prueba como artefacto `informes-de-prueba`.
+- **Capturas:** `CapturasTest` (Robolectric con gráficos nativos) guarda Inicio, Recetas y el editor en los tres temas en `app/build/capturas/`; CI las sube siempre como artefacto `capturas` para revisarlas a ojo frente a los bocetos (no se commitean).
 - **Nueva versión:** cambia `versionName` en `app/version.properties` (`versionCode = major*10000 + minor*100 + patch`; minor y patch de 0 a 99). Cada push a `main` publica `Recetario-<versionName>.apk` en la versión `v<versionName>` de Releases; si la versión ya existe, sustituye el APK.
 - Versiones: AGP 9.5.1 con Kotlin integrado (no se aplica `org.jetbrains.kotlin.android`), Kotlin 2.4.21, KSP 2.3.13, `compileSdk`/`targetSdk` 37, `minSdk` 26. Todas en `gradle/libs.versions.toml`.
 
@@ -68,4 +76,5 @@ Usa siempre el wrapper (`./gradlew`, Gradle 9.9.1) con JDK 21.
 - En el contenedor de Claude Code en la nube no hay SDK de Android (sí Java 21) y no se puede aceptar su licencia. Allí solo se prueba `logic/` en local; `:app` se verifica en GitHub Actions haciendo push a la rama de trabajo.
 - Maven Central responde a veces `429 Too Many Requests` a través del proxy del contenedor. Basta con repetir el comando de Gradle.
 - Los flujos `release.yml` y `create-signing-key.yml` solo funcionan en `main`: aparecen en Actions cuando el código ya está en `main` y fallan a propósito si se lanzan en otra rama (así no se firma ni se publica código sin fusionar, ni se crea una segunda llave). Antes de fusionar, CI ensaya sus pasos con una llave de prueba. Lo que sube un flujo con `GITHUB_TOKEN` no lanza otros flujos: por eso «Crear llave de firma» lanza «Publicar APK» con `gh workflow run`.
+- Pruebas Compose: usan `installTestContainer()` (base de datos en memoria y reloj fijo) y la regla `v2`. Los datos de Room llegan en otro hilo: espera con `waitFor`/`waitForGone` (`app/src/test/.../testing/`). `waitForIdle` no adelanta los `delay()` de las animaciones (entrada escalonada): para capturar, adelanta `mainClock`. `performScrollToNode` deja a la vista el nodo buscado, no lo que hay debajo: desplaza hasta el nodo exacto antes de tocarlo.
 - `api.open-meteo.com` está bloqueado por el proxy del contenedor. No afecta a la app (la llamada la hace el teléfono), pero no se puede probar desde aquí.
