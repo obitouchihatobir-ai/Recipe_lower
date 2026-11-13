@@ -521,4 +521,126 @@ class EditorViewModelTest {
         assertThat(vm.state.value.steps[1].photos).containsExactly("paso.jpg")
         assertThat(vm.state.value.steps[1].timerSeconds).isEqualTo(300)
     }
+
+    // Ronda 2: los enlaces del paso se derivan siempre del texto, de los ingredientes y de lo que tocó la persona.
+
+    @Test
+    fun halfTypedWord_doesNotLeaveAnIngredientSelected() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Sal")
+        val step = vm.state.value.steps.single()
+        for (text in listOf("S", "Sa", "Sal", "Salt", "Saltea")) vm.onEvent(EditorEvent.SetStepText(step.id, text))
+        assertThat(vm.state.value.steps.single().ingredientIds).isEmpty()
+    }
+
+    @Test
+    fun deletingTheWord_unselectsTheIngredient() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Calabaza")
+        val step = vm.state.value.steps.single()
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza"))
+        assertThat(vm.state.value.steps.single().ingredientIds).hasSize(1)
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la "))
+        assertThat(vm.state.value.steps.single().ingredientIds).isEmpty()
+    }
+
+    @Test
+    fun ingredientAddedAfterTheText_isSelected() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.onEvent(EditorEvent.AddStep)
+        val step = vm.state.value.steps.single()
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade el caldo"))
+        vm.onEvent(EditorEvent.AddIngredient)
+        val caldo = vm.state.value.ingredients.single()
+        vm.onEvent(EditorEvent.UpdateIngredient(caldo.copy(name = "Caldo")))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(caldo.id)
+    }
+
+    @Test
+    fun dismissedSuggestionStaysOff_andManualLinkSurvivesTextChanges() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Calabaza", "Nata")
+        val (calabaza, nata) = vm.state.value.ingredients
+        val step = vm.state.value.steps.single()
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza"))
+        vm.onEvent(EditorEvent.SetStepIngredients(step.id, emptySet()))
+        vm.onEvent(EditorEvent.SetStepIngredients(step.id, setOf(nata.id))) // a mano, sin sugerencia
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza troceada y remueve"))
+        val s = vm.state.value.steps.single()
+        assertThat(s.ingredientIds).containsExactly(nata.id)
+        assertThat(s.manualIngredientIds).containsExactly(nata.id)
+        assertThat(s.dismissedIngredientIds).containsExactly(calabaza.id)
+    }
+
+    @Test
+    fun loadedRecipe_keepsItsExactLinks() = runTest(dispatcher) {
+        val first = vmWithIngredients("Calabaza", "Caldo de verduras")
+        first.fillValid()
+        val (calabaza, caldo) = first.state.value.ingredients
+        val step = first.state.value.steps.single()
+        first.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza y el caldo"))
+        first.onEvent(EditorEvent.SetStepIngredients(step.id, setOf(calabaza.id))) // quita el caldo
+        val id = first.save()!!
+        assertThat(repo.recipes.value.getValue(id).steps.single().ingredientIds).containsExactly(calabaza.id)
+
+        val vm = newVm(recipeId = id)
+        val loaded = vm.state.value.steps.single()
+        assertThat(loaded.ingredientIds).containsExactly(calabaza.id)
+        assertThat(loaded.manualIngredientIds).containsExactly(calabaza.id)
+        // Seguir escribiendo no enlaza el caldo, que la receta guardada no usaba.
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza y el caldo, y cuece"))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(calabaza.id)
+        assertThat(caldo.id).isNotIn(vm.state.value.steps.single().ingredientIds)
+    }
+
+    @Test
+    fun oldDraftWithoutBookkeeping_loadsItsLinksAsManual() = runTest(dispatcher) {
+        draftsDir.mkdirs()
+        draftFile("new").writeText(
+            """{"recipeId":"viejo","title":"Gazpacho","ingredients":[{"id":"i1","name":"Tomate"}],""" +
+                """"steps":[{"id":"s1","text":"Tritura todo","ingredientIds":["i1"]}]}""",
+        )
+        val vm = newVm()
+        val step = vm.pendingDraft.value!!.steps.single()
+        assertThat(step.ingredientIds).containsExactly("i1")
+        assertThat(step.manualIngredientIds).containsExactly("i1")
+        assertThat(step.dismissedIngredientIds).isEmpty()
+    }
+
+    @Test
+    fun suggestionToggledOffAndOn_doesNotWriteAPhantomDraft() = runTest(dispatcher) {
+        val first = vmWithIngredients("Calabaza")
+        first.fillValid()
+        val step = first.state.value.steps.single()
+        first.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza"))
+        val id = first.save()!!
+
+        val vm = newVm(recipeId = id)
+        val calabaza = vm.state.value.ingredients.single()
+        vm.onEvent(EditorEvent.SetStepIngredients(step.id, emptySet()))
+        vm.onEvent(EditorEvent.SetStepIngredients(step.id, setOf(calabaza.id)))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(calabaza.id)
+        advanceTimeBy(600)
+
+        assertThat(draftFile(id).exists()).isFalse()
+        assertThat(newVm(recipeId = id).pendingDraft.value).isNull()
+    }
+
+    @Test
+    fun undoAfterASaveStarted_isIgnored_butWorksAgainAfterAFailedSave() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Harina")
+        val harina = vm.state.value.ingredients.single()
+        val removal = vm.state.value.removalOfIngredient(harina.id)!!
+        vm.onEvent(EditorEvent.RemoveIngredient(harina.id))
+        assertThat(vm.save()).isNull() // sin título ni categoría: no se guarda
+        vm.onEvent(EditorEvent.UndoRemoval(removal))
+        assertThat(vm.state.value.ingredients).containsExactly(harina)
+
+        val again = vm.state.value.removalOfIngredient(harina.id)!!
+        vm.onEvent(EditorEvent.RemoveIngredient(harina.id))
+        vm.fillValid()
+        val id = vm.save()!!
+        vm.onEvent(EditorEvent.UndoRemoval(again))
+        assertThat(vm.state.value.ingredients).isEmpty()
+        assertThat(repo.recipes.value.getValue(id).ingredients).isEmpty()
+        advanceTimeBy(600)
+        assertThat(draftFile(id).exists()).isFalse()
+    }
 }
