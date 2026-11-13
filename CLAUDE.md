@@ -37,6 +37,9 @@ docs/superpowers/plans/   Planes de implementación
 - Las pantallas se parten en `XxxRoute` (ViewModel y contenedor) y `XxxContent` (sin estado), que es lo que usan las capturas.
 - Iconos propios de trazo en `core/ui/icons/AppIcons.kt` (no se usa material-icons).
 
+## Lista de compra
+Lógica pura en `logic/.../shopping/` (`ShoppingModels`, `SectionClassifier`, `mergeInto`, `asShareText`); Room (`shopping_items`, `ShoppingDao`), `ShoppingRepository` y pantalla en `app/.../shopping/`. `addFromRecipe` escala, clasifica y funde en una transacción y devuelve cuántos ingredientes añadió. Borrar y «Vaciar marcados» ofrecen «Deshacer» (`restore`). La taza viene de `cupMl: Flow<Int>` (por ahora `flowOf(240)`; la Tarea 12 lo conecta a Ajustes). Añadir a mano usa un panel inferior, no un `AlertDialog` (en Robolectric el diálogo con campos de texto colgó la prueba). Si cambias una tabla de Room y no puedes compilar en local, el paso «Comprobar que el esquema…» de CI imprime el JSON generado: cópialo a `app/schemas/…/1.json` (sin la línea final `##[error]`).
+
 ## Editor de recetas
 El borrador se guarda en `filesDir/drafts/` (`new.json` o `<idReceta>.json`) con 500 ms de espera y se borra al guardar o descartar (`EditorViewModel`, `DraftStore`).
 
