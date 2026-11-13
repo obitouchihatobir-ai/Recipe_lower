@@ -25,6 +25,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # Lanzado desde otra rama, firmaría código sin fusionar con la llave real
+      # y sustituiría el APK publicado: solo se publica lo que está en main.
+      - name: Comprobar que se publica desde main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Ejecuta «Publicar APK» en la rama main."
+            exit 1
+          fi
+
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
