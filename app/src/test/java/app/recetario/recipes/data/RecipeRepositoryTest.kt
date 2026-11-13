@@ -180,7 +180,7 @@ class RecipeRepositoryTest {
     @Test
     fun tags_areDedupedByNormalizedName() = runBlocking<Unit> {
         repo.save(recipe(id = "r1", tags = listOf("Rápido", "rapido", " RÁPIDO ")))
-        repo.save(recipe(id = "r2", tags = listOf("rapido")))
+        repo.save(recipe(id = "r2", ingredients = emptyList(), steps = emptyList(), tags = listOf("rapido")))
 
         assertThat(repo.observeTags().first()).containsExactly("Rápido")
         assertThat(repo.observeRecipe("r1").first()!!.tags).containsExactly("Rápido")
@@ -189,8 +189,8 @@ class RecipeRepositoryTest {
 
     @Test
     fun renameTag_mergesWithExistingTag() = runBlocking<Unit> {
-        repo.save(recipe(id = "r1", tags = listOf("Fácil")))
-        repo.save(recipe(id = "r2", tags = listOf("Sencillo")))
+        repo.save(recipe(id = "r1", ingredients = emptyList(), steps = emptyList(), tags = listOf("Fácil")))
+        repo.save(recipe(id = "r2", ingredients = emptyList(), steps = emptyList(), tags = listOf("Sencillo")))
 
         repo.renameTag("Fácil", "sencillo")
 
