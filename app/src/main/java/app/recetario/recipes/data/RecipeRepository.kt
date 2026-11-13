@@ -2,6 +2,7 @@ package app.recetario.recipes.data
 
 import androidx.room.withTransaction
 import app.recetario.core.data.AppDatabase
+import app.recetario.core.data.DefaultCategories
 import app.recetario.core.text.normalize
 import app.recetario.recipes.model.Category
 import app.recetario.recipes.model.FlavorProfile
@@ -51,7 +52,10 @@ class RoomRecipeRepository(
         recipes.observeRecipe(id).map { it?.toRecipe() }
 
     override suspend fun save(recipe: Recipe) {
+        val previous = HashSet<String>()
         db.withTransaction {
+            recipes.coverPhoto(recipe.id)?.let(previous::add)
+            previous += recipes.stepPhotos(recipe.id)
             recipes.upsert(recipe.toEntity(updatedAt = clock.instant()))
             recipes.deleteIngredients(recipe.id)
             recipes.deleteSteps(recipe.id)
@@ -81,6 +85,9 @@ class RoomRecipeRepository(
             tags.linkAll(links.values.toList())
             tags.deleteOrphans()
         }
+        // Tras confirmar la transacción: fotos que la receta ya no usa y que nadie más referencia.
+        val kept = (listOfNotNull(recipe.coverPhoto) + recipe.steps.flatMap { it.photos }).toSet()
+        (previous - kept).filterNot { recipes.isPhotoReferenced(it) }.forEach(photos::delete)
     }
 
     override suspend fun delete(id: String) {
@@ -99,12 +106,16 @@ class RoomRecipeRepository(
     override fun observeCategories(): Flow<List<Category>> =
         categories.observeAll().map { list -> list.map { it.toModel() } }
 
-    override suspend fun saveCategory(category: Category) = categories.upsert(category.toEntity())
+    override suspend fun saveCategory(category: Category) {
+        // La marca isDefault no se confía al llamador: los IDs de serie siempre la llevan.
+        val isDefault = category.isDefault || category.id in DefaultCategories.ids
+        categories.upsert(category.copy(isDefault = isDefault).toEntity())
+    }
 
     override suspend fun deleteCategory(id: String, reassignTo: String) {
         db.withTransaction {
             val category = categories.get(id) ?: return@withTransaction
-            require(!category.isDefault) { "Las categorías de serie no se pueden borrar" }
+            require(!category.isDefault && id !in DefaultCategories.ids) { "Las categorías de serie no se pueden borrar" }
             recipes.reassignCategory(id, reassignTo)
             categories.delete(id)
         }

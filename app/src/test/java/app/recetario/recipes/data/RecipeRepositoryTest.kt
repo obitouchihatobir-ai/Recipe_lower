@@ -178,6 +178,47 @@ class RecipeRepositoryTest {
     }
 
     @Test
+    fun saveDefaultCategory_withIsDefaultFalse_stillCannotBeDeleted() = runBlocking<Unit> {
+        repo.saveCategory(Category(DefaultCategories.DRINK_ID, "Bebidas", "🍹", "#2A7F8E", BaseType.DRINK, 1, isDefault = false))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { repo.deleteCategory(DefaultCategories.DRINK_ID, reassignTo = DefaultCategories.FOOD_ID) }
+        }
+        assertThat(repo.observeCategories().first().single { it.id == "cat-bebidas" }.isDefault).isTrue()
+    }
+
+    @Test
+    fun renameDefaultCategory_keepsIsDefault() = runBlocking<Unit> {
+        val food = repo.observeCategories().first().single { it.id == DefaultCategories.FOOD_ID }
+        repo.saveCategory(food.copy(name = "Platos", isDefault = false))
+
+        val renamed = repo.observeCategories().first().single { it.id == DefaultCategories.FOOD_ID }
+        assertThat(renamed.name).isEqualTo("Platos")
+        assertThat(renamed.isDefault).isTrue()
+    }
+
+    @Test
+    fun save_removingStepPhotoAndChangingCover_deletesOldFilesOnly() = runBlocking<Unit> {
+        listOf("cover.jpg", "a.jpg", "b.jpg", "new-cover.jpg", "shared.jpg").forEach { photos.file(it).writeText("x") }
+        repo.save(recipe(steps = listOf(Step("s1", "Mezclar", listOf("a.jpg", "b.jpg", "shared.jpg"), null, emptySet()))))
+        repo.save(
+            recipe(id = "r2", ingredients = emptyList(), tags = emptyList(), cover = "shared.jpg",
+                steps = listOf(Step("s-other", "Otro", emptyList(), null, emptySet()))),
+        )
+
+        repo.save(
+            recipe(cover = "new-cover.jpg", steps = listOf(Step("s1", "Mezclar", listOf("a.jpg"), null, emptySet()))),
+        )
+
+        assertThat(photos.file("cover.jpg").exists()).isFalse()
+        assertThat(photos.file("b.jpg").exists()).isFalse()
+        assertThat(photos.file("a.jpg").exists()).isTrue()
+        assertThat(photos.file("new-cover.jpg").exists()).isTrue()
+        // shared.jpg ya no es de r1 pero r2 sigue usándola como portada.
+        assertThat(photos.file("shared.jpg").exists()).isTrue()
+    }
+
+    @Test
     fun tags_areDedupedByNormalizedName() = runBlocking<Unit> {
         repo.save(recipe(id = "r1", tags = listOf("Rápido", "rapido", " RÁPIDO ")))
         repo.save(recipe(id = "r2", ingredients = emptyList(), steps = emptyList(), tags = listOf("rapido")))

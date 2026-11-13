@@ -9,6 +9,8 @@ object DefaultCategories {
     const val DRINK_ID = "cat-bebidas"
     const val DESSERT_ID = "cat-postres"
 
+    val ids = setOf(FOOD_ID, DRINK_ID, DESSERT_ID)
+
     private data class Seed(val id: String, val name: String, val emoji: String, val color: String, val baseType: String)
 
     private val seeds = listOf(
