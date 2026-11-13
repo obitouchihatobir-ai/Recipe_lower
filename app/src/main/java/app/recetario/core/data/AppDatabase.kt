@@ -16,6 +16,8 @@ import app.recetario.recipes.data.StepIngredientEntity
 import app.recetario.recipes.data.StepPhotoEntity
 import app.recetario.recipes.data.TagDao
 import app.recetario.recipes.data.TagEntity
+import app.recetario.shopping.ShoppingDao
+import app.recetario.shopping.ShoppingItemEntity
 
 @Database(
     entities = [
@@ -27,6 +29,7 @@ import app.recetario.recipes.data.TagEntity
         TagEntity::class,
         RecipeTagEntity::class,
         CategoryEntity::class,
+        ShoppingItemEntity::class,
     ],
     version = 1,
     exportSchema = true,
@@ -36,6 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun recipeDao(): RecipeDao
     abstract fun categoryDao(): CategoryDao
     abstract fun tagDao(): TagDao
+    abstract fun shoppingDao(): ShoppingDao
 
     companion object {
         // Sin fallbackToDestructiveMigration: un cambio de esquema exige migración.

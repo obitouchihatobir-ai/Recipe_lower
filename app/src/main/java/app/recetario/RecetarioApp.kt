@@ -6,6 +6,9 @@ import app.recetario.core.data.AppDatabase
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.data.RoomRecipeRepository
+import app.recetario.shopping.RoomShoppingRepository
+import app.recetario.shopping.ShoppingRepository
+import kotlinx.coroutines.flow.flowOf
 import java.io.File
 import java.time.Clock
 
@@ -30,4 +33,7 @@ class AppContainer(
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")
     val recipeRepository: RecipeRepository = RoomRecipeRepository(database, photoStore, clock)
+
+    /** El tamaño de la taza (240 ml) lo conectará a los ajustes la Tarea 12. */
+    val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, flowOf(240))
 }

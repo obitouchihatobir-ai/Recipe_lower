@@ -49,7 +49,7 @@ class NavigationTest {
         rule.onNodeWithTag("tab-recipes").assertIsSelected()
 
         rule.onNodeWithTag("tab-shopping").performClick()
-        rule.onNodeWithTag("shopping-placeholder").assertIsDisplayed()
+        rule.onNodeWithTag("shopping-screen").assertIsDisplayed()
         rule.onNodeWithTag("tab-shopping").assertIsSelected()
 
         rule.onNodeWithTag("tab-pairing").performClick()

@@ -31,6 +31,7 @@ object AppIcons {
     val Gallery = stroke("Galería", "M4 5h16v14H4z", "M4 16l5-5 4 4 2-2 5 5", circle(15.5f, 9f, 1.5f))
     val ChevronDown = stroke("Desplegar", "M6 9l6 6 6-6")
     val Note = stroke("Nota", "M6 4h9l3 3v13H6z", "M9 11h6", "M9 15h4")
+    val Share = stroke("Compartir", "M12 15V4", "M8 8l4-4 4 4", "M5 13v6h14v-6")
     val Sort = stroke("Ordenar", "M7 4v16", "M4 17l3 3 3-3", "M17 20V4", "M14 7l3-3 3 3")
 }
 

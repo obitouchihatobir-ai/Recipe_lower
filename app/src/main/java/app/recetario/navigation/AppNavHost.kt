@@ -34,11 +34,11 @@ import app.recetario.core.ui.components.LocalSharedTransitionScope
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.home.HomeRoute
-import app.recetario.pairing.ComingSoon
 import app.recetario.pairing.PairingPlaceholderScreen
 import app.recetario.recipes.detail.DetailPlaceholderScreen
 import app.recetario.recipes.editor.EditorRoute
 import app.recetario.recipes.list.RecipesRoute
+import app.recetario.shopping.ShoppingRoute
 
 private const val FADE_MS = 250
 
@@ -108,15 +108,7 @@ fun AppNavHost(
                             )
                         }
                     }
-                    composable<Shopping> {
-                        // La Tarea 10 pone aquí la lista de la compra.
-                        ComingSoon(
-                            emoji = "🛒",
-                            title = "Compra",
-                            text = "Muy pronto: tu lista de la compra, ordenada por secciones del súper.",
-                            modifier = Modifier.testTag("shopping-placeholder"),
-                        )
-                    }
+                    composable<Shopping> { ShoppingRoute(container) }
                     composable<Pairing> { PairingPlaceholderScreen() }
                     composable<RecipeDetail> { from ->
                         val route = from.toRoute<RecipeDetail>()

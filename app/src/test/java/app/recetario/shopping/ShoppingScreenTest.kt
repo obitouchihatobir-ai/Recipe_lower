@@ -84,7 +84,7 @@ class ShoppingScreenTest {
         rule.onNodeWithText("Pan").performClick()
         rule.waitFor(hasText("Vaciar marcados"))
         rule.onNodeWithText("Vaciar marcados").performClick()
-        rule.waitForGone(hasText("Pan", substring = false).and(androidx.compose.ui.test.hasClickAction()))
+        rule.waitForGone(hasText("Pan"))
         rule.waitFor(hasText("Deshacer"))
         rule.onNodeWithText("Deshacer").performClick()
         rule.waitFor(hasText("Pan"))
