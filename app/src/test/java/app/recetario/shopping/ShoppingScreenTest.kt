@@ -129,19 +129,11 @@ class ShoppingScreenTest {
 
     @Test
     fun back_closesThePanel_andKeepsTheTypedText() {
-        val owner = object : androidx.activity.OnBackPressedDispatcherOwner {
-            override val lifecycle: androidx.lifecycle.Lifecycle = androidx.lifecycle.LifecycleRegistry.createUnsafe(this)
-            override val onBackPressedDispatcher = androidx.activity.OnBackPressedDispatcher()
-        }
-        rule.setContent {
-            androidx.compose.runtime.CompositionLocalProvider(
-                androidx.activity.compose.LocalOnBackPressedDispatcherOwner provides owner,
-            ) { RecetarioTheme(ThemeChoice.CALIDO) { ShoppingRoute(container) } }
-        }
+        launch()
         rule.waitFor(hasText("Tu lista está vacía. Desde una receta, pulsa «Lo que necesito»."))
         rule.onNodeWithTag("shopping-add").performClick()
         rule.onNodeWithTag("shopping-add-name").performTextInput("Tomates")
-        rule.runOnUiThread { owner.onBackPressedDispatcher.onBackPressed() }
+        androidx.test.espresso.Espresso.pressBack()
         rule.waitForGone(hasTestTag("shopping-add-panel"))
         rule.onNodeWithTag("shopping-add").performClick()
         rule.onNodeWithText("Tomates").assertIsDisplayed()
