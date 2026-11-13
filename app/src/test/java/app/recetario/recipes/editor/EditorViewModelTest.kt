@@ -19,8 +19,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -41,7 +44,10 @@ private class FakeRecipeRepository : RecipeRepository {
     val recipes = MutableStateFlow<Map<String, Recipe>>(emptyMap())
     override fun observeSummaries(): Flow<List<RecipeSummary>> = error("no se usa")
     override fun observeRecipe(id: String): Flow<Recipe?> = recipes.map { it[id] }
+    /** Con true, guardar falla como si la base de datos diera un error. */
+    var failSaves = false
     override suspend fun save(recipe: Recipe) {
+        if (failSaves) throw IllegalStateException("database or disk is full")
         recipes.value = recipes.value + (recipe.id to recipe)
     }
     override suspend fun delete(id: String) = error("no se usa")
@@ -583,7 +589,9 @@ class EditorViewModelTest {
         val vm = newVm(recipeId = id)
         val loaded = vm.state.value.steps.single()
         assertThat(loaded.ingredientIds).containsExactly(calabaza.id)
-        assertThat(loaded.manualIngredientIds).containsExactly(calabaza.id)
+        // Lo guardado que el texto ya sugiere no se marca a mano: así sigue el texto como en una receta nueva.
+        assertThat(loaded.manualIngredientIds).isEmpty()
+        assertThat(loaded.dismissedIngredientIds).containsExactly(caldo.id)
         // Seguir escribiendo no enlaza el caldo, que la receta guardada no usaba.
         vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza y el caldo, y cuece"))
         assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(calabaza.id)
@@ -642,5 +650,67 @@ class EditorViewModelTest {
         assertThat(repo.recipes.value.getValue(id).ingredients).isEmpty()
         advanceTimeBy(600)
         assertThat(draftFile(id).exists()).isFalse()
+    }
+
+    // Ronda 3.
+
+    @Test
+    fun reopenedRecipe_changingTheWord_unlinksTheOldIngredient() = runTest(dispatcher) {
+        val first = vmWithIngredients("Calabaza", "Cebolla")
+        first.fillValid()
+        val (calabaza, cebolla) = first.state.value.ingredients
+        val step = first.state.value.steps.single()
+        first.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza"))
+        val id = first.save()!!
+
+        val vm = newVm(recipeId = id)
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(calabaza.id)
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la cebolla"))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(cebolla.id)
+    }
+
+    @Test
+    fun editingAQuantity_doesNotChangeLinks_butRenamingDoes() = runTest(dispatcher) {
+        // Borrador de antes de las sugerencias: el paso nombra la nata pero solo enlazaba la calabaza.
+        draftsDir.mkdirs()
+        draftFile("new").writeText(
+            """{"recipeId":"viejo","title":"Crema","ingredients":[{"id":"i1","name":"Calabaza"},{"id":"i2","name":"Nata"}],""" +
+                """"steps":[{"id":"s1","text":"Añade la calabaza y la nata","ingredientIds":["i1"]}]}""",
+        )
+        val vm = newVm()
+        vm.recoverDraft()
+        val nata = vm.state.value.ingredients[1]
+
+        vm.onEvent(EditorEvent.UpdateIngredient(nata.copy(quantityText = "100")))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly("i1")
+
+        vm.onEvent(EditorEvent.UpdateIngredient(nata.copy(quantityText = "100", name = "Nata para cocinar")))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly("i1", "i2")
+    }
+
+    @Test
+    fun saveFailure_reportsAnError_keepsTheDraft_andUnlocksUndo() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Harina")
+        vm.fillValid()
+        val harina = vm.state.value.ingredients.single()
+        val removal = vm.state.value.removalOfIngredient(harina.id)!!
+        vm.onEvent(EditorEvent.RemoveIngredient(harina.id))
+        val errors = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.saveErrors.toList(errors) }
+        repo.failSaves = true
+
+        assertThat(vm.save()).isNull()
+        runCurrent()
+        assertThat(errors).containsExactly("No se pudo guardar la receta. Inténtalo de nuevo.")
+        assertThat(repo.recipes.value).isEmpty()
+
+        vm.onEvent(EditorEvent.UndoRemoval(removal))
+        assertThat(vm.state.value.ingredients).containsExactly(harina)
+        advanceTimeBy(600)
+        assertThat(draftFile("new").exists()).isTrue()
+
+        // Al reintentar sin fallo, se guarda.
+        repo.failSaves = false
+        assertThat(vm.save()).isNotNull()
     }
 }
