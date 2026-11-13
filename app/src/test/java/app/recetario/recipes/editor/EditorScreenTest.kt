@@ -126,4 +126,37 @@ class EditorScreenTest {
         rule.waitForGone(hasText("¿Recuperar el borrador?"))
         rule.onNodeWithTag("editor-title").assert(hasText("Gazpacho a medias"))
     }
+
+    @Test
+    fun removeIngredient_offersUndo_andRestoresIt() {
+        openNewRecipe()
+        scrollToText("Añadir ingrediente")
+        rule.onNodeWithText("Añadir ingrediente").performClick()
+        scrollTo("ingredient-name")
+        rule.onNodeWithTag("ingredient-name").performTextInput("Limón")
+
+        rule.onNodeWithContentDescription("Quitar el ingrediente").performClick()
+        rule.waitForGone(hasTestTag("ingredient-name"))
+        rule.waitFor(hasText("Se eliminó el ingrediente"))
+
+        rule.onNodeWithText("Deshacer").performClick()
+        rule.waitFor(hasTestTag("ingredient-name"))
+        scrollTo("ingredient-name")
+        rule.onNodeWithTag("ingredient-name").assert(hasText("Limón"))
+    }
+
+    @Test
+    fun typedButUnconfirmedTag_isCommittedOnSave() {
+        openNewRecipe()
+        rule.onNodeWithTag("editor-title").performTextInput("Horchata")
+        rule.onNodeWithText("Bebidas").performClick()
+        scrollTo("tag-input")
+        rule.onNodeWithTag("tag-input").performTextInput("Verano")
+
+        rule.onNodeWithText("Guardar").performClick()
+
+        rule.waitFor(hasTestTag("recipes-search"))
+        val summary = runBlocking { container.recipeRepository.observeSummaries().first() }.single()
+        assertThat(summary.tags).containsExactly("Verano")
+    }
 }

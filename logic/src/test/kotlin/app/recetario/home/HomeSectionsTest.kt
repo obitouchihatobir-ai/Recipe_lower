@@ -5,8 +5,10 @@ import app.recetario.recipes.model.FlavorProfile
 import app.recetario.recipes.model.RecipeSummary
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalTime
+import java.time.ZoneOffset
 
 class HomeSectionsTest {
     private fun r(id: String, title: String = id, updatedAt: Long = 0, favorite: Boolean = false) = RecipeSummary(
@@ -43,5 +45,12 @@ class HomeSectionsTest {
     fun favorites_onlyFavorites_alphabetical_ignoringAccents() {
         val all = listOf(r("1", "Tarta", favorite = true), r("2", "Ámbar", favorite = true), r("3", "Bizcocho"))
         assertThat(favoriteRecipes(all).map { it.title }).containsExactly("Ámbar", "Tarta").inOrder()
+    }
+
+    @Test
+    fun nextMinute_isTheDelayUntilTheNextMinuteBoundary() {
+        fun at(iso: String) = Clock.fixed(Instant.parse(iso), ZoneOffset.UTC)
+        assertThat(millisToNextMinute(at("2026-11-13T11:59:30.250Z"))).isEqualTo(29_750)
+        assertThat(millisToNextMinute(at("2026-11-13T12:00:00Z"))).isEqualTo(60_000)
     }
 }

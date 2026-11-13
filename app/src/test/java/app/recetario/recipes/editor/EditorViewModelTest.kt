@@ -432,4 +432,93 @@ class EditorViewModelTest {
         val vm = newVm(categoryId = "no-existe")
         assertThat(vm.state.value.categoryId).isNull()
     }
+
+    /** Editor con esos ingredientes (ya con nombre) y un paso vacío. */
+    private fun TestScope.vmWithIngredients(vararg names: String): EditorViewModel {
+        val vm = newVm()
+        repeat(names.size) { vm.onEvent(EditorEvent.AddIngredient) }
+        vm.state.value.ingredients.zip(names) { ing, name -> vm.onEvent(EditorEvent.UpdateIngredient(ing.copy(name = name))) }
+        vm.onEvent(EditorEvent.AddStep)
+        return vm
+    }
+
+    @Test
+    fun stepText_preselectsSuggestedIngredients() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Calabaza", "Caldo de verduras", "Crema")
+        val (calabaza, caldo, _) = vm.state.value.ingredients
+        val step = vm.state.value.steps.single()
+
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza"))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(calabaza.id)
+
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza y el caldo"))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(calabaza.id, caldo.id)
+    }
+
+    @Test
+    fun removedSuggestion_isNotReAddedOnFurtherTyping_andIsKeptInTheDraft() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Calabaza", "Caldo de verduras")
+        val (calabaza, caldo) = vm.state.value.ingredients
+        val step = vm.state.value.steps.single()
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza"))
+
+        vm.onEvent(EditorEvent.SetStepIngredients(step.id, emptySet())) // la persona la quita
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade la calabaza y remueve"))
+        assertThat(vm.state.value.steps.single().ingredientIds).isEmpty()
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade el caldo"))
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Añade el caldo y la calabaza"))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(caldo.id)
+        assertThat(vm.state.value.steps.single().dismissedIngredientIds).containsExactly(calabaza.id)
+
+        advanceTimeBy(600)
+        val reopened = newVm()
+        assertThat(reopened.pendingDraft.value!!.steps.single().dismissedIngredientIds).containsExactly(calabaza.id)
+
+        // Volver a marcarla a mano la acepta de nuevo.
+        vm.onEvent(EditorEvent.SetStepIngredients(step.id, setOf(caldo.id, calabaza.id)))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(caldo.id, calabaza.id)
+        assertThat(vm.state.value.steps.single().dismissedIngredientIds).isEmpty()
+    }
+
+    @Test
+    fun undoRemoveIngredient_restoresItsPositionAndStepLinks() = runTest(dispatcher) {
+        val vm = vmWithIngredients("Azúcar", "Harina", "Leche")
+        val (azucar, harina, leche) = vm.state.value.ingredients
+        val step = vm.state.value.steps.single()
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Tamiza la harina"))
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(harina.id)
+
+        val removal = vm.state.value.removalOfIngredient(harina.id)!!
+        vm.onEvent(EditorEvent.RemoveIngredient(harina.id))
+        assertThat(vm.state.value.ingredients.map { it.id }).containsExactly(azucar.id, leche.id).inOrder()
+        assertThat(vm.state.value.steps.single().ingredientIds).isEmpty()
+
+        vm.onEvent(EditorEvent.UndoRemoval(removal))
+        assertThat(vm.state.value.ingredients).containsExactly(azucar, harina, leche).inOrder()
+        assertThat(vm.state.value.steps.single().ingredientIds).containsExactly(harina.id)
+        // Deshacer dos veces no lo duplica.
+        vm.onEvent(EditorEvent.UndoRemoval(removal))
+        assertThat(vm.state.value.ingredients).hasSize(3)
+    }
+
+    @Test
+    fun undoRemoveStep_restoresItsPositionPhotosAndTimer() = runTest(dispatcher) {
+        val vm = newVm()
+        repeat(3) { vm.onEvent(EditorEvent.AddStep) }
+        val (s1, s2, s3) = vm.state.value.steps
+        vm.onEvent(EditorEvent.SetStepText(s2.id, "Hornea 5 minutos"))
+        vm.onEvent(EditorEvent.SetStepTimer(s2.id, 300))
+        vm.attachImportedPhoto("paso.jpg", PhotoTarget.StepPhoto(s2.id))
+        val before = vm.state.value.steps[1]
+
+        val removal = vm.state.value.removalOfStep(s2.id)!!
+        vm.onEvent(EditorEvent.RemoveStep(s2.id))
+        assertThat(vm.state.value.steps.map { it.id }).containsExactly(s1.id, s3.id).inOrder()
+
+        vm.onEvent(EditorEvent.UndoRemoval(removal))
+        assertThat(vm.state.value.steps.map { it.id }).containsExactly(s1.id, s2.id, s3.id).inOrder()
+        assertThat(vm.state.value.steps[1]).isEqualTo(before)
+        assertThat(vm.state.value.steps[1].photos).containsExactly("paso.jpg")
+        assertThat(vm.state.value.steps[1].timerSeconds).isEqualTo(300)
+    }
 }
