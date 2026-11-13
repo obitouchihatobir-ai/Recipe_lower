@@ -2,6 +2,7 @@ package app.recetario
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -15,7 +16,8 @@ class SmokeTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun launchShowsAppName() {
-        composeRule.onNodeWithText("Recetario").assertIsDisplayed()
+    fun launchShowsHomeAndBottomBar() {
+        composeRule.onNodeWithText("¿Qué cocinamos hoy?").assertIsDisplayed()
+        composeRule.onNodeWithTag("tab-recipes").assertIsDisplayed()
     }
 }
