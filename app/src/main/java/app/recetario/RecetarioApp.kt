@@ -22,5 +22,6 @@ class AppContainer(context: Context) {
     val clock: Clock = Clock.systemDefaultZone()
     val database: AppDatabase = AppDatabase.create(context)
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
+    val draftsDir = File(context.filesDir, "drafts")
     val recipeRepository: RecipeRepository = RoomRecipeRepository(database, photoStore, clock)
 }

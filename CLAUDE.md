@@ -30,6 +30,9 @@ docs/superpowers/plans/   Planes de implementación
 .superpowers/             Bocetos temporales de las sesiones (ignorado por git)
 ```
 
+## Editor de recetas
+El borrador se guarda en `filesDir/drafts/` (`new.json` o `<idReceta>.json`) con 500 ms de espera y se borra al guardar o descartar (`EditorViewModel`, `DraftStore`).
+
 ## Tecnología prevista
 - Kotlin + Jetpack Compose (Material 3 personalizado), Room (SQLite), DataStore.
 - Android 8.0 (API 26) como mínimo.

@@ -1,0 +1,250 @@
+package app.recetario.recipes.editor
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.recetario.core.data.DefaultCategories
+import app.recetario.recipes.data.PhotoStore
+import app.recetario.recipes.data.RecipeRepository
+import app.recetario.recipes.model.BaseType
+import app.recetario.recipes.model.Category
+import app.recetario.recipes.model.Moment
+import app.recetario.recipes.model.Recipe
+import app.recetario.recipes.model.RecipeSummary
+import app.recetario.recipes.model.ServeTemp
+import app.recetario.recipes.quantity.MeasureUnit
+import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import java.io.File
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
+
+private class FakeRecipeRepository : RecipeRepository {
+    val recipes = MutableStateFlow<Map<String, Recipe>>(emptyMap())
+    override fun observeSummaries(): Flow<List<RecipeSummary>> = error("no se usa")
+    override fun observeRecipe(id: String): Flow<Recipe?> = recipes.map { it[id] }
+    override suspend fun save(recipe: Recipe) {
+        recipes.value = recipes.value + (recipe.id to recipe)
+    }
+    override suspend fun delete(id: String) = error("no se usa")
+    override suspend fun setFavorite(id: String, favorite: Boolean) = error("no se usa")
+    override fun observeCategories(): Flow<List<Category>> = error("no se usa")
+    override suspend fun saveCategory(category: Category) = error("no se usa")
+    override suspend fun deleteCategory(id: String, reassignTo: String) = error("no se usa")
+    override fun observeTags(): Flow<List<String>> = error("no se usa")
+    override suspend fun renameTag(old: String, new: String) = error("no se usa")
+    override suspend fun deleteTag(name: String) = error("no se usa")
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(AndroidJUnit4::class)
+class EditorViewModelTest {
+    @get:Rule
+    val tmp = TemporaryFolder()
+
+    private val dispatcher = StandardTestDispatcher()
+    private val now = Instant.parse("2026-11-13T10:00:00Z")
+    private val clock = Clock.fixed(now, ZoneOffset.UTC)
+    private lateinit var repo: FakeRecipeRepository
+    private lateinit var photos: PhotoStore
+    private lateinit var draftsDir: File
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+        repo = FakeRecipeRepository()
+        photos = PhotoStore(tmp.newFolder("photos"))
+        draftsDir = File(tmp.root, "drafts")
+    }
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
+
+    private fun TestScope.newVm(recipeId: String? = null): EditorViewModel {
+        val handle = SavedStateHandle(if (recipeId == null) emptyMap() else mapOf(EditorViewModel.RECIPE_ID_ARG to recipeId))
+        val vm = EditorViewModel(handle, repo, photos, DraftStore(draftsDir), clock, ioDispatcher = dispatcher)
+        runCurrent()
+        return vm
+    }
+
+    private fun draftFile(key: String) = File(draftsDir, "$key.json")
+
+    private fun EditorViewModel.fillValid() {
+        onEvent(EditorEvent.SetTitle("Tarta"))
+        onEvent(EditorEvent.SetCategory(DefaultCategories.DESSERT_ID, BaseType.DESSERT))
+    }
+
+    @Test
+    fun save_withoutTitle_setsError_andReturnsNull() = runTest(dispatcher) {
+        val vm = newVm()
+        assertThat(vm.save()).isNull()
+        assertThat(vm.state.value.errors[Field.TITLE]).isEqualTo("Ponle un nombre a la receta")
+        assertThat(vm.state.value.errors[Field.CATEGORY]).isEqualTo("Elige una categoría")
+        assertThat(repo.recipes.value).isEmpty()
+        vm.onEvent(EditorEvent.SetTitle("Algo"))
+        assertThat(vm.state.value.errors).doesNotContainKey(Field.TITLE)
+    }
+
+    @Test
+    fun save_valid_persistsRecipe() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.fillValid()
+        vm.onEvent(EditorEvent.SetCookingMinutes("45"))
+        vm.onEvent(EditorEvent.AddIngredient)
+        val ing = vm.state.value.ingredients.single()
+        vm.onEvent(EditorEvent.UpdateIngredient(ing.copy(name = " Harina ", quantityText = "1 1/2", unit = MeasureUnit.CUP)))
+        vm.onEvent(EditorEvent.AddIngredient) // vacío: no se guarda
+        vm.onEvent(EditorEvent.AddStep)
+        val step = vm.state.value.steps.single()
+        vm.onEvent(EditorEvent.SetStepText(step.id, "Cuece 20 minutos"))
+        vm.onEvent(EditorEvent.SetStepIngredients(step.id, setOf(ing.id, "fantasma")))
+
+        val id = vm.save()
+
+        assertThat(id).isNotNull()
+        val saved = repo.recipes.value.getValue(id!!)
+        assertThat(saved.title).isEqualTo("Tarta")
+        assertThat(saved.categoryId).isEqualTo(DefaultCategories.DESSERT_ID)
+        assertThat(saved.totalMinutes).isEqualTo(45)
+        assertThat(saved.createdAt).isEqualTo(now)
+        assertThat(saved.ingredients).hasSize(1)
+        assertThat(saved.ingredients[0].name).isEqualTo("Harina")
+        assertThat(saved.ingredients[0].quantity).isEqualTo(1.5)
+        assertThat(saved.steps.single().timerSeconds).isEqualTo(1200)
+        assertThat(saved.steps.single().ingredientIds).containsExactly(ing.id)
+    }
+
+    @Test
+    fun reorderIngredients_keepsIds() = runTest(dispatcher) {
+        val vm = newVm()
+        repeat(3) { vm.onEvent(EditorEvent.AddIngredient) }
+        val before = vm.state.value.ingredients.map { it.id }
+        vm.onEvent(EditorEvent.MoveIngredient(0, 2))
+        assertThat(vm.state.value.ingredients.map { it.id }).containsExactly(before[1], before[2], before[0]).inOrder()
+    }
+
+    @Test
+    fun leavingWithChanges_savesDraft_andNextOpenOffersIt() = runTest(dispatcher) {
+        val vm = newVm()
+        assertThat(vm.pendingDraft.value).isNull()
+        vm.onEvent(EditorEvent.SetTitle("Sopa de calabaza"))
+        advanceTimeBy(499)
+        assertThat(draftFile("new").exists()).isFalse()
+        advanceTimeBy(2)
+        assertThat(draftFile("new").exists()).isTrue()
+
+        val reopened = newVm()
+        assertThat(reopened.pendingDraft.value?.title).isEqualTo("Sopa de calabaza")
+        assertThat(reopened.state.value.title).isEmpty()
+        reopened.recoverDraft()
+        assertThat(reopened.state.value.title).isEqualTo("Sopa de calabaza")
+        assertThat(reopened.pendingDraft.value).isNull()
+
+        val again = newVm()
+        again.discardPendingDraft()
+        assertThat(again.pendingDraft.value).isNull()
+        assertThat(draftFile("new").exists()).isFalse()
+    }
+
+    @Test
+    fun returningToTheInitialState_removesTheDraft() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.onEvent(EditorEvent.SetTitle("A"))
+        advanceTimeBy(600)
+        assertThat(draftFile("new").exists()).isTrue()
+        vm.onEvent(EditorEvent.SetTitle(""))
+        advanceTimeBy(600)
+        assertThat(draftFile("new").exists()).isFalse()
+    }
+
+    @Test
+    fun successfulSave_clearsDraft() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.fillValid()
+        advanceTimeBy(600)
+        assertThat(draftFile("new").exists()).isTrue()
+        assertThat(vm.save()).isNotNull()
+        advanceTimeBy(600)
+        assertThat(draftFile("new").exists()).isFalse()
+        assertThat(newVm().pendingDraft.value).isNull()
+    }
+
+    @Test
+    fun chooseDrinkCategory_prefillsMomentsAndCold() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.onEvent(EditorEvent.SetCategory(DefaultCategories.DRINK_ID, BaseType.DRINK))
+        val s = vm.state.value
+        assertThat(s.moments).containsExactly(Moment.LUNCH, Moment.SNACK, Moment.DINNER)
+        assertThat(s.serveTemp).isEqualTo(ServeTemp.COLD)
+        assertThat(s.defaultsSuggested).isTrue()
+
+        // Siguen siendo editables; tras tocarlos ya no se sobrescriben al cambiar de categoría.
+        vm.onEvent(EditorEvent.ToggleMoment(Moment.SNACK))
+        vm.onEvent(EditorEvent.SetCategory(DefaultCategories.FOOD_ID, BaseType.FOOD))
+        assertThat(vm.state.value.moments).containsExactly(Moment.LUNCH, Moment.DINNER)
+        assertThat(vm.state.value.serveTemp).isEqualTo(ServeTemp.COLD)
+    }
+
+    @Test
+    fun discard_deletesSessionPhotosAndDraft() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.fillValid()
+        photos.file("nueva.jpg").also { it.parentFile!!.mkdirs() }.writeText("x")
+        vm.attachImportedPhoto("nueva.jpg", PhotoTarget.Cover)
+        advanceTimeBy(600)
+        assertThat(draftFile("new").exists()).isTrue()
+
+        vm.discard()
+
+        assertThat(photos.file("nueva.jpg").exists()).isFalse()
+        assertThat(draftFile("new").exists()).isFalse()
+        assertThat(vm.state.value.title).isEmpty()
+        assertThat(vm.state.value.coverPhoto).isNull()
+    }
+
+    @Test
+    fun editingExisting_loadsRecipe_andUsesItsOwnDraft() = runTest(dispatcher) {
+        val first = newVm()
+        first.fillValid()
+        first.onEvent(EditorEvent.AddIngredient)
+        val ing = first.state.value.ingredients.single()
+        first.onEvent(EditorEvent.UpdateIngredient(ing.copy(name = "Azúcar", quantityText = "⅓", unit = MeasureUnit.CUP)))
+        val id = first.save()!!
+
+        val vm = newVm(id)
+        assertThat(vm.state.value.title).isEqualTo("Tarta")
+        assertThat(vm.state.value.ingredients.single().quantityText).isEqualTo("1/3")
+        assertThat(vm.pendingDraft.value).isNull()
+
+        vm.onEvent(EditorEvent.SetTitle("Tarta de queso"))
+        advanceTimeBy(600)
+        assertThat(draftFile(id).exists()).isTrue()
+        assertThat(draftFile("new").exists()).isFalse()
+        assertThat(newVm(id).pendingDraft.value?.title).isEqualTo("Tarta de queso")
+    }
+
+    @Test
+    fun quantityText_roundTripsThroughParser() {
+        for (v in listOf(2.0, 0.5, 1.5, 0.25, 2.75, 1.0 / 3, 0.125, 0.4)) {
+            val parsed = app.recetario.recipes.quantity.parseQuantity(quantityToText(v))!!
+            assertThat(parsed).isWithin(0.001).of(v)
+        }
+    }
+}
