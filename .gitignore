@@ -1,2 +1,15 @@
 # Bocetos y archivos temporales de las sesiones de diseño
 .superpowers/
+
+# Gradle y Android
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+
+# Llaves de firma: solo se versiona signing/release.p12.enc
+signing/*.p12
+*.jks
+*.keystore
