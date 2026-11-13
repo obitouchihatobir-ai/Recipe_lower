@@ -94,7 +94,12 @@ Los tokens salen de los bocetos (`estilo-visual.html`, `apariencia.html`).
 - **Ajustes › Apariencia:** Cálido, Fresco, Nocturno y el interruptor **Automático**. Con Automático, la app usa el tema claro elegido (Cálido o Fresco) de día y Nocturno de noche o cuando el sistema está en modo oscuro.
   - La «noche» va de 20:00 a 7:00, configurable, en la etapa 1. Desde la etapa 2 puede usar la puesta y la salida del sol que da Open-Meteo (decisión de Claude).
 - La primera vez que se abre la app arranca en **Automático con Cálido de día** (decisión de Claude).
-- Todos los textos deben cumplir un contraste mínimo de 4,5:1 en los tres temas.
+- Todos los textos deben cumplir un contraste mínimo de 4,5:1 en los tres temas. Algunos colores de la tabla no llegan:
+  - texto secundario de Cálido y Fresco (≈3,4–4,0);
+  - verde de acento como texto en Fresco (4,1);
+  - texto blanco sobre botón verde en Fresco (4,1).
+
+  Esos se **oscurecen lo mínimo necesario conservando el tono**; Nocturno ya cumple (decisión de Claude).
 
 ### 6.2 Animaciones
 Breves (normalmente de 150 a 450 ms), con física de muelle suave, sin bloquear nunca el toque y respetando la opción del sistema «quitar animaciones».
@@ -108,7 +113,7 @@ Breves (normalmente de 150 a 450 ms), con física de muelle suave, sin bloquear 
 
 ### 6.3 Navegación
 La barra inferior tiene 4 pestañas: **Inicio · Recetas · Compra · Maridaje**. Hay un botón flotante «+» para crear una receta en Inicio y en Recetas.
-- **Inicio:** saludo, clima, tarjeta Hoy (etapa 2), chips de categorías, recientes, favoritas y «hace tiempo que no la haces» (etapa 2). Desde la cabecera se llega a Ajustes y al diario.
+- **Inicio:** saludo, clima (etapa 2, junto con Open-Meteo), tarjeta Hoy (etapa 2), chips de categorías, recientes, favoritas y «hace tiempo que no la haces» (etapa 2). Desde la cabecera se llega a Ajustes y al diario.
 - **Recetas:** búsqueda, filtros y vista en cuadrícula o en lista.
 - **Compra:** pestañas internas **Lista · Despensa · Semana** (Despensa y Semana llegan en la etapa 2).
 - **Maridaje:** elegir una receta o una bebida y ver con qué combina. También el menú completo y el historial de maridajes valorados (etapa 2). En la etapa 1 la pestaña muestra un estado vacío que anuncia la función.
@@ -210,7 +215,7 @@ Base de datos local (Room/SQLite) más archivos de imagen en el almacenamiento i
 
 ### 8.5 Copias de seguridad (etapa 1)
 - **Exportar:** un único `.zip` (por ejemplo `Recetario-2026-11-13.zip`) con un JSON de todos los datos, con versión de esquema, y la carpeta de imágenes. El usuario elige dónde guardarlo (Google Drive, Descargas…).
-- **Importar:** «Reemplazar todo» (con confirmación, y después de una copia automática de lo actual) o «Combinar» (sin duplicar; identificadores estables, UUID).
+- **Importar:** «Reemplazar todo» (con confirmación, y después de una copia automática de lo actual) o «Combinar» (sin duplicar; identificadores estables, UUID). Al combinar, si hay conflicto gana la edición más reciente y nunca se borra nada (decisión de Claude).
 - **Copia automática semanal** a una carpeta elegida por el usuario. Si falla, la app avisa (decisión de Claude).
 - **Recordatorio** en Inicio si la última copia tiene más de 30 días (decisión de Claude).
 - La clave de la IA **nunca** se incluye en las copias.
@@ -274,7 +279,7 @@ Base de datos local (Room/SQLite) más archivos de imagen en el almacenamiento i
   - API de Claude con el SDK oficial de Java de Anthropic, si funciona en Android con API 26. Si no, HTTP directo contra `POST /v1/messages`, con el motivo documentado.
   - Modelo `claude-opus-5-5`, pensamiento adaptativo y salida estructurada (`output_config.format`).
   - Respaldo en el servidor ante negativas: `fallbacks: "default"` con la beta `server-side-fallback-2026-07-01`. Siempre se comprueba `stop_reason` antes de leer el contenido.
-  - Coste estimado: de 2 a 5 centavos de dólar por consulta.
+  - Coste estimado: de 2 a 5 centavos de dólar por maridaje. «Algo nuevo» genera una receta entera, así que puede llegar a unos 10 centavos.
   - Errores claros cuando no hay conexión, la clave no es válida, no queda saldo o se supera el límite de peticiones.
 
 ### 8.8 Despensa, diario y menú de la semana (etapa 2)
