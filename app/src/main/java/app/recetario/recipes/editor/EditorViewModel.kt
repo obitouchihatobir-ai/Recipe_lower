@@ -127,6 +127,9 @@ class EditorViewModel(
     private var persistJob: Job? = null
     private var dirty = false
 
+    /** True desde que empieza un guardado (vuelve a false si la validación lo impide). */
+    private var undoLocked = false
+
     init {
         viewModelScope.launch {
             if (editingId != null) {
@@ -148,7 +151,7 @@ class EditorViewModel(
             }
             val draft = withContext(ioDispatcher) { draftStore.load(draftKey) }
             if (draft != null) {
-                if (draft == baseline) withContext(ioDispatcher) { draftStore.clear(draftKey) }
+                if (draft.content() == baseline.content()) withContext(ioDispatcher) { draftStore.clear(draftKey) }
                 else _pendingDraft.value = draft
             }
             _ready.value = true
@@ -189,29 +192,36 @@ class EditorViewModel(
             is EditorEvent.UpdateIngredient -> update { s ->
                 s.withoutRowErrorsOf(e.value.id)
                     .copy(ingredients = s.ingredients.map { if (it.id == e.value.id) e.value else it })
+                    .relinkedSteps() // un nombre nuevo cambia lo que sugiere cada paso
             }
             is EditorEvent.RemoveIngredient -> update { s ->
                 s.copy(
                     ingredients = s.ingredients.filterNot { it.id == e.id },
-                    steps = s.steps.map { it.copy(ingredientIds = it.ingredientIds - e.id) },
+                    steps = s.steps.map {
+                        it.copy(
+                            ingredientIds = it.ingredientIds - e.id,
+                            manualIngredientIds = it.manualIngredientIds - e.id,
+                            dismissedIngredientIds = it.dismissedIngredientIds - e.id,
+                        )
+                    },
                 )
             }
             is EditorEvent.MoveIngredient -> update { it.copy(ingredients = it.ingredients.moved(e.from, e.to)) }
 
             EditorEvent.AddStep -> update { it.copy(steps = it.steps + StepDraft(id = newId())) }
             is EditorEvent.SetStepText -> update { s ->
-                s.withoutRowErrorsOf(e.id).copy(steps = s.steps.map { if (it.id == e.id) it.withText(e.text, s.ingredients) else it })
+                s.withoutRowErrorsOf(e.id)
+                    .copy(steps = s.steps.map { if (it.id == e.id) it.copy(text = e.text).relinked(s.ingredients) else it })
             }
             is EditorEvent.SetStepTimer -> updateStep(e.id) { it.copy(timerSeconds = e.seconds) }
-            is EditorEvent.SetStepIngredients -> updateStep(e.id) { st ->
-                // Lo que se quita a mano no se vuelve a sugerir; lo que se vuelve a marcar, sí.
-                val removed = st.ingredientIds - e.ingredientIds
-                val added = e.ingredientIds - st.ingredientIds
-                st.copy(ingredientIds = e.ingredientIds, dismissedIngredientIds = st.dismissedIngredientIds - added + removed)
+            is EditorEvent.SetStepIngredients -> update { s ->
+                s.withoutRowErrorsOf(e.id)
+                    .copy(steps = s.steps.map { if (it.id == e.id) it.toggled(e.ingredientIds, s.ingredients) else it })
             }
             is EditorEvent.RemoveStep -> update { s -> s.copy(steps = s.steps.filterNot { it.id == e.id }) }
             is EditorEvent.MoveStep -> update { it.copy(steps = it.steps.moved(e.from, e.to)) }
-            is EditorEvent.UndoRemoval -> update { it.restored(e.removal) }
+            // Una vez empezado a guardar, deshacer ya no cambia nada (lo guardado no debe quedar a medias).
+            is EditorEvent.UndoRemoval -> if (!undoLocked) update { it.restored(e.removal) }
 
             is EditorEvent.ImportPhoto -> viewModelScope.launch {
                 val name = try {
@@ -244,10 +254,12 @@ class EditorViewModel(
     suspend fun save(): String? {
         if (!_ready.value) return null
         if (_pendingDraft.value != null) return null
+        undoLocked = true
         val s = _state.value
         val (errors, rowErrors) = s.validate()
         if (errors.isNotEmpty() || rowErrors.isNotEmpty()) {
             _state.update { it.copy(errors = errors, rowErrors = rowErrors) }
+            undoLocked = false
             return null
         }
         val recipe = s.toRecipe(clock)
@@ -326,7 +338,8 @@ class EditorViewModel(
         if (_pendingDraft.value != null) return // todavía no se ha decidido qué hacer con el borrador anterior
         val current = _state.value.withoutErrors()
         try {
-            if (current == baseline) draftStore.clear(draftKey) else draftStore.save(draftKey, current)
+            // Solo cuenta el contenido: si únicamente cambió la contabilidad de sugerencias, no hay borrador.
+            if (current.content() == baseline.content()) draftStore.clear(draftKey) else draftStore.save(draftKey, current)
         } catch (_: IOException) {
             // Un borrador que no se puede escribir no debe tumbar el editor.
         }
@@ -389,7 +402,16 @@ internal fun Recipe.toEditorState() = EditorState(
             customUnit = it.customUnit.orEmpty(), note = it.note,
         )
     },
-    steps = steps.map { StepDraft(it.id, it.text, it.photos, it.timerSeconds, it.ingredientIds) },
+    // Los enlaces guardados son manuales; lo que el texto sugiere y la receta no usaba cuenta como quitado,
+    // así abrir una receta nunca cambia sus enlaces.
+    steps = steps.map {
+        StepDraft(
+            id = it.id, text = it.text, photos = it.photos, timerSeconds = it.timerSeconds,
+            ingredientIds = it.ingredientIds,
+            manualIngredientIds = it.ingredientIds,
+            dismissedIngredientIds = suggestStepIngredients(it.text, ingredients) - it.ingredientIds,
+        )
+    },
     tags = tags, notes = notes, favorite = favorite, sourceUrl = sourceUrl.orEmpty(), aiGenerated = aiGenerated,
 )
 

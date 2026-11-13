@@ -126,6 +126,8 @@ fun EditorRoute(
         onEvent = onEvent,
         onSave = {
             if (!saving) {
+                // Guardar cierra el «Deshacer» pendiente: lo guardado no debe cambiar después.
+                snackbar.currentSnackbarData?.dismiss()
                 val tags = vm.state.value.tags
                 val withPending = addTagsFromInput(tags, pendingTag)
                 if (withPending !== tags) vm.onEvent(EditorEvent.SetTags(withPending))

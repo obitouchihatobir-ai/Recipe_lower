@@ -35,8 +35,14 @@ data class StepDraft(
     val text: String = "",
     val photos: List<String> = emptyList(),
     val timerSeconds: Int? = null,
+    /**
+     * Ingredientes que usa el paso. Siempre derivado ([relinked]): los marcados a mano más los que sugiere
+     * el texto actual, menos los sugeridos que la persona quitó.
+     */
     val ingredientIds: Set<String> = emptySet(),
-    /** Ingredientes sugeridos que la persona quitó de este paso: no se vuelven a marcar solos. */
+    /** Marcados a mano. Los borradores y recetas de antes solo traen [ingredientIds]: se cargan como manuales. */
+    val manualIngredientIds: Set<String> = ingredientIds,
+    /** Sugeridos que la persona quitó de este paso: no se vuelven a marcar solos. */
     val dismissedIngredientIds: Set<String> = emptySet(),
 )
 
@@ -94,22 +100,60 @@ data class EditorState(
         get() = (listOfNotNull(coverPhoto) + steps.flatMap { it.photos }).toSet()
 }
 
+/** Ingredientes del texto del paso según sus nombres (§7: la app los sugiere comparando nombres). */
+internal fun StepDraft.suggested(ingredients: List<IngredientDraft>): Set<String> = suggestStepIngredients(
+    text,
+    ingredients.filter { it.name.isNotBlank() }
+        .map { Ingredient(id = it.id, section = null, name = it.name, quantity = null, unit = it.unit, customUnit = null, note = "") },
+)
+
 /**
- * Cambia el texto del paso y marca los ingredientes que el texto nuevo menciona y el anterior no
- * (§7: la app los sugiere comparando nombres), salvo los que la persona quitó de este paso.
+ * Recalcula [StepDraft.ingredientIds] = manuales ∪ (sugeridos por el texto actual − quitados), solo con
+ * ingredientes que existen. Se llama al cambiar el texto y al añadir, renombrar o quitar ingredientes,
+ * así una palabra a medio escribir («Sal» al escribir «Saltea») no deja un enlace equivocado.
  */
-internal fun StepDraft.withText(newText: String, ingredients: List<IngredientDraft>): StepDraft {
-    val named = ingredients.filter { it.name.isNotBlank() }
-        .map { Ingredient(id = it.id, section = null, name = it.name, quantity = null, unit = it.unit, customUnit = null, note = "") }
-    val fresh = suggestStepIngredients(newText, named) - suggestStepIngredients(text, named) - dismissedIngredientIds - ingredientIds
-    return copy(text = newText, ingredientIds = if (fresh.isEmpty()) ingredientIds else ingredientIds + fresh)
+internal fun StepDraft.relinked(ingredients: List<IngredientDraft>): StepDraft {
+    val existing = ingredients.mapTo(HashSet()) { it.id }
+    val effective = (manualIngredientIds + (suggested(ingredients) - dismissedIngredientIds)).filterTo(LinkedHashSet()) { it in existing }
+    return if (effective == ingredientIds) this else copy(ingredientIds = effective)
 }
+
+internal fun EditorState.relinkedSteps(): EditorState = copy(steps = steps.map { it.relinked(ingredients) })
+
+/**
+ * La persona deja los chips del paso como [newIds]: encender un sugerido solo lo saca de los quitados;
+ * encender otro lo marca a mano; apagar uno lo desmarca y, si es sugerido, lo apunta como quitado.
+ */
+internal fun StepDraft.toggled(newIds: Set<String>, ingredients: List<IngredientDraft>): StepDraft {
+    val suggested = suggested(ingredients)
+    var manual = manualIngredientIds
+    var dismissed = dismissedIngredientIds
+    for (id in newIds - ingredientIds) if (id in suggested) dismissed = dismissed - id else manual = manual + id
+    for (id in ingredientIds - newIds) {
+        manual = manual - id
+        if (id in suggested) dismissed = dismissed + id
+    }
+    return copy(manualIngredientIds = manual, dismissedIngredientIds = dismissed).relinked(ingredients)
+}
+
+/**
+ * Lo que de verdad es la receta, sin errores ni la contabilidad de sugerencias (manuales y quitados):
+ * con eso se decide si hay cambios que merezcan un borrador.
+ */
+internal fun EditorState.content(): EditorState = withoutErrors().copy(
+    steps = steps.map { it.copy(manualIngredientIds = emptySet(), dismissedIngredientIds = emptySet()) },
+)
 
 /** Lo necesario para deshacer la eliminación de un ingrediente o de un paso. */
 sealed interface Removal
 
-/** [linkedStepIds]: pasos que usaban el ingrediente (se vuelven a enlazar al deshacer). */
-data class RemovedIngredient(val index: Int, val draft: IngredientDraft, val linkedStepIds: Set<String>) : Removal
+/** [manualInSteps] y [dismissedInSteps]: pasos donde estaba marcado a mano o quitado (se recuperan al deshacer). */
+data class RemovedIngredient(
+    val index: Int,
+    val draft: IngredientDraft,
+    val manualInSteps: Set<String>,
+    val dismissedInSteps: Set<String>,
+) : Removal
 
 /** El paso se guarda entero: texto, fotos, temporizador e ingredientes. */
 data class RemovedStep(val index: Int, val draft: StepDraft) : Removal
@@ -117,7 +161,12 @@ data class RemovedStep(val index: Int, val draft: StepDraft) : Removal
 fun EditorState.removalOfIngredient(id: String): RemovedIngredient? {
     val index = ingredients.indexOfFirst { it.id == id }
     if (index < 0) return null
-    return RemovedIngredient(index, ingredients[index], steps.filter { id in it.ingredientIds }.mapTo(LinkedHashSet()) { it.id })
+    return RemovedIngredient(
+        index = index,
+        draft = ingredients[index],
+        manualInSteps = steps.filter { id in it.manualIngredientIds }.mapTo(LinkedHashSet()) { it.id },
+        dismissedInSteps = steps.filter { id in it.dismissedIngredientIds }.mapTo(LinkedHashSet()) { it.id },
+    )
 }
 
 fun EditorState.removalOfStep(id: String): RemovedStep? {
@@ -129,11 +178,19 @@ fun EditorState.removalOfStep(id: String): RemovedStep? {
 fun EditorState.restored(removal: Removal): EditorState = when (removal) {
     is RemovedIngredient ->
         if (ingredients.any { it.id == removal.draft.id }) this
-        else copy(
-            ingredients = ingredients.toMutableList().apply { add(removal.index.coerceIn(0, size), removal.draft) },
-            steps = steps.map { if (it.id in removal.linkedStepIds) it.copy(ingredientIds = it.ingredientIds + removal.draft.id) else it },
-        )
+        else {
+            val id = removal.draft.id
+            copy(
+                ingredients = ingredients.toMutableList().apply { add(removal.index.coerceIn(0, size), removal.draft) },
+                steps = steps.map {
+                    it.copy(
+                        manualIngredientIds = if (it.id in removal.manualInSteps) it.manualIngredientIds + id else it.manualIngredientIds,
+                        dismissedIngredientIds = if (it.id in removal.dismissedInSteps) it.dismissedIngredientIds + id else it.dismissedIngredientIds,
+                    )
+                },
+            ).relinkedSteps()
+        }
     is RemovedStep ->
         if (steps.any { it.id == removal.draft.id }) this
-        else copy(steps = steps.toMutableList().apply { add(removal.index.coerceIn(0, size), removal.draft) })
+        else copy(steps = steps.toMutableList().apply { add(removal.index.coerceIn(0, size), removal.draft) }).relinkedSteps()
 }
