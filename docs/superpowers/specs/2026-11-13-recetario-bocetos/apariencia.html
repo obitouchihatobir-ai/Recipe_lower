@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boceto de apariencia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page-bg: #ECEAE6; --page-ink: #222; --page-muted: #6b6b6b; --page-card: #fff; --page-line: #dcd9d3; --page-accent: #222;
+    --x: 50%; --y: 50%;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #0f0f11; --page-ink: #eee; --page-muted: #9a9a9a; --page-card: #1a1a1d; --page-line: #2c2c30; --page-accent: #eee;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page-bg); color: var(--page-ink); font-family: Inter, system-ui, sans-serif; padding: 28px 16px 60px; }
+  header { max-width: 640px; margin: 0 auto 24px; }
+  header .step { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--page-muted); margin: 0 0 6px; }
+  header h1 { font-size: 24px; margin: 0 0 8px; font-weight: 600; }
+  header p { margin: 0 0 8px; color: var(--page-muted); line-height: 1.5; }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  .sim { display: flex; gap: 6px; padding: 4px; border-radius: 999px; background: var(--page-card); border: 1px solid var(--page-line); }
+  .sim button { border: 0; background: transparent; color: var(--page-ink); font: 600 13px Inter, sans-serif; padding: 8px 14px; border-radius: 999px; cursor: pointer; }
+  .sim button.on { background: var(--page-accent); color: var(--page-bg); }
+  .sim-label { font-size: 12px; color: var(--page-muted); margin: 0; }
+
+  /* ---------- Teléfono ---------- */
+  .phone {
+    position: relative; width: 300px; height: 760px; border-radius: 38px; overflow: hidden;
+    background: var(--bg); color: var(--ink); font-family: var(--font-body);
+    box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 20px 50px -20px rgba(0,0,0,.35);
+    view-transition-name: phone;
+  }
+  .screen { height: 100%; overflow-y: auto; padding: 14px 18px 96px; scrollbar-width: none; }
+  .screen::-webkit-scrollbar { display: none; }
+  .status { font-size: 12px; font-weight: 600; text-align: center; opacity: .7; margin-bottom: 14px; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .hello { margin: 0; font-size: 13px; color: var(--muted); }
+  .title { margin: 2px 0 0; font-family: var(--font-head); font-weight: var(--head-weight); font-size: 25px; line-height: 1.15; letter-spacing: var(--head-tracking); }
+  .top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .weather { flex-shrink: 0; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); white-space: nowrap; }
+  .palette-btn {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink); transition: transform .15s;
+  }
+  .palette-btn:active { transform: scale(.9); }
+  .palette-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .today { margin-top: 16px; padding: 16px; border-radius: var(--radius); background: var(--today-bg); color: var(--today-ink); border: var(--today-border); }
+  .eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; opacity: .85; }
+  .reason { margin: 6px 0 12px; font-size: 13.5px; line-height: 1.4; }
+  .menu { display: flex; flex-direction: column; gap: 8px; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: calc(var(--radius) - 6px); background: var(--today-item); }
+  .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 19px; background: var(--today-ico); flex-shrink: 0; }
+  .item b { display: block; font-size: 13.5px; font-weight: 600; }
+  .item small { font-size: 11.5px; opacity: .75; }
+  .today-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .btn { flex: 1; text-align: center; font-size: 13px; font-weight: 600; padding: 9px 0; border-radius: 999px; cursor: pointer; transition: transform .15s; user-select: none; }
+  .btn:active { transform: scale(.96); }
+  .btn.primary { background: var(--btn-bg); color: var(--btn-ink); }
+  .btn.ghost { border: 1px solid var(--btn-ghost-line); }
+  .chips { display: flex; gap: 6px; margin: 18px 0 4px; overflow-x: auto; scrollbar-width: none; }
+  .chip { font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 999px; white-space: nowrap; cursor: pointer; background: var(--surface); border: 1px solid var(--line); color: var(--muted); transition: background .25s, color .25s, border-color .25s, transform .15s; }
+  .chip:active { transform: scale(.95); }
+  .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .section-title { margin: 16px 0 10px; font-family: var(--font-head); font-weight: var(--head-weight); font-size: 17px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { cursor: pointer; transition: transform .15s; }
+  .card:active { transform: scale(.97); }
+  .photo { height: 104px; border-radius: var(--radius); display: grid; place-items: center; font-size: 34px; margin-bottom: 7px; }
+  .card b { display: block; font-size: 13px; font-weight: 600; line-height: 1.25; }
+  .card small { font-size: 11.5px; color: var(--muted); }
+  .flavor { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+  .fab { position: absolute; right: 18px; bottom: 82px; width: 52px; height: 52px; border-radius: var(--fab-radius); background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-size: 28px; box-shadow: 0 10px 24px -8px var(--accent); cursor: pointer; transition: transform .2s; }
+  .fab:active { transform: scale(.92) rotate(90deg); }
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 68px; display: flex; justify-content: space-around; align-items: center; background: var(--tab-bg); border-top: 1px solid var(--line); }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+  .tab svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tab.on { color: var(--accent); }
+
+  /* ---------- Hoja de Apariencia ---------- */
+  .backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.38); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 5; }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); color: var(--ink);
+    border-radius: 26px 26px 0 0; padding: 10px 18px 26px; transform: translateY(105%);
+    transition: transform .5s cubic-bezier(.2,.9,.2,1); box-shadow: 0 -10px 30px -10px rgba(0,0,0,.3);
+  }
+  .phone.open .backdrop { opacity: 1; pointer-events: auto; }
+  .phone.open .sheet { transform: none; }
+  .grabber { width: 38px; height: 4px; border-radius: 4px; background: var(--line); margin: 0 auto 14px; }
+  .sheet h3 { margin: 0 0 2px; font-family: var(--font-head); font-weight: var(--head-weight); font-size: 20px; }
+  .sheet .sub { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }
+  .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .theme-opt { cursor: pointer; text-align: center; transition: transform .15s; }
+  .theme-opt:active { transform: scale(.95); }
+  .swatch {
+    height: 78px; border-radius: 16px; position: relative; overflow: hidden; display: grid; place-items: center;
+    border: 2px solid transparent; transition: border-color .25s, box-shadow .25s;
+  }
+  .swatch .aa { font-size: 22px; }
+  .swatch .dot { position: absolute; right: 8px; bottom: 8px; width: 14px; height: 14px; border-radius: 50%; }
+  .theme-opt.sel .swatch { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .theme-opt span { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; }
+  .sw-a { background: #F6EFE6; color: #2B2118; } .sw-a .aa { font-family: 'Fraunces', serif; font-weight: 600; } .sw-a .dot { background: #C2563A; }
+  .sw-b { background: #FFFFFF; color: #1E2A22; outline: 1px solid #E2EAE2; outline-offset: -1px; } .sw-b .aa { font-family: 'Nunito', sans-serif; font-weight: 800; } .sw-b .dot { background: #4E8A5C; }
+  .sw-c { background: #141416; color: #F2EDE4; } .sw-c .aa { font-family: 'Playfair Display', serif; font-weight: 600; } .sw-c .dot { background: #E0A458; }
+  .auto-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 12px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); cursor: pointer; }
+  .auto-row b { display: block; font-size: 13.5px; }
+  .auto-row small { font-size: 12px; color: var(--muted); line-height: 1.35; display: block; }
+  .switch { flex-shrink: 0; width: 44px; height: 26px; border-radius: 999px; background: var(--line); position: relative; transition: background .25s; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .3s cubic-bezier(.2,.9,.2,1.2); }
+  .auto-on .switch { background: var(--accent); }
+  .auto-on .switch::after { transform: translateX(18px); }
+  .auto-note { margin: 10px 2px 0; font-size: 12px; color: var(--muted); min-height: 16px; }
+
+  /* ---------- Animaciones ---------- */
+  .play .anim { animation: up .65s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 90ms); }
+  @keyframes up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  ::view-transition-old(phone) { animation: none; }
+  ::view-transition-new(phone) { animation: reveal .7s cubic-bezier(.4,0,.2,1); }
+  @keyframes reveal { from { clip-path: circle(0 at var(--x) var(--y)); } to { clip-path: circle(140% at var(--x) var(--y)); } }
+  @media (prefers-reduced-motion: reduce) { .play .anim { animation: none; } ::view-transition-new(phone) { animation: none; } }
+
+  /* ---------- Temas ---------- */
+  .theme-a {
+    --bg: #F6EFE6; --surface: #FFFAF3; --ink: #2B2118; --muted: #8A7A6A; --line: #E8DACB; --accent: #C2563A; --accent-ink: #FFF8F0;
+    --font-head: 'Fraunces', Georgia, serif; --font-body: 'Inter', sans-serif; --head-weight: 600; --head-tracking: -0.01em;
+    --radius: 18px; --fab-radius: 18px;
+    --today-bg: linear-gradient(140deg, #C2563A, #D98048); --today-ink: #FFF8F0; --today-border: none;
+    --today-item: rgba(255,248,240,.14); --today-ico: rgba(255,248,240,.22);
+    --btn-bg: #FFF8F0; --btn-ink: #A9452C; --btn-ghost-line: rgba(255,248,240,.5); --tab-bg: rgba(255,250,243,.95);
+  }
+  .theme-a .p1 { background: linear-gradient(140deg, #F5E7B0, #D9E6B8); }
+  .theme-a .p2 { background: linear-gradient(140deg, #F4C3AE, #E58A6F); }
+  .theme-b {
+    --bg: #FFFFFF; --surface: #F3F7F2; --ink: #1E2A22; --muted: #7A887E; --line: #E2EAE2; --accent: #4E8A5C; --accent-ink: #FFFFFF;
+    --font-head: 'Nunito', sans-serif; --font-body: 'Nunito', sans-serif; --head-weight: 800; --head-tracking: -0.015em;
+    --radius: 24px; --fab-radius: 50%;
+    --today-bg: #EAF3E9; --today-ink: #1E2A22; --today-border: none; --today-item: #FFFFFF; --today-ico: #EAF3E9;
+    --btn-bg: #4E8A5C; --btn-ink: #fff; --btn-ghost-line: #BCD3BE; --tab-bg: rgba(255,255,255,.96);
+  }
+  .theme-b .p1 { background: linear-gradient(140deg, #FBF3C4, #DDF0D2); }
+  .theme-b .p2 { background: linear-gradient(140deg, #FFE0D6, #F7B4A2); }
+  .theme-c {
+    --bg: #141416; --surface: #1E1E22; --ink: #F2EDE4; --muted: #9A948A; --line: #2C2C31; --accent: #E0A458; --accent-ink: #1A1408;
+    --font-head: 'Playfair Display', Georgia, serif; --font-body: 'Inter', sans-serif; --head-weight: 600; --head-tracking: 0;
+    --radius: 16px; --fab-radius: 16px;
+    --today-bg: linear-gradient(165deg, #2A241B, #1C1C20); --today-ink: #F2EDE4; --today-border: 1px solid rgba(224,164,88,.35);
+    --today-item: rgba(255,255,255,.04); --today-ico: rgba(224,164,88,.14);
+    --btn-bg: #E0A458; --btn-ink: #1A1408; --btn-ghost-line: rgba(242,237,228,.25); --tab-bg: rgba(20,20,22,.95);
+  }
+  .theme-c .p1 { background: linear-gradient(140deg, #3B3A22, #2C3A25); }
+  .theme-c .p2 { background: linear-gradient(140deg, #4A2A22, #5E2F25); }
+
+  .note { max-width: 640px; margin: 28px auto 0; color: var(--page-muted); font-size: 14px; line-height: 1.55; }
+  .note b { color: var(--page-ink); }
+</style>
+</head>
+<body class="play">
+<header>
+  <p class="step">Boceto 2 · Cambiar de tema</p>
+  <h1>Los tres temas dentro de la app</h1>
+  <p>Toca el icono de paleta (arriba a la derecha del teléfono) para abrir <b>Apariencia</b>. Al elegir un tema, la app cambia con una animación circular desde donde tocaste.</p>
+  <p>Activa <b>Automático</b> y usa los botones de abajo para simular la hora: de día usa tu tema claro y de noche pasa a Nocturno. El menú de Hoy también cambia con la hora y el clima.</p>
+</header>
+
+<div class="stage">
+  <div class="sim" role="group" aria-label="Simular hora">
+    <button data-time="day">☀ Mediodía</button>
+    <button data-time="night" class="on">🌙 Noche</button>
+  </div>
+  <p class="sim-label">Simulación de la hora (solo para el boceto)</p>
+
+  <div class="phone theme-a" id="phone">
+    <div class="screen">
+      <div class="status" id="clock">21:40</div>
+      <div class="top anim" style="--i:0">
+        <div>
+          <p class="hello" id="hello">Buenas noches</p>
+          <h2 class="title">¿Qué cocinamos hoy?</h2>
+        </div>
+        <div class="top-right">
+          <div class="weather" id="weather">🌧 9 °C</div>
+          <div class="palette-btn" id="paletteBtn" title="Apariencia">
+            <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H17a4 4 0 0 0 4-4c0-4.4-4-8.2-9-8.2z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="today anim" style="--i:1">
+        <span class="eyebrow" id="eyebrow">Menú de esta noche · Otoño</span>
+        <p class="reason" id="reason">Hace frío y llueve: algo caliente y reconfortante.</p>
+        <div class="menu" id="menu"></div>
+        <div class="today-actions"><span class="btn primary">Empezar</span><span class="btn ghost">Otra idea</span></div>
+      </div>
+
+      <div class="chips anim" style="--i:2">
+        <span class="chip on">Todas</span><span class="chip">Comidas</span><span class="chip">Bebidas</span><span class="chip">Postres</span><span class="chip">Salsas</span>
+      </div>
+
+      <div class="section-title anim" style="--i:3">Recientes</div>
+      <div class="cards">
+        <div class="card anim" style="--i:4"><div class="photo p1">🍋</div><b>Limonada con hierbabuena</b><small><span class="flavor" style="background:#E3C94A"></span>Bebida · ácida · 10 min</small></div>
+        <div class="card anim" style="--i:5"><div class="photo p2">🍅</div><b>Bloody Mary</b><small><span class="flavor" style="background:#D9603F"></span>Bebida · salada · 5 min</small></div>
+      </div>
+    </div>
+
+    <div class="fab">+</div>
+    <nav class="tabbar">
+      <span class="tab on"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>Inicio</span>
+      <span class="tab"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></svg>Recetas</span>
+      <span class="tab"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.4 11h11L21 7H6.2"/><circle cx="9" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg>Compra</span>
+      <span class="tab"><svg viewBox="0 0 24 24"><path d="M12 3c-3 4-6 6-6 10a6 6 0 0 0 12 0c0-4-3-6-6-10z"/></svg>Maridaje</span>
+    </nav>
+
+    <div class="backdrop" id="backdrop"></div>
+    <div class="sheet" id="sheet">
+      <div class="grabber"></div>
+      <h3>Apariencia</h3>
+      <p class="sub">Elige cómo se ve tu recetario.</p>
+      <div class="themes">
+        <div class="theme-opt sel" data-theme="a"><div class="swatch sw-a"><span class="aa">Aa</span><i class="dot"></i></div><span>Cálido</span></div>
+        <div class="theme-opt" data-theme="b"><div class="swatch sw-b"><span class="aa">Aa</span><i class="dot"></i></div><span>Fresco</span></div>
+        <div class="theme-opt" data-theme="c"><div class="swatch sw-c"><span class="aa">Aa</span><i class="dot"></i></div><span>Nocturno</span></div>
+      </div>
+      <div class="auto-row" id="autoRow">
+        <div style="flex:1">
+          <b>Automático</b>
+          <small>Tu tema claro de día y Nocturno de noche (o cuando el teléfono esté en modo oscuro).</small>
+        </div>
+        <div class="switch"></div>
+      </div>
+      <p class="auto-note" id="autoNote"></p>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <p><b>Cómo funcionaría en la app:</b> Ajustes › Apariencia, con los tres temas y el interruptor Automático. Cuando Automático está activado, eliges cuál de los dos temas claros (Cálido o Fresco) quieres de día.</p>
+  <p>Respóndeme en el chat: ¿te gusta así?, ¿con qué tema debería abrirse la primera vez?</p>
+</div>
+
+<script>
+  const phone = document.getElementById('phone');
+  const state = { theme: 'a', dayTheme: 'a', auto: false, time: 'night' };
+
+  const scenes = {
+    night: {
+      clock: '21:40', hello: 'Buenas noches', weather: '🌧 9 °C',
+      eyebrow: 'Menú de esta noche · Otoño', reason: 'Hace frío y llueve: algo caliente y reconfortante.',
+      menu: [['🎃','Crema de calabaza','Comida · 35 min'],['☕','Chocolate caliente','Bebida · dulce · sin alcohol'],['🍮','Flan casero','Postre · 50 min']]
+    },
+    day: {
+      clock: '13:10', hello: 'Buenas tardes', weather: '☀ 24 °C',
+      eyebrow: 'Comida de hoy · Otoño', reason: 'Día soleado y templado: algo ligero y fresco.',
+      menu: [['🥗','Ensalada de quinoa y mango','Comida · 20 min'],['🍋','Limonada con hierbabuena','Bebida · ácida · sin alcohol'],['🍓','Paletas de fresa','Postre · 15 min']]
+    }
+  };
+
+  function effectiveTheme() {
+    if (!state.auto) return state.theme;
+    return state.time === 'night' ? 'c' : state.dayTheme;
+  }
+
+  function render() {
+    const s = scenes[state.time];
+    document.getElementById('clock').textContent = s.clock;
+    document.getElementById('hello').textContent = s.hello;
+    document.getElementById('weather').textContent = s.weather;
+    document.getElementById('eyebrow').textContent = s.eyebrow;
+    document.getElementById('reason').textContent = s.reason;
+    document.getElementById('menu').innerHTML = s.menu.map(([i,t,m]) =>
+      `<div class="item"><span class="ico">${i}</span><div><b>${t}</b><small>${m}</small></div></div>`).join('');
+
+    const eff = effectiveTheme();
+    phone.classList.remove('theme-a','theme-b','theme-c');
+    phone.classList.add('theme-' + eff);
+
+    document.querySelectorAll('.theme-opt').forEach(o => {
+      const t = o.dataset.theme;
+      const selected = state.auto ? (t === state.dayTheme) : (t === state.theme);
+      o.classList.toggle('sel', selected);
+    });
+    document.getElementById('autoRow').classList.toggle('auto-on', state.auto);
+    const names = { a: 'Cálido', b: 'Fresco', c: 'Nocturno' };
+    document.getElementById('autoNote').textContent = state.auto
+      ? `De día: ${names[state.dayTheme]} · De noche: Nocturno · Ahora: ${names[eff]}`
+      : '';
+  }
+
+  function withTransition(evt, fn) {
+    if (evt) {
+      const r = phone.getBoundingClientRect();
+      document.documentElement.style.setProperty('--x', (evt.clientX - r.left) + 'px');
+      document.documentElement.style.setProperty('--y', (evt.clientY - r.top) + 'px');
+    }
+    if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.startViewTransition(fn);
+    } else {
+      fn();
+    }
+  }
+
+  document.querySelectorAll('.theme-opt').forEach(o => o.addEventListener('click', e => {
+    const t = o.dataset.theme;
+    withTransition(e, () => {
+      if (state.auto && t !== 'c') { state.dayTheme = t; }
+      else { state.auto = false; state.theme = t; if (t !== 'c') state.dayTheme = t; }
+      render();
+    });
+  }));
+
+  document.getElementById('autoRow').addEventListener('click', e => withTransition(e, () => {
+    state.auto = !state.auto;
+    if (!state.auto) state.theme = effectiveTheme() === 'c' && state.time === 'night' ? 'c' : state.dayTheme;
+    render();
+  }));
+
+  document.querySelectorAll('.sim button').forEach(b => b.addEventListener('click', e => {
+    document.querySelectorAll('.sim button').forEach(x => x.classList.toggle('on', x === b));
+    const r = phone.getBoundingClientRect();
+    document.documentElement.style.setProperty('--x', (r.width / 2) + 'px');
+    document.documentElement.style.setProperty('--y', '0px');
+    withTransition(null, () => { state.time = b.dataset.time; render(); });
+  }));
+
+  const openSheet = () => phone.classList.add('open');
+  const closeSheet = () => phone.classList.remove('open');
+  document.getElementById('paletteBtn').addEventListener('click', openSheet);
+  document.getElementById('backdrop').addEventListener('click', closeSheet);
+
+  phone.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
+    phone.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+    chip.classList.add('on');
+  }));
+
+  render();
+  setTimeout(openSheet, 1100);
+</script>
+</body>
+</html>
