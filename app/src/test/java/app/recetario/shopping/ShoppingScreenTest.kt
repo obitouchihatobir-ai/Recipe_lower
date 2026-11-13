@@ -2,6 +2,7 @@ package app.recetario.shopping
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.hasClickAction
@@ -124,5 +125,25 @@ class ShoppingScreenTest {
         rule.onNodeWithText("Deshacer").performClick()
         rule.waitFor(hasText("Pan"))
         rule.waitFor(hasText("Vaciar marcados"))
+    }
+
+    @Test
+    fun back_closesThePanel_andKeepsTheTypedText() {
+        val owner = object : androidx.activity.OnBackPressedDispatcherOwner {
+            override val lifecycle: androidx.lifecycle.Lifecycle = androidx.lifecycle.LifecycleRegistry.createUnsafe(this)
+            override val onBackPressedDispatcher = androidx.activity.OnBackPressedDispatcher()
+        }
+        rule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.activity.compose.LocalOnBackPressedDispatcherOwner provides owner,
+            ) { RecetarioTheme(ThemeChoice.CALIDO) { ShoppingRoute(container) } }
+        }
+        rule.waitFor(hasText("Tu lista está vacía. Desde una receta, pulsa «Lo que necesito»."))
+        rule.onNodeWithTag("shopping-add").performClick()
+        rule.onNodeWithTag("shopping-add-name").performTextInput("Tomates")
+        rule.runOnUiThread { owner.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForGone(hasTestTag("shopping-add-panel"))
+        rule.onNodeWithTag("shopping-add").performClick()
+        rule.onNodeWithText("Tomates").assertIsDisplayed()
     }
 }
