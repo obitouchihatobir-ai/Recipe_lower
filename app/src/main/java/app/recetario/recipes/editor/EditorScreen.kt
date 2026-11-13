@@ -91,6 +91,7 @@ fun EditorRoute(
         onPicked = { stream, target -> vm.onEvent(EditorEvent.ImportPhoto(stream, target)) },
         onError = { message -> scope.launch { snackbar.showSnackbar(message) } },
     )
+    LaunchedEffect(vm) { vm.saveErrors.collect { snackbar.showSnackbar(it) } }
     // Quitar un ingrediente o un paso ofrece «Deshacer».
     val onEvent: (EditorEvent) -> Unit = remember(vm) {
         { e ->

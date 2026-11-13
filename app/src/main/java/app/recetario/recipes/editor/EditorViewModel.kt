@@ -21,12 +21,16 @@ import app.recetario.recipes.model.Step
 import app.recetario.recipes.model.ServeTemp
 import app.recetario.recipes.quantity.MeasureUnit
 import app.recetario.recipes.quantity.parseQuantity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -127,8 +131,13 @@ class EditorViewModel(
     private var persistJob: Job? = null
     private var dirty = false
 
-    /** True desde que empieza un guardado (vuelve a false si la validación lo impide). */
+    /** True desde que empieza un guardado (vuelve a false si la validación o la base de datos lo impiden). */
     private var undoLocked = false
+
+    private val _saveErrors = Channel<String>(Channel.BUFFERED)
+
+    /** Avisos de una sola vez cuando guardar falla (la pantalla los muestra en un snackbar). */
+    val saveErrors: Flow<String> = _saveErrors.receiveAsFlow()
 
     init {
         viewModelScope.launch {
@@ -190,9 +199,11 @@ class EditorViewModel(
 
             EditorEvent.AddIngredient -> update { it.copy(ingredients = it.ingredients + IngredientDraft(id = newId())) }
             is EditorEvent.UpdateIngredient -> update { s ->
-                s.withoutRowErrorsOf(e.value.id)
+                val renamed = s.ingredients.firstOrNull { it.id == e.value.id }?.name != e.value.name
+                val next = s.withoutRowErrorsOf(e.value.id)
                     .copy(ingredients = s.ingredients.map { if (it.id == e.value.id) e.value else it })
-                    .relinkedSteps() // un nombre nuevo cambia lo que sugiere cada paso
+                // Solo un nombre nuevo cambia lo que sugiere cada paso (la cantidad o la nota, no).
+                if (renamed) next.relinkedSteps() else next
             }
             is EditorEvent.RemoveIngredient -> update { s ->
                 s.copy(
@@ -263,7 +274,16 @@ class EditorViewModel(
             return null
         }
         val recipe = s.toRecipe(clock)
-        repo.save(recipe)
+        try {
+            repo.save(recipe)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No se cierra la app ni se borra el borrador: se avisa y se puede volver a intentar.
+            undoLocked = false
+            _saveErrors.trySend(SAVE_FAILED)
+            return null
+        }
         persistJob?.cancelAndJoin()
         dirty = false
         val createdMillis = recipe.createdAt.toEpochMilli()
@@ -349,6 +369,7 @@ class EditorViewModel(
         /** Argumentos de la ruta `RecipeEditor(id, categoryId)`. */
         const val RECIPE_ID_ARG = "id"
         const val CATEGORY_ID_ARG = "categoryId"
+        const val SAVE_FAILED = "No se pudo guardar la receta. Inténtalo de nuevo."
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -402,14 +423,15 @@ internal fun Recipe.toEditorState() = EditorState(
             customUnit = it.customUnit.orEmpty(), note = it.note,
         )
     },
-    // Los enlaces guardados son manuales; lo que el texto sugiere y la receta no usaba cuenta como quitado,
-    // así abrir una receta nunca cambia sus enlaces.
+    // Al abrir, los enlaces son exactamente los guardados: los que el texto sugiere siguen al texto (como en
+    // una receta nueva), el resto se marca a mano y lo sugerido que no se usaba cuenta como quitado.
     steps = steps.map {
+        val suggested = suggestStepIngredients(it.text, ingredients)
         StepDraft(
             id = it.id, text = it.text, photos = it.photos, timerSeconds = it.timerSeconds,
             ingredientIds = it.ingredientIds,
-            manualIngredientIds = it.ingredientIds,
-            dismissedIngredientIds = suggestStepIngredients(it.text, ingredients) - it.ingredientIds,
+            manualIngredientIds = it.ingredientIds - suggested,
+            dismissedIngredientIds = suggested - it.ingredientIds,
         )
     },
     tags = tags, notes = notes, favorite = favorite, sourceUrl = sourceUrl.orEmpty(), aiGenerated = aiGenerated,
