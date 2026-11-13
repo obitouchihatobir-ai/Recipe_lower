@@ -157,6 +157,10 @@ fun ShoppingContent(
     val reduced = LocalReducedMotion.current
     val tracker = rememberEntranceTracker()
     var adding by rememberSaveable { mutableStateOf(false) }
+    // Lo escrito vive aquí, no en el panel: Atrás cierra el panel y se conserva; solo «Añadir» lo borra.
+    var draftName by rememberSaveable { mutableStateOf("") }
+    var draftQuantity by rememberSaveable { mutableStateOf("") }
+    var draftUnit by rememberSaveable { mutableStateOf(MeasureUnit.PIECE.name) }
     Box(modifier.fillMaxSize().background(c.bg).testTag("shopping-screen")) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(
@@ -230,9 +234,18 @@ fun ShoppingContent(
         }
         if (adding) {
             AddItemPanel(
+                name = draftName,
+                onName = { draftName = it },
+                quantityText = draftQuantity,
+                onQuantityText = { draftQuantity = it },
+                unitName = draftUnit,
+                onUnitName = { draftUnit = it },
                 onDismiss = { adding = false },
                 onConfirm = { name, quantity, unit ->
                     onAdd(name, quantity, unit)
+                    draftName = ""
+                    draftQuantity = ""
+                    draftUnit = MeasureUnit.PIECE.name
                     adding = false
                 },
                 modifier = Modifier.align(Alignment.BottomCenter),
@@ -363,14 +376,17 @@ private fun unitLabel(unit: MeasureUnit) = if (unit == MeasureUnit.PIECE) "unida
 /** Panel para añadir a mano: nombre, cantidad (admite 1,5 · 1/2 · 1 1/2 · ½) y unidad. */
 @Composable
 private fun AddItemPanel(
+    name: String,
+    onName: (String) -> Unit,
+    quantityText: String,
+    onQuantityText: (String) -> Unit,
+    unitName: String,
+    onUnitName: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, Double?, MeasureUnit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val c = LocalRecetarioColors.current
-    var name by rememberSaveable { mutableStateOf("") }
-    var quantityText by rememberSaveable { mutableStateOf("") }
-    var unitName by rememberSaveable { mutableStateOf(MeasureUnit.PIECE.name) }
     val unit = MeasureUnit.valueOf(unitName)
     val nameFocus = remember { FocusRequester() }
     // Atrás cierra el panel (lo escrito se conserva) en vez de salir de la pestaña.
@@ -390,20 +406,20 @@ private fun AddItemPanel(
         SectionTitle("Añadir artículo")
         AppTextField(
             value = name,
-            onValueChange = { name = it },
+            onValueChange = onName,
             label = "Nombre",
             modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).testTag("shopping-add-name"),
         )
         AppTextField(
             value = quantityText,
-            onValueChange = { quantityText = it },
+            onValueChange = onQuantityText,
             label = "Cantidad (opcional)",
             modifier = Modifier.fillMaxWidth().testTag("shopping-add-quantity"),
             error = if (quantityInvalid) "No se entiende la cantidad" else null,
         )
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(manualUnits) { u ->
-                ChoiceChip(unitLabel(u), selected = u == unit, onClick = { unitName = u.name }, role = Role.RadioButton)
+                ChoiceChip(unitLabel(u), selected = u == unit, onClick = { onUnitName(u.name) }, role = Role.RadioButton)
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
