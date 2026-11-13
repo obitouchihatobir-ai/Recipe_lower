@@ -1,6 +1,7 @@
 package app.recetario.core.ui.components
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -82,5 +83,41 @@ class FlavorWheelTest {
             }
         }
         rule.onNodeWithText("Rápida").assertExists()
+    }
+
+    @Test
+    fun labelOrigin_keepsEveryLabelInsideCanvas() {
+        val canvas = Size(120f, 120f)
+        val label = Size(28f, 10f)
+        for (i in 0 until 5) {
+            val angle = -Math.PI / 2 + i * 2 * Math.PI / 5
+            val o = labelOrigin(Offset(60f, 60f), angle, 40.8f + 10f, label, canvas)
+            assertThat(o.x).isAtLeast(0f)
+            assertThat(o.y).isAtLeast(0f)
+            assertThat(o.x + label.width).isAtMost(120f)
+            assertThat(o.y + label.height).isAtMost(120f)
+        }
+        // Un radio exagerado también queda dentro.
+        val far = labelOrigin(Offset(60f, 60f), -Math.PI / 2, 200f, label, canvas)
+        assertThat(far.y).isAtLeast(0f)
+    }
+
+    @Test
+    fun entrance_playedKeyIsInstant_andNewKeyAnimates() {
+        val tracker = object : EntranceTracker() {
+            override fun hasPlayed(key: Any) = key == "visto"
+        }
+        assertThat(entranceIsInstant(false, "visto", tracker)).isTrue()
+        assertThat(entranceIsInstant(false, "nuevo", tracker)).isFalse()
+        assertThat(entranceIsInstant(false, "nuevo", null)).isFalse()
+        assertThat(entranceIsInstant(true, null, null)).isTrue()
+    }
+
+    @Test
+    fun entranceTracker_remembersPlayedKeys() {
+        val t = EntranceTracker()
+        assertThat(t.hasPlayed("a")).isFalse()
+        t.markPlayed("a")
+        assertThat(t.hasPlayed("a")).isTrue()
     }
 }

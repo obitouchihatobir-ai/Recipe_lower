@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -32,10 +33,10 @@ fun AnimatedCheck(checked: Boolean, modifier: Modifier = Modifier) {
     val target = if (checked) 1f else 0f
     val scale by animateFloatAsState(
         target,
-        animationSpec = if (reduced) tween(0) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        animationSpec = if (reduced) tween(0) else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
         label = "checkScale",
     )
-    val fill by animateFloatAsState(target, tween(if (reduced) 0 else 200), label = "checkFill")
+    val fill by animateFloatAsState(target, tween(if (reduced) 0 else 150), label = "checkFill")
     Box(
         modifier
             .size(20.dp)
@@ -43,9 +44,9 @@ fun AnimatedCheck(checked: Boolean, modifier: Modifier = Modifier) {
             .border(1.8.dp, if (checked) c.accent else c.line, CircleShape)
             .semantics { stateDescription = if (checked) "Marcado" else "Sin marcar" },
     ) {
-        Canvas(Modifier.size(20.dp)) {
+        Canvas(Modifier.size(20.dp).graphicsLayer { scaleX = scale; scaleY = scale }) {
             if (fill > 0f) drawCircle(c.accent.copy(alpha = fill))
-            if (scale > 0f) {
+            if (fill > 0f) {
                 val s = size.minDimension
                 val path = Path().apply {
                     moveTo(s * 0.28f, s * 0.52f)
@@ -54,7 +55,7 @@ fun AnimatedCheck(checked: Boolean, modifier: Modifier = Modifier) {
                 }
                 val mark: Color = c.onAccent
                 drawPath(
-                    path, mark.copy(alpha = scale.coerceIn(0f, 1f)),
+                    path, mark.copy(alpha = fill),
                     style = Stroke(width = s * 0.12f, cap = StrokeCap.Round, join = StrokeJoin.Round),
                 )
             }

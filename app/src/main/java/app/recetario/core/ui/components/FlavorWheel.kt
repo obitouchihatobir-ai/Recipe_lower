@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -34,6 +35,19 @@ private val axisLabels = listOf("Dulce", "Salado", "Ácido", "Amargo", "Picante"
 private fun axisPoint(i: Int, n: Int, center: Offset, r: Float): Offset {
     val a = -PI / 2 + i * 2 * PI / n
     return Offset(center.x + r * cos(a).toFloat(), center.y + r * sin(a).toFloat())
+}
+
+/**
+ * Esquina superior izquierda de una etiqueta centrada en el eje [angle] a [radius] del [center],
+ * desplazada lo justo para que la caja quede entera dentro del lienzo.
+ */
+fun labelOrigin(center: Offset, angle: Double, radius: Float, labelSize: Size, canvasSize: Size): Offset {
+    val x = center.x + radius * cos(angle).toFloat() - labelSize.width / 2f
+    val y = center.y + radius * sin(angle).toFloat() - labelSize.height / 2f
+    return Offset(
+        x.coerceIn(0f, maxOf(0f, canvasSize.width - labelSize.width)),
+        y.coerceIn(0f, maxOf(0f, canvasSize.height - labelSize.height)),
+    )
 }
 
 /** Vértices del polígono del perfil: primer eje hacia arriba, en sentido horario; 0 se dibuja al 6 % del radio. */
@@ -63,7 +77,7 @@ fun FlavorWheel(
         else grow.snapTo(1f)
     }
     val measurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = colors.muted, fontSize = 8.sp)
+    val labelStyle = TextStyle(color = colors.muted, fontSize = (8f * size.value / 120f).sp)
     val values = listOf(profile.sweet, profile.salty, profile.sour, profile.bitter, profile.spicy)
 
     Canvas(
@@ -73,7 +87,7 @@ fun FlavorWheel(
     ) {
         val unit = this.size.minDimension / 120f
         val c = Offset(this.size.width / 2, this.size.height / 2)
-        val r = 46f * unit
+        val r = this.size.minDimension * 0.34f
         for (k in 1..4) {
             val path = Path()
             for (i in 0 until 5) {
@@ -85,9 +99,15 @@ fun FlavorWheel(
         }
         for (i in 0 until 5) {
             drawLine(colors.line, c, axisPoint(i, 5, c, r), strokeWidth = 1f * unit)
-            val l = axisPoint(i, 5, c, r + 10f * unit)
             val layout = measurer.measure(axisLabels[i], labelStyle)
-            drawText(layout, topLeft = Offset(l.x - layout.size.width / 2f, l.y - layout.size.height / 2f))
+            val angle = -PI / 2 + i * 2 * PI / 5
+            drawText(
+                layout,
+                topLeft = labelOrigin(
+                    c, angle, r + 10f * unit,
+                    Size(layout.size.width.toFloat(), layout.size.height.toFloat()), this.size,
+                ),
+            )
         }
         val poly = Path()
         flavorPolygon(values, c, r).forEachIndexed { i, p ->
