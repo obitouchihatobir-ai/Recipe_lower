@@ -30,9 +30,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -187,6 +184,8 @@ internal fun BasicsSection(
     state: EditorState,
     categories: List<Category>,
     allTags: List<String>,
+    pendingTag: String,
+    onPendingTagChange: (String) -> Unit,
     onEvent: (EditorEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -270,22 +269,25 @@ internal fun BasicsSection(
                 }
             }
         }
-        TagsEditor(state.tags, allTags) { onEvent(EditorEvent.SetTags(it)) }
+        TagsEditor(state.tags, allTags, pendingTag, onPendingTagChange) { onEvent(EditorEvent.SetTags(it)) }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagsEditor(tags: List<String>, allTags: List<String>, onChange: (List<String>) -> Unit) {
+private fun TagsEditor(
+    tags: List<String>,
+    allTags: List<String>,
+    text: String,
+    onTextChange: (String) -> Unit,
+    onChange: (List<String>) -> Unit,
+) {
     val c = LocalRecetarioColors.current
-    var text by rememberSaveable { mutableStateOf("") }
     fun has(tag: String) = tags.any { normalize(it) == normalize(tag) }
     fun add() {
-        val fresh = text.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        var next = tags
-        for (t in fresh) if (next.none { normalize(it) == normalize(t) }) next = next + t
-        if (next != tags) onChange(next)
-        text = ""
+        val next = addTagsFromInput(tags, text)
+        if (next !== tags) onChange(next)
+        onTextChange("")
     }
     Column(Modifier.padding(top = 10.dp)) {
         FieldLabel("Etiquetas")
@@ -305,8 +307,8 @@ private fun TagsEditor(tags: List<String>, allTags: List<String>, onChange: (Lis
         }
         OutlinedTextField(
             value = text,
-            onValueChange = { text = it },
-            modifier = Modifier.fillMaxWidth(),
+            onValueChange = onTextChange,
+            modifier = Modifier.fillMaxWidth().testTag("tag-input"),
             label = { Text("Añadir etiqueta") },
             placeholder = { Text("Por ejemplo, Vegetariana") },
             singleLine = true,

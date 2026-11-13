@@ -78,6 +78,9 @@ sealed interface EditorEvent {
     data class RemoveStep(val id: String) : EditorEvent
     data class MoveStep(val from: Int, val to: Int) : EditorEvent
 
+    /** «Deshacer» tras quitar un ingrediente o un paso. */
+    data class UndoRemoval(val removal: Removal) : EditorEvent
+
     /** Importa la imagen con el PhotoStore y la coloca en [target]. */
     class ImportPhoto(val source: InputStream, val target: PhotoTarget) : EditorEvent
     data object RemoveCover : EditorEvent
@@ -196,11 +199,19 @@ class EditorViewModel(
             is EditorEvent.MoveIngredient -> update { it.copy(ingredients = it.ingredients.moved(e.from, e.to)) }
 
             EditorEvent.AddStep -> update { it.copy(steps = it.steps + StepDraft(id = newId())) }
-            is EditorEvent.SetStepText -> updateStep(e.id) { it.copy(text = e.text) }
+            is EditorEvent.SetStepText -> update { s ->
+                s.withoutRowErrorsOf(e.id).copy(steps = s.steps.map { if (it.id == e.id) it.withText(e.text, s.ingredients) else it })
+            }
             is EditorEvent.SetStepTimer -> updateStep(e.id) { it.copy(timerSeconds = e.seconds) }
-            is EditorEvent.SetStepIngredients -> updateStep(e.id) { it.copy(ingredientIds = e.ingredientIds) }
+            is EditorEvent.SetStepIngredients -> updateStep(e.id) { st ->
+                // Lo que se quita a mano no se vuelve a sugerir; lo que se vuelve a marcar, sí.
+                val removed = st.ingredientIds - e.ingredientIds
+                val added = e.ingredientIds - st.ingredientIds
+                st.copy(ingredientIds = e.ingredientIds, dismissedIngredientIds = st.dismissedIngredientIds - added + removed)
+            }
             is EditorEvent.RemoveStep -> update { s -> s.copy(steps = s.steps.filterNot { it.id == e.id }) }
             is EditorEvent.MoveStep -> update { it.copy(steps = it.steps.moved(e.from, e.to)) }
+            is EditorEvent.UndoRemoval -> update { it.restored(e.removal) }
 
             is EditorEvent.ImportPhoto -> viewModelScope.launch {
                 val name = try {

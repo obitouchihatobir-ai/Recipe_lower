@@ -3,6 +3,7 @@ package app.recetario.recipes.editor
 import app.recetario.recipes.model.Course
 import app.recetario.recipes.model.Difficulty
 import app.recetario.recipes.model.FlavorProfile
+import app.recetario.recipes.model.Ingredient
 import app.recetario.recipes.model.Intensity
 import app.recetario.recipes.model.Moment
 import app.recetario.recipes.model.ServeTemp
@@ -35,6 +36,8 @@ data class StepDraft(
     val photos: List<String> = emptyList(),
     val timerSeconds: Int? = null,
     val ingredientIds: Set<String> = emptySet(),
+    /** Ingredientes sugeridos que la persona quitó de este paso: no se vuelven a marcar solos. */
+    val dismissedIngredientIds: Set<String> = emptySet(),
 )
 
 /** Todos los campos editables de una receta, como texto o valor simple, más los errores de validación. */
@@ -89,4 +92,48 @@ data class EditorState(
     /** Fotos que este estado referencia (portada y pasos). */
     val photoFiles: Set<String>
         get() = (listOfNotNull(coverPhoto) + steps.flatMap { it.photos }).toSet()
+}
+
+/**
+ * Cambia el texto del paso y marca los ingredientes que el texto nuevo menciona y el anterior no
+ * (§7: la app los sugiere comparando nombres), salvo los que la persona quitó de este paso.
+ */
+internal fun StepDraft.withText(newText: String, ingredients: List<IngredientDraft>): StepDraft {
+    val named = ingredients.filter { it.name.isNotBlank() }
+        .map { Ingredient(id = it.id, section = null, name = it.name, quantity = null, unit = it.unit, customUnit = null, note = "") }
+    val fresh = suggestStepIngredients(newText, named) - suggestStepIngredients(text, named) - dismissedIngredientIds - ingredientIds
+    return copy(text = newText, ingredientIds = if (fresh.isEmpty()) ingredientIds else ingredientIds + fresh)
+}
+
+/** Lo necesario para deshacer la eliminación de un ingrediente o de un paso. */
+sealed interface Removal
+
+/** [linkedStepIds]: pasos que usaban el ingrediente (se vuelven a enlazar al deshacer). */
+data class RemovedIngredient(val index: Int, val draft: IngredientDraft, val linkedStepIds: Set<String>) : Removal
+
+/** El paso se guarda entero: texto, fotos, temporizador e ingredientes. */
+data class RemovedStep(val index: Int, val draft: StepDraft) : Removal
+
+fun EditorState.removalOfIngredient(id: String): RemovedIngredient? {
+    val index = ingredients.indexOfFirst { it.id == id }
+    if (index < 0) return null
+    return RemovedIngredient(index, ingredients[index], steps.filter { id in it.ingredientIds }.mapTo(LinkedHashSet()) { it.id })
+}
+
+fun EditorState.removalOfStep(id: String): RemovedStep? {
+    val index = steps.indexOfFirst { it.id == id }
+    return if (index < 0) null else RemovedStep(index, steps[index])
+}
+
+/** Vuelve a poner lo quitado en su posición; si ya está (deshacer dos veces), no cambia nada. */
+fun EditorState.restored(removal: Removal): EditorState = when (removal) {
+    is RemovedIngredient ->
+        if (ingredients.any { it.id == removal.draft.id }) this
+        else copy(
+            ingredients = ingredients.toMutableList().apply { add(removal.index.coerceIn(0, size), removal.draft) },
+            steps = steps.map { if (it.id in removal.linkedStepIds) it.copy(ingredientIds = it.ingredientIds + removal.draft.id) else it },
+        )
+    is RemovedStep ->
+        if (steps.any { it.id == removal.draft.id }) this
+        else copy(steps = steps.toMutableList().apply { add(removal.index.coerceIn(0, size), removal.draft) })
 }

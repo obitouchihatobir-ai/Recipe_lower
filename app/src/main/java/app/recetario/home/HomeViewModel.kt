@@ -9,9 +9,18 @@ import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.list.RecipeCardData
 import app.recetario.recipes.list.toCardData
 import app.recetario.recipes.model.Category
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import java.time.LocalTime
@@ -26,19 +35,39 @@ data class HomeState(
     val favorites: List<RecipeCardData> = emptyList(),
 )
 
-class HomeViewModel(repo: RecipeRepository, private val clock: Clock) : ViewModel() {
+/** Un aviso a cada cambio de minuto del [clock]. */
+fun minuteTicks(clock: Clock): Flow<Unit> = flow {
+    while (true) {
+        delay(millisToNextMinute(clock))
+        emit(Unit)
+    }
+}
+
+/**
+ * [ticks] hace que el saludo se recalcule (cada minuto, así cambia a las 12:00 y a las 20:00); los datos
+ * se combinan en [dispatcher], fuera del hilo principal.
+ */
+class HomeViewModel(
+    repo: RecipeRepository,
+    private val clock: Clock,
+    ticks: Flow<Unit> = minuteTicks(clock),
+    dispatcher: CoroutineDispatcher = Dispatchers.Default,
+) : ViewModel() {
+    private val greetings: Flow<String> = ticks.onStart { emit(Unit) }.map { greeting() }.distinctUntilChanged()
+
     val state: StateFlow<HomeState> =
-        combine(repo.observeSummaries(), repo.observeCategories()) { summaries, categories ->
+        combine(repo.observeSummaries(), repo.observeCategories(), greetings) { summaries, categories, greeting ->
             val byId = categories.associateBy { it.id }
             HomeState(
-                greeting = greeting(),
+                greeting = greeting,
                 loaded = true,
                 isEmpty = summaries.isEmpty(),
                 categories = categories,
                 recent = recentRecipes(summaries).map { it.toCardData(byId) },
                 favorites = favoriteRecipes(summaries).map { it.toCardData(byId) },
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState(greeting = greeting()))
+        }.flowOn(dispatcher)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState(greeting = greeting()))
 
     private fun greeting() = greetingFor(LocalTime.now(clock))
 

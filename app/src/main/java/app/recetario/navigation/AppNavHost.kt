@@ -18,7 +18,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavBackStackEntry
@@ -92,9 +91,9 @@ fun AppNavHost(
                         CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
                             HomeRoute(
                                 container = container,
-                                onCategory = { id -> from.ifResumed { navController.openRecipesFiltered(id) } },
-                                onRecipe = { id -> from.ifResumed { navController.navigate(RecipeDetail(id)) } },
-                                onAdd = { from.ifResumed { navController.navigate(RecipeEditor()) } },
+                                onCategory = { id -> navController.from(from) { openRecipesFiltered(id) } },
+                                onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
+                                onAdd = { navController.from(from) { navigate(RecipeEditor()) } },
                             )
                         }
                     }
@@ -102,9 +101,9 @@ fun AppNavHost(
                         CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
                             RecipesRoute(
                                 container = container,
-                                onRecipe = { id -> from.ifResumed { navController.navigate(RecipeDetail(id)) } },
+                                onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
                                 onAdd = { categoryId ->
-                                    from.ifResumed { navController.navigate(RecipeEditor(categoryId = categoryId)) }
+                                    navController.from(from) { navigate(RecipeEditor(categoryId = categoryId)) }
                                 },
                             )
                         }
@@ -125,8 +124,8 @@ fun AppNavHost(
                             DetailPlaceholderScreen(
                                 container = container,
                                 recipeId = route.id,
-                                onBack = { from.ifResumed { navController.popBackStack() } },
-                                onEdit = { from.ifResumed { navController.navigate(RecipeEditor(id = route.id)) } },
+                                onBack = { navController.from(from) { popBackStack() } },
+                                onEdit = { navController.from(from) { navigate(RecipeEditor(id = route.id)) } },
                             )
                         }
                     }
@@ -135,8 +134,8 @@ fun AppNavHost(
                         EditorRoute(
                             container = container,
                             isNew = route.id == null,
-                            onBack = { from.ifResumed { navController.popBackStack() } },
-                            onSaved = { from.ifResumed { navController.popBackStack() } },
+                            onBack = { navController.from(from) { popBackStack() } },
+                            onSaved = { navController.from(from) { popBackStack() } },
                         )
                     }
                 }
@@ -161,9 +160,12 @@ private class DetailTransitionTracker {
     }
 }
 
-/** Ignora los toques mientras el destino entra o sale (evita abrir dos veces la misma pantalla). */
-private inline fun NavBackStackEntry.ifResumed(block: () -> Unit) {
-    if (lifecycle.currentState == Lifecycle.State.RESUMED) block()
+/**
+ * Navega solo si [entry] sigue siendo el destino actual. Los toques nunca se bloquean durante las
+ * transiciones: un segundo toque en la pantalla que se va no apila otra copia del destino.
+ */
+private inline fun NavHostController.from(entry: NavBackStackEntry, block: NavHostController.() -> Unit) {
+    if (currentBackStackEntry?.id == entry.id) block()
 }
 
 /** Pestañas: cada una conserva su estado y pulsarla otra vez no apila copias. */

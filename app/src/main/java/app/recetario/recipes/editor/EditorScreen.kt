@@ -17,8 +17,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -56,6 +58,12 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 /** De dónde sale una foto nueva. */
 enum class PhotoSource { CAMERA, GALLERY }
 
+/** Pide fotos a la cámara o la galería; [discardPending] tira las que aún no se han entregado al editor. */
+class PhotoRequester(
+    val request: (PhotoTarget, PhotoSource) -> Unit,
+    val discardPending: () -> Unit,
+)
+
 @Composable
 fun EditorRoute(
     container: AppContainer,
@@ -74,10 +82,34 @@ fun EditorRoute(
     val snackbar = remember { SnackbarHostState() }
     var saving by remember { mutableStateOf(false) }
     var saveFailures by remember { mutableIntStateOf(0) }
-    val requestPhoto = rememberPhotoRequester(
+    // Etiqueta escrita pero aún sin añadir: «Guardar» la añade.
+    var pendingTag by rememberSaveable { mutableStateOf("") }
+    // Las fotos solo se entregan con el editor listo y el borrador ya decidido.
+    val photos = rememberPhotoRequester(
+        editorReady = ready,
+        draftPending = pendingDraft != null,
         onPicked = { stream, target -> vm.onEvent(EditorEvent.ImportPhoto(stream, target)) },
         onError = { message -> scope.launch { snackbar.showSnackbar(message) } },
     )
+    // Quitar un ingrediente o un paso ofrece «Deshacer».
+    val onEvent: (EditorEvent) -> Unit = remember(vm) {
+        { e ->
+            val current = vm.state.value
+            val undo = when (e) {
+                is EditorEvent.RemoveIngredient -> current.removalOfIngredient(e.id)?.let { it to "Se eliminó el ingrediente" }
+                is EditorEvent.RemoveStep -> current.removalOfStep(e.id)?.let { it to "Se eliminó el paso" }
+                else -> null
+            }
+            vm.onEvent(e)
+            if (undo != null) {
+                scope.launch {
+                    snackbar.currentSnackbarData?.dismiss()
+                    val result = snackbar.showSnackbar(undo.second, actionLabel = "Deshacer", duration = SnackbarDuration.Long)
+                    if (result == SnackbarResult.ActionPerformed) vm.onEvent(EditorEvent.UndoRemoval(undo.first))
+                }
+            }
+        }
+    }
 
     EditorContent(
         state = state,
@@ -89,9 +121,15 @@ fun EditorRoute(
         saving = saving,
         saveFailures = saveFailures,
         snackbar = snackbar,
-        onEvent = vm::onEvent,
+        pendingTag = pendingTag,
+        onPendingTagChange = { pendingTag = it },
+        onEvent = onEvent,
         onSave = {
             if (!saving) {
+                val tags = vm.state.value.tags
+                val withPending = addTagsFromInput(tags, pendingTag)
+                if (withPending !== tags) vm.onEvent(EditorEvent.SetTags(withPending))
+                pendingTag = ""
                 saving = true
                 scope.launch {
                     val id = try {
@@ -104,13 +142,17 @@ fun EditorRoute(
             }
         },
         onBack = onBack,
-        onPickPhoto = requestPhoto,
+        onPickPhoto = photos.request,
     )
 
     if (pendingDraft != null) {
         RecoverDraftDialog(
             onRecover = vm::recoverDraft,
-            onDiscard = { scope.launch { vm.discardPendingDraft() } },
+            onDiscard = {
+                // Las fotos hechas para ese borrador se tiran con él (antes de que se puedan entregar).
+                photos.discardPending()
+                scope.launch { vm.discardPendingDraft() }
+            },
         )
     }
 }
@@ -143,6 +185,8 @@ fun EditorContent(
     saving: Boolean,
     saveFailures: Int,
     snackbar: SnackbarHostState,
+    pendingTag: String,
+    onPendingTagChange: (String) -> Unit,
     onEvent: (EditorEvent) -> Unit,
     onSave: () -> Unit,
     onBack: () -> Unit,
@@ -206,6 +250,8 @@ fun EditorContent(
                 categories = categories,
                 allTags = allTags,
                 photoStore = photoStore,
+                pendingTag = pendingTag,
+                onPendingTagChange = onPendingTagChange,
                 onEvent = onEvent,
                 onPickPhoto = onPickPhoto,
                 onToggleSection = { section ->
@@ -225,6 +271,8 @@ private fun EditorList(
     categories: List<Category>,
     allTags: List<String>,
     photoStore: PhotoStore,
+    pendingTag: String,
+    onPendingTagChange: (String) -> Unit,
     onEvent: (EditorEvent) -> Unit,
     onPickPhoto: (PhotoTarget, PhotoSource) -> Unit,
     onToggleSection: (EditorSection) -> Unit,
@@ -267,7 +315,7 @@ private fun EditorList(
                     onToggle = { onToggleSection(row.section) },
                     modifier = animate,
                 )
-                EditorRow.Basics -> BasicsSection(state, categories, allTags, onEvent, animate)
+                EditorRow.Basics -> BasicsSection(state, categories, allTags, pendingTag, onPendingTagChange, onEvent, animate)
                 EditorRow.Flavor -> FlavorSection(state, onEvent, animate.testTag("flavor-section"))
                 EditorRow.Notes -> NotesSection(state, onEvent, animate)
                 is EditorRow.IngredientItem -> ReorderableItem(
