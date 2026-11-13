@@ -50,6 +50,33 @@
 - Navegación: cada tarea añade sus destinos al `NavHost` de la Tarea 9.
 - Dependencias: cada tarea registra en `AppContainer` lo que crea.
 
+## Enmienda 1 (2026-11-13, al empezar la ejecución)
+
+El entorno de Claude Code no permite aceptar la licencia del SDK de Android, así que `:app` no se puede compilar aquí. Para no perder el ciclo de pruebas rápido:
+
+- **La lógica pura vive en un build incluido `logic/`** (Kotlin/JVM, sin Android).
+  - Tiene su propio `logic/settings.gradle.kts` y usa el catálogo `../gradle/libs.versions.toml`.
+  - La raíz lo incluye con `includeBuild("logic")` y `:app` depende de `app.recetario:logic`.
+  - Se prueba en local con `./gradlew -p logic test`.
+  - Los paquetes no cambian (`app.recetario.*`).
+- **Archivos que van a `logic/src/main/kotlin/…`**, con sus pruebas en `logic/src/test/kotlin/…`:
+  - `core/text/Normalize.kt`;
+  - `recipes/model/Recipe.kt` (modelos y enums de dominio);
+  - `recipes/quantity/*`;
+  - `converter/UnitConverter.kt` y `Densities.kt`;
+  - `recipes/search/RecipeFilter.kt`;
+  - `recipes/editor/EditorHelpers.kt`;
+  - `recipes/detail/RecipeTextFormatter.kt`;
+  - `shopping/{ShoppingModels,SectionClassifier,ShoppingMerge}.kt`;
+  - `core/ui/theme/ThemeResolver.kt` (solo `ThemeChoice`, `ThemeSettings` y `resolveTheme`);
+  - `cooking/TimerManager.kt`;
+  - `backup/{BackupModel,BackupRotation,BackupReminder}.kt`.
+- **Todo lo que depende de Android** (Room, Compose, Robolectric, servicios) se queda en `:app` y **se verifica en GitHub Actions**. Cada tarea que toca `:app` hace push a la rama de trabajo y no termina hasta ver el CI en verde.
+- `ci.yml` ejecuta también `./gradlew -p logic test`.
+- La Task 4 crea `MeasureUnit` completo, con las etiquetas de la tabla de la Task 5; la Task 5 añade las funciones.
+- La Task 12 no añade la fila «Copias de seguridad» en Ajustes; la añade la Task 15 junto con su destino.
+- La Task 16 cambia la copia previa de «Reemplazar todo» para que use `writeLocalBackup()`, que entra en la rotación.
+
 ## Foco de revisión
 
 Cinco entradas que el spec implica y que la gente encontrará, aunque ninguna prueba de función las cubra de forma natural:
@@ -97,7 +124,7 @@ docs/instalar.md                  guía de instalación en español
 
 ---
 
-### Tarea 1: Proyecto Android, cadena de herramientas e integración continua
+### Task 1: Proyecto Android, cadena de herramientas e integración continua
 
 **Archivos:**
 - Crear: `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradle/libs.versions.toml`, `gradle/wrapper/*`, `gradlew`, `gradlew.bat`
@@ -126,7 +153,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Paso 6: `ci.yml`.** En `push` y `pull_request`: checkout, `actions/setup-java@v4` (temurin 21), `gradle/actions/setup-gradle@v4` y `./gradlew testDebugUnitTest assembleDebug`. Sube los informes de prueba si algo falla.
 - [ ] **Paso 7: documentar** los comandos en `CLAUDE.md` y hacer commit: «Crear proyecto Android con integración continua».
 
-### Tarea 2: Firma y publicación del APK
+### Task 2: Firma y publicación del APK
 
 **Archivos:**
 - Crear: `scripts/signing/create-keystore.sh`, `scripts/signing/decrypt-keystore.sh`, `scripts/signing/test-signing-scripts.sh`
@@ -168,7 +195,7 @@ docs/instalar.md                  guía de instalación en español
   5. Las actualizaciones se instalan encima.
 - [ ] **Paso 8: verificar y hacer commit.** Ejecutar `bash scripts/signing/test-signing-scripts.sh && ./gradlew assembleRelease`; sin `RECETARIO_KEYSTORE` debe generar un APK release sin firmar. Commit: «Añadir firma y publicación automática del APK».
 
-### Tarea 3: Sistema de temas
+### Task 3: Sistema de temas
 
 **Archivos:**
 - Crear: `core/ui/theme/{Palettes.kt,Typography.kt,RecetarioTheme.kt,ThemeResolver.kt,Contrast.kt}` y `core/ui/motion/ReducedMotion.kt`
@@ -210,7 +237,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Paso 4: ejecutar las pruebas y verlas pasar.**
 - [ ] **Paso 5: commit:** «Añadir los tres temas con modo automático y contraste verificado».
 
-### Tarea 4: Modelo de dominio, base de datos y repositorio de recetas
+### Task 4: Modelo de dominio, base de datos y repositorio de recetas
 
 **Archivos:**
 - Crear: `recipes/model/Recipe.kt`, `core/text/Normalize.kt`, `core/data/{AppDatabase.kt,Converters.kt,DefaultCategories.kt}`, `recipes/data/{Entities.kt,RecipeDao.kt,CategoryDao.kt,TagDao.kt,RecipeRepository.kt,PhotoStore.kt}`
@@ -269,7 +296,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Paso 4: ejecutar las pruebas y verlas pasar.** Comprobar también que existe `app/schemas/app.recetario.core.data.AppDatabase/1.json`.
 - [ ] **Paso 5: commit:** «Añadir modelo de recetas, base de datos y repositorio».
 
-### Tarea 5: Unidades, escalado, formato y conversión de cantidades
+### Task 5: Unidades, escalado, formato y conversión de cantidades
 
 **Archivos:**
 - Crear: `recipes/quantity/{MeasureUnit.kt,QuantityFormatter.kt}`, `converter/{UnitConverter.kt,Densities.kt}`
@@ -343,7 +370,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Paso 4: verlas pasar.**
 - [ ] **Paso 5: commit:** «Añadir unidades, escalado y conversión de cantidades».
 
-### Tarea 6: Búsqueda y filtros
+### Task 6: Búsqueda y filtros
 
 **Archivos:**
 - Crear: `recipes/search/RecipeFilter.kt`
@@ -368,7 +395,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir búsqueda y filtros de recetas».
 
-### Tarea 7: Lógica del editor de recetas
+### Task 7: Lógica del editor de recetas
 
 **Archivos:**
 - Crear: `recipes/quantity/QuantityParser.kt`, `recipes/editor/{EditorState.kt,EditorHelpers.kt,DraftStore.kt,EditorViewModel.kt}`
@@ -410,7 +437,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir la lógica del editor con borrador y detección de tiempos».
 
-### Tarea 8: Componentes visuales compartidos
+### Task 8: Componentes visuales compartidos
 
 **Archivos:**
 - Crear: `core/ui/components/{FlavorWheel.kt,Entrance.kt,Pills.kt,ServingsStepper.kt,AnimatedCheck.kt,PhotoOrPlaceholder.kt}`
@@ -437,7 +464,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir rueda de sabores y componentes animados».
 
-### Tarea 9: Navegación, Inicio, lista de recetas y editor
+### Task 9: Navegación, Inicio, lista de recetas y editor
 
 **Archivos:**
 - Crear: `navigation/{Routes.kt,AppNavHost.kt,BottomBar.kt}`, `home/{HomeScreen.kt,HomeViewModel.kt}`, `recipes/list/{RecipesScreen.kt,RecipesViewModel.kt}`, `recipes/editor/EditorScreen.kt`, `pairing/PairingPlaceholderScreen.kt`, `res/xml/file_paths.xml`
@@ -481,7 +508,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Paso 5: verificación visual.** Hacer capturas con Robolectric (`captureRoboImage` o `onRoot().captureToImage()`) de Inicio y del editor en los 3 temas, y compararlas con los bocetos.
 - [ ] **Paso 6: commit:** «Añadir navegación, Inicio, lista de recetas y editor».
 
-### Tarea 10: Lista de compra
+### Task 10: Lista de compra
 
 **Archivos:**
 - Crear: `shopping/{ShoppingModels.kt,SectionClassifier.kt,ShoppingMerge.kt,ShoppingDao.kt,ShoppingRepository.kt,ShoppingViewModel.kt,ShoppingScreen.kt}`
@@ -524,7 +551,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir lista de compra con fusión y secciones».
 
-### Tarea 11: Detalle de receta y compartir como texto
+### Task 11: Detalle de receta y compartir como texto
 
 **Archivos:**
 - Crear: `recipes/detail/{DetailScreen.kt,DetailViewModel.kt,RecipeTextFormatter.kt}`
@@ -573,7 +600,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir detalle de receta y compartir como texto».
 
-### Tarea 12: Ajustes, apariencia, categorías y etiquetas
+### Task 12: Ajustes, apariencia, categorías y etiquetas
 
 **Archivos:**
 - Crear: `settings/{SettingsRepository.kt,SettingsScreen.kt,AppearanceScreen.kt,CategoriesScreen.kt,TagsScreen.kt,AboutScreen.kt}`, `core/ui/theme/ThemeReveal.kt`
@@ -604,7 +631,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir ajustes, apariencia con transición circular, categorías y etiquetas».
 
-### Tarea 13: Modo cocina (lista) y temporizadores
+### Task 13: Modo cocina (lista) y temporizadores
 
 **Archivos:**
 - Crear: `cooking/{CookingViewModel.kt,CookingScreen.kt,TimerManager.kt,TimerService.kt,KeepScreenOn.kt}`
@@ -656,7 +683,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir modo cocina en lista con temporizadores en segundo plano».
 
-### Tarea 14: Pantalla del conversor y conversiones desde la receta
+### Task 14: Pantalla del conversor y conversiones desde la receta
 
 **Archivos:**
 - Crear: `converter/ConverterScreen.kt`
@@ -677,7 +704,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir pantalla del conversor y conversiones desde la receta».
 
-### Tarea 15: Copia de seguridad manual (exportar e importar)
+### Task 15: Copia de seguridad manual (exportar e importar)
 
 **Archivos:**
 - Crear: `backup/{BackupModel.kt,BackupExporter.kt,BackupImporter.kt,BackupManager.kt,BackupScreen.kt}`
@@ -715,7 +742,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir exportación e importación de copias de seguridad».
 
-### Tarea 16: Copia semanal automática (teléfono y Google Drive) y recordatorio
+### Task 16: Copia semanal automática (teléfono y Google Drive) y recordatorio
 
 **Archivos:**
 - Crear: `backup/{AutoBackupWorker.kt,BackupRotation.kt,BackupReminder.kt}`, `res/xml/{backup_rules.xml,data_extraction_rules.xml}`
@@ -759,7 +786,7 @@ docs/instalar.md                  guía de instalación en español
 - [ ] **Pasos 2 a 4:** verlas fallar, implementar y verlas pasar.
 - [ ] **Paso 5: commit:** «Añadir copia semanal en el teléfono y en Google Drive».
 
-### Tarea 17: Cierre de la etapa 1
+### Task 17: Cierre de la etapa 1
 
 **Archivos:**
 - Modificar: `CLAUDE.md` (estructura real de paquetes, comandos y problemas conocidos), `app/version.properties` (0.1.0), `docs/instalar.md` (repasar)
