@@ -1,0 +1,82 @@
+name: Crear llave de firma
+
+# Se lanza a mano UNA sola vez, en la rama main (guía: docs/instalar.md).
+# Genera la llave de firma con el secreto SIGNING_PASSPHRASE, guarda en el
+# repositorio solo su versión cifrada (signing/release.p12.enc) y lanza
+# «Publicar APK». Nunca sustituye una llave que ya exista.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  create-key:
+    name: Crear llave de firma
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Comprobar el secreto y que la llave no exista
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Ejecuta este flujo en la rama main."
+            exit 1
+          fi
+          if [ -z "$SIGNING_PASSPHRASE" ]; then
+            echo "::error::Falta el secreto SIGNING_PASSPHRASE. Créalo en Settings › Secrets and variables › Actions (paso 1 de docs/instalar.md)."
+            exit 1
+          fi
+          if [ "${#SIGNING_PASSPHRASE}" -lt 20 ]; then
+            echo "::error::La frase del secreto SIGNING_PASSPHRASE debe tener 20 caracteres o más. Cámbiala en Settings › Secrets and variables › Actions."
+            exit 1
+          fi
+          if [ -e signing/release.p12.enc ]; then
+            echo "::error::La llave de firma ya existe (signing/release.p12.enc). No se crea otra: con una llave nueva, las actualizaciones no se instalarían encima."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Generar y cifrar la llave
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: scripts/signing/create-keystore.sh signing/release.p12.enc
+
+      # Solo se guarda el archivo cifrado. Si main ha cambiado mientras tanto,
+      # el push falla y no se pierde ni se sustituye nada.
+      - name: Guardar la llave cifrada en el repositorio
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add signing/release.p12.enc
+          staged="$(git diff --cached --name-only)"
+          if [ "$staged" != "signing/release.p12.enc" ]; then
+            echo "::error::Se iba a guardar algo más que signing/release.p12.enc: $staged"
+            exit 1
+          fi
+          git commit -m "Añadir la llave de firma cifrada"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+      # Lo que sube este flujo no lanza otros flujos, así que la primera
+      # publicación se pide a mano.
+      - name: Lanzar «Publicar APK»
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run release.yml --ref "$GITHUB_REF_NAME"

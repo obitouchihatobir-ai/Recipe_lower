@@ -1,0 +1,90 @@
+name: Publicar APK
+
+# Compila el APK firmado y lo publica en GitHub Releases como
+# Recetario-<versionName>.apk, en la versión v<versionName>.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Nunca dos publicaciones a la vez: no se cancelan, esperan su turno.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    name: Compilar, firmar y publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Comprobar que existe la llave de firma
+        run: |
+          if [ ! -f signing/release.p12.enc ]; then
+            echo "::error::Falta la llave: ejecuta primero el flujo «Crear llave de firma»"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Pruebas de la lógica pura
+        run: ./gradlew -p logic test
+
+      # La llave descifrada solo existe durante este paso, fuera del repositorio.
+      - name: Pruebas de la app y APK release firmado
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          export RECETARIO_KEYSTORE="$RUNNER_TEMP/release.p12"
+          trap 'rm -f "$RECETARIO_KEYSTORE"' EXIT
+          scripts/signing/decrypt-keystore.sh signing/release.p12.enc "$RECETARIO_KEYSTORE"
+          ./gradlew testDebugUnitTest assembleRelease
+
+      # app-release.apk solo existe si el APK está firmado (sin firma sería
+      # app-release-unsigned.apk), así que este paso falla si algo no firmó.
+      - name: Preparar Recetario-<versión>.apk
+        id: apk
+        run: |
+          version="$(sed -n 's/^versionName=//p' app/version.properties)"
+          if [ -z "$version" ]; then
+            echo "::error::No se encuentra versionName en app/version.properties"
+            exit 1
+          fi
+          apk="$RUNNER_TEMP/Recetario-$version.apk"
+          mv app/build/outputs/apk/release/app-release.apk "$apk"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "path=$apk" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.apk.outputs.version }}
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          tag="v$VERSION"
+          guide="$GITHUB_SERVER_URL/$GH_REPO/blob/main/docs/instalar.md"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$APK" --clobber
+          else
+            gh release create "$tag" "$APK" \
+              --target "$GITHUB_SHA" \
+              --title "Recetario $VERSION" \
+              --notes "Versión $VERSION de Recetario. Para instalarla o actualizarla, descarga Recetario-$VERSION.apk desde el móvil y ábrelo. Guía paso a paso: $guide"
+          fi

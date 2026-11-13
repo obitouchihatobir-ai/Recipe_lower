@@ -10,6 +10,6 @@ local.properties
 .idea/
 
 # Llaves de firma: solo se versiona signing/release.p12.enc
-signing/*.p12
+*.p12
 *.jks
 *.keystore

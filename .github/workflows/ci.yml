@@ -32,6 +32,9 @@ jobs:
       - name: Pruebas de la lógica pura
         run: ./gradlew -p logic test
 
+      - name: Pruebas de los scripts de firma
+        run: bash scripts/signing/test-signing-scripts.sh
+
       - name: Pruebas de la app y APK de depuración y release
         run: ./gradlew testDebugUnitTest assembleDebug assembleRelease
 
@@ -49,9 +52,25 @@ jobs:
               and .outputFile == "app-release-unsigned.apk"' \
             "$dir/output-metadata.json"
 
+      # Ensaya la firma de release.yml con una llave desechable (frase de prueba,
+      # no la real): el APK debe salir firmado por CN=Recetario.
+      - name: Ensayar la firma con una llave de prueba
+        env:
+          SIGNING_PASSPHRASE: frase de prueba solo para CI
+        run: |
+          export RECETARIO_KEYSTORE="$RUNNER_TEMP/prueba.p12"
+          trap 'rm -f "$RECETARIO_KEYSTORE"' EXIT
+          scripts/signing/create-keystore.sh "$RUNNER_TEMP/prueba.p12.enc"
+          scripts/signing/decrypt-keystore.sh "$RUNNER_TEMP/prueba.p12.enc" "$RECETARIO_KEYSTORE"
+          ./gradlew assembleRelease
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk |
+            tee "$RUNNER_TEMP/firma.txt"
+          grep -q 'certificate DN: CN=Recetario$' "$RUNNER_TEMP/firma.txt"
+
       - name: Subir informes de prueba
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: informes-de-prueba
           path: |
