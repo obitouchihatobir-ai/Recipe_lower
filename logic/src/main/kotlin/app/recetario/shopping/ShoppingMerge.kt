@@ -37,6 +37,10 @@ private fun combine(a: ShoppingItem, b: ShoppingItem, converter: UnitConverter):
     if (a.unit in vague || b.unit in vague) return null
     val kind = a.unit.kind
     if (kind != b.unit.kind) return null
+    // Misma unidad: se conserva (2 cucharadas + 2 cucharadas = 4 cucharadas); solo se convierte si difieren.
+    if (a.unit == b.unit && (kind == UnitKind.MASS || kind == UnitKind.VOLUME)) {
+        return a.copy(quantity = sum(a.quantity, b.quantity))
+    }
     return when (kind) {
         UnitKind.MASS -> sumIn(a, b, MeasureUnit.GRAM, converter)
         UnitKind.VOLUME -> sumIn(a, b, MeasureUnit.MILLILITER, converter)

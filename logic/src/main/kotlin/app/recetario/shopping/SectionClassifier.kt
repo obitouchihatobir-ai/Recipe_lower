@@ -3,8 +3,8 @@ package app.recetario.shopping
 import app.recetario.core.text.normalize
 
 /**
- * Diccionario básico de palabras clave (en singular y sin tildes). Se mira primero la primera palabra del
- * nombre, después el nombre completo y, como último recurso, el resto de palabras; si nada coincide, OTHER.
+ * Diccionario básico de palabras clave (en singular y sin tildes). Se miran primero las entradas de varias palabras contenidas en el
+ * nombre (la más larga primero), después la primera palabra y, como último recurso, el resto de palabras; si nada coincide, OTHER.
  */
 object SectionClassifier {
     private val words: Map<String, ShopSection> = buildMap {
@@ -48,11 +48,16 @@ object SectionClassifier {
         )
     }
 
+    /** Entradas de varias palabras, las más largas primero. */
+    private val phrases: List<Pair<String, ShopSection>> =
+        words.entries.filter { ' ' in it.key }.sortedByDescending { it.key.length }.map { it.key to it.value }
+
     fun classify(name: String): ShopSection {
         val tokens = normalize(name).split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
         if (tokens.isEmpty()) return ShopSection.OTHER
+        val joined = " " + tokens.joinToString(" ") + " "
+        for ((phrase, section) in phrases) if (" $phrase " in joined) return section
         lookup(tokens.first())?.let { return it }
-        words[tokens.joinToString(" ")]?.let { return it }
         for (token in tokens.drop(1)) lookup(token)?.let { return it }
         return ShopSection.OTHER
     }

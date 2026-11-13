@@ -2,6 +2,10 @@ package app.recetario.shopping
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -88,5 +92,37 @@ class ShoppingScreenTest {
         rule.waitFor(hasText("Deshacer"))
         rule.onNodeWithText("Deshacer").performClick()
         rule.waitFor(hasText("Pan"))
+    }
+
+    @Test
+    fun longPress_changesTheSection() {
+        runBlocking { container.shoppingRepository.addManual("Pan", null, MeasureUnit.PIECE) }
+        launch()
+        rule.waitFor(hasText("Pan"))
+        rule.onNodeWithText("Despensa").assertIsDisplayed()
+        rule.onNodeWithText("Pan").performTouchInput { longClick() }
+        rule.waitFor(hasText("Bebidas"))
+        rule.onNodeWithTag("section-option-DRINKS").performClick()
+        rule.waitFor(hasText("Bebidas"))
+        rule.waitForGone(hasText("Despensa"))
+    }
+
+    @Test
+    fun deleteAction_thenUndo_restoresTheCurrentVersion() {
+        runBlocking {
+            container.shoppingRepository.addManual("Pan", 1.0, MeasureUnit.PIECE)
+        }
+        launch()
+        rule.waitFor(hasText("Pan"))
+        rule.onNodeWithText("Pan").performClick()
+        rule.waitFor(hasText("Vaciar marcados"))
+        val node = rule.onNode(hasText("Pan").and(hasClickAction()))
+        val action = node.fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == "Borrar" }
+        rule.runOnUiThread { action.action() }
+        rule.waitForGone(hasText("Pan"))
+        rule.waitFor(hasText("Deshacer"))
+        rule.onNodeWithText("Deshacer").performClick()
+        rule.waitFor(hasText("Pan"))
+        rule.waitFor(hasText("Vaciar marcados"))
     }
 }

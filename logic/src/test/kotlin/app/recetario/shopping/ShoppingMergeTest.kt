@@ -159,4 +159,35 @@ class ShoppingMergeTest {
         )
         assertThat(out).hasSize(1)
     }
+
+    @Test fun sameUnitIsKept() {
+        val spoons = mergeInto(
+            listOf(item("Azúcar", 2.0, MeasureUnit.TABLESPOON)),
+            listOf(item("Azúcar", 2.0, MeasureUnit.TABLESPOON)),
+        )
+        assertThat(spoons).hasSize(1)
+        assertThat(spoons[0].quantity).isEqualTo(4.0)
+        assertThat(spoons[0].unit).isEqualTo(MeasureUnit.TABLESPOON)
+        val tsp = mergeInto(
+            listOf(item("Canela", 1.0, MeasureUnit.TEASPOON)),
+            listOf(item("Canela", 1.0, MeasureUnit.TEASPOON)),
+        )
+        assertThat(tsp[0].quantity).isEqualTo(2.0)
+        assertThat(tsp[0].unit).isEqualTo(MeasureUnit.TEASPOON)
+        val kg = mergeInto(
+            listOf(item("Patata", 1.0, MeasureUnit.KILOGRAM)),
+            listOf(item("Patata", 2.0, MeasureUnit.KILOGRAM)),
+        )
+        assertThat(kg[0].unit).isEqualTo(MeasureUnit.KILOGRAM)
+        assertThat(kg[0].quantity).isEqualTo(3.0)
+    }
+
+    @Test fun differentUnitsStillConvert() {
+        val out = mergeInto(
+            listOf(item("Azúcar", 2.0, MeasureUnit.TABLESPOON)),
+            listOf(item("Azúcar", 1.0, MeasureUnit.TEASPOON)),
+        )
+        assertThat(out[0].unit).isEqualTo(MeasureUnit.MILLILITER)
+        assertThat(out[0].quantity).isWithin(1e-9).of(35.0)
+    }
 }

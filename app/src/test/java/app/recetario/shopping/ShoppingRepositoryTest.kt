@@ -156,4 +156,36 @@ class ShoppingRepositoryTest {
         big.addManual("Leche", 0.0, MeasureUnit.MILLILITER)
         assertThat(all().single().quantity).isWithin(1e-9).of(250.0)
     }
+
+    @Test
+    fun setSection_movesTheItemToAnotherGroup() = runBlocking<Unit> {
+        repo.addManual("Pan", null, MeasureUnit.PIECE)
+        val id = all().single().id
+        repo.setSection(id, ShopSection.DRINKS)
+        val groups = repo.observe().first()
+        assertThat(groups.keys.toList()).containsExactly(ShopSection.DRINKS)
+        assertThat(groups.getValue(ShopSection.DRINKS).single().name).isEqualTo("Pan")
+    }
+
+    @Test
+    fun delete_returnsTheCurrentRow_andRestoreBringsItBackExactly() = runBlocking<Unit> {
+        repo.addManual("Leche", 1.0, MeasureUnit.LITER)
+        repo.addManual("Leche", 0.2, MeasureUnit.LITER)
+        val id = all().single().id
+        repo.toggle(id)
+        val removed = repo.delete(id)
+        assertThat(removed).isNotNull()
+        assertThat(removed!!.checked).isTrue()
+        assertThat(removed.quantity).isWithin(1e-9).of(1.2)
+        assertThat(all()).isEmpty()
+        repo.restore(listOf(removed))
+        val back = all().single()
+        assertThat(back.checked).isTrue()
+        assertThat(back.quantity).isWithin(1e-9).of(1.2)
+    }
+
+    @Test
+    fun delete_ofAMissingId_returnsNull() = runBlocking<Unit> {
+        assertThat(repo.delete("no-existe")).isNull()
+    }
 }

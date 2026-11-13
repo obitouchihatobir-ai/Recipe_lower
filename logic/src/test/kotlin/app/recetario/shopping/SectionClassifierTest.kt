@@ -27,4 +27,12 @@ class SectionClassifierTest {
     }
 
     @Test fun blankIsOther() = assertThat(SectionClassifier.classify("  ")).isEqualTo(ShopSection.OTHER)
+
+    @Test fun multiWordEntriesWinOverTheFirstWord() {
+        assertThat(SectionClassifier.classify("Tomate frito")).isEqualTo(ShopSection.PANTRY)
+        assertThat(SectionClassifier.classify("Harina de trigo")).isEqualTo(ShopSection.PANTRY)
+        assertThat(SectionClassifier.classify("harina de trigo integral")).isEqualTo(ShopSection.PANTRY)
+        assertThat(SectionClassifier.classify("Caldo de verduras")).isEqualTo(ShopSection.PANTRY)
+        assertThat(SectionClassifier.classify("Calabaza")).isEqualTo(ShopSection.FRUITS_VEG)
+    }
 }
