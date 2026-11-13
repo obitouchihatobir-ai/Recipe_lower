@@ -205,7 +205,8 @@ class EditorViewModelTest {
 
         vm.onEvent(EditorEvent.UpdateIngredient(i1.copy(name = "Sal", note = "al gusto")))
         vm.onEvent(EditorEvent.SetStepText(s1.id, "Mezcla"))
-        val saved = repo.recipes.value.getValue(vm.save()!!)
+        val id = vm.save()!!
+        val saved = repo.recipes.value.getValue(id)
         assertThat(saved.ingredients).hasSize(1)
         assertThat(saved.steps).hasSize(1)
     }
