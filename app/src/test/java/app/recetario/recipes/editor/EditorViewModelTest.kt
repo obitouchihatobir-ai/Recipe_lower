@@ -392,4 +392,44 @@ class EditorViewModelTest {
             assertThat(parsed).isWithin(0.001).of(v)
         }
     }
+
+    @Test
+    fun save_partiallyUnderstoodMinutes_isAnError() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.fillValid()
+        vm.onEvent(EditorEvent.SetCookingMinutes("1 hora y media"))
+        assertThat(vm.save()).isNull()
+        assertThat(vm.state.value.errors[Field.MINUTES]).isEqualTo("Escribe el tiempo en minutos, por ejemplo 35.")
+        assertThat(vm.state.value.cookingMinutesText).isEqualTo("1 hora y media")
+    }
+
+    @Test
+    fun save_blankNameIngredientWithOnlySectionOrCustomUnit_returnsError() = runTest(dispatcher) {
+        val vm = newVm()
+        vm.fillValid()
+        repeat(2) { vm.onEvent(EditorEvent.AddIngredient) }
+        val (a, b) = vm.state.value.ingredients
+        vm.onEvent(EditorEvent.UpdateIngredient(a.copy(section = "Masa")))
+        vm.onEvent(EditorEvent.UpdateIngredient(b.copy(unit = MeasureUnit.CUSTOM, customUnit = "puñado")))
+        assertThat(vm.save()).isNull()
+        assertThat(vm.state.value.rowErrors.keys).containsExactly(ingredientNameErrorKey(a.id), ingredientNameErrorKey(b.id))
+    }
+
+    @Test
+    fun pendingDraft_blocksDiscard() = runTest(dispatcher) {
+        val first = newVm()
+        first.fillValid()
+        advanceTimeBy(600)
+        val vm = newVm()
+        assertThat(vm.pendingDraft.value).isNotNull()
+        vm.discard()
+        assertThat(draftFile("new").exists()).isTrue()
+        assertThat(vm.pendingDraft.value).isNotNull()
+    }
+
+    @Test
+    fun unknownCategoryIdArg_isNotPreselected() = runTest(dispatcher) {
+        val vm = newVm(categoryId = "no-existe")
+        assertThat(vm.state.value.categoryId).isNull()
+    }
 }

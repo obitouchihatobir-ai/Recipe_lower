@@ -65,4 +65,21 @@ class EditorHelpersTest {
     }
 
     @Test fun `marcar dulce no baja un dulce mayor`() = assertEquals(3, FlavorProfile(sweet = 3).markSweet().sweet)
+
+    @Test fun `duracion estricta acepta entero y terminos`() {
+        assertEquals(35, parseDurationMinutes("35"))
+        assertEquals(60, parseDurationMinutes("1 h"))
+        assertEquals(60, parseDurationMinutes("1 hora"))
+        assertEquals(120, parseDurationMinutes("2 horas"))
+        assertEquals(45, parseDurationMinutes(" 45 min "))
+        assertEquals(90, parseDurationMinutes("1 h 30 min"))
+        assertEquals(90, parseDurationMinutes("90 minutos"))
+        assertEquals(90, parseDurationMinutes("1 hora y 30 minutos"))
+    }
+
+    @Test fun `duracion estricta rechaza lo entendido a medias`() {
+        for (t in listOf("1 hora y media", "1 h 30", "20-30 min", "40 min + 2 h de reposo", "-5", "", "unos 40", "2 sartenes")) {
+            assertNull(t, parseDurationMinutes(t))
+        }
+    }
 }
