@@ -65,6 +65,12 @@ class ThemeRevealHostTest {
         assertTrue("el círculo no llegó a empezar", isColor(pixel(5, 5), new))
         assertTrue("la esquina lejana ya cambió de tema", isColor(pixel(700, 1500), old))
 
+        // ~100 ms después (el círculo mide unos 260 px de 1700): lejos sigue el fondo antiguo, junto al origen el nuevo.
+        // Si no se pudiera tomar la imagen del fotograma anterior (cambio directo), la esquina lejana ya sería nueva.
+        rule.mainClock.advanceTimeBy(100)
+        assertTrue("a ~100 ms la esquina lejana sigue antigua", isColor(pixel(700, 1500), old))
+        assertTrue("a ~100 ms el origen es nuevo", isColor(pixel(5, 5), new))
+
         rule.mainClock.advanceTimeBy(700)
         assertTrue("al terminar todo es el tema nuevo", isColor(pixel(700, 1500), new))
     }
