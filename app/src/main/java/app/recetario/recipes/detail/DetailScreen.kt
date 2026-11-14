@@ -71,6 +71,7 @@ import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.list.formatDurationSeconds
 import app.recetario.recipes.list.formatMinutes
 import app.recetario.recipes.model.ServeTemp
+import app.recetario.recipes.quantity.scaleQuantity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -90,7 +91,6 @@ fun DetailRoute(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onCooking: (servings: Int) -> Unit,
-    onQuantityTap: (ingredientId: String) -> Unit = {},
 ) {
     val vm: DetailViewModel = viewModel(factory = DetailViewModel.factory(container, recipeId))
     val live by vm.state.collectAsStateWithLifecycle()
@@ -100,6 +100,7 @@ fun DetailRoute(
     if (live.recipe != null) last = live
     val state = last ?: live
 
+    val cupMl by container.settingsRepository.cupMl.collectAsStateWithLifecycle(initialValue = 240)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var toast by rememberSaveable { mutableStateOf<String?>(null) }
@@ -135,7 +136,7 @@ fun DetailRoute(
         onDelete = vm::delete,
         onServings = vm::setServings,
         onToggleIngredient = vm::toggleIngredient,
-        onQuantityTap = onQuantityTap,
+        cupMl = cupMl,
         onNeed = {
             if (!adding) {
                 adding = true
@@ -187,7 +188,7 @@ fun DetailContent(
     onDelete: () -> Unit,
     onServings: (Int) -> Unit,
     onToggleIngredient: (String) -> Unit,
-    onQuantityTap: (String) -> Unit,
+    cupMl: Int,
     onNeed: () -> Unit,
     onCooking: () -> Unit,
 ) {
@@ -196,6 +197,8 @@ fun DetailContent(
     val recipe = state.recipe
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    // Ingrediente cuya hoja de equivalencias está abierta.
+    var conversionsFor by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         LazyColumn(
@@ -314,13 +317,15 @@ fun DetailContent(
                                 modifier = Modifier.padding(top = 10.dp),
                             )
                         }
+                        val scaled = scaleQuantity(ing.quantity, recipe.servings, state.servings)
                         IngredientRow(
                             ingredient = ing,
                             quantity = state.quantities[ing.id].orEmpty(),
+                            convertible = ing.isConvertible(scaled),
                             checked = ing.id in state.checkedIngredientIds,
                             showDivider = index < recipe.ingredients.lastIndex,
                             onToggle = { onToggleIngredient(ing.id) },
-                            onQuantityTap = { onQuantityTap(ing.id) },
+                            onQuantityTap = { conversionsFor = ing.id },
                         )
                     }
                 }
@@ -408,6 +413,12 @@ fun DetailContent(
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
                 ) { Text("▶ Modo cocina", fontSize = 15.sp, fontWeight = FontWeight.W700) }
             }
+        }
+
+        val open = recipe?.ingredients?.firstOrNull { it.id == conversionsFor }
+        val openQuantity = if (recipe != null && open != null) scaleQuantity(open.quantity, recipe.servings, state.servings) else null
+        if (open != null && openQuantity != null) {
+            ConversionsPanel(open, openQuantity, state.quantities[open.id].orEmpty(), cupMl, onDismiss = { conversionsFor = null })
         }
     }
 

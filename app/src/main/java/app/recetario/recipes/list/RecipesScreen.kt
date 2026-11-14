@@ -75,6 +75,7 @@ fun RecipesRoute(
     container: AppContainer,
     onRecipe: (String) -> Unit,
     onAdd: (categoryId: String?) -> Unit,
+    onConverter: () -> Unit,
 ) {
     val vm: RecipesViewModel = viewModel(factory = RecipesViewModel.factory(container.recipeRepository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -93,6 +94,7 @@ fun RecipesRoute(
         onClearFilters = { vm.setFilter { RecipeFilter(query = it.query, sort = it.sort) } },
         onRecipe = onRecipe,
         onAdd = { onAdd(filter.categoryIds.singleOrNull()) },
+        onConverter = onConverter,
     )
     if (showFilters) {
         FiltersSheet(
@@ -121,6 +123,7 @@ fun RecipesContent(
     onClearFilters: () -> Unit,
     onRecipe: (String) -> Unit,
     onAdd: () -> Unit,
+    onConverter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val c = LocalRecetarioColors.current
@@ -131,6 +134,9 @@ fun RecipesContent(
             Column(Modifier.padding(start = 18.dp, end = 10.dp, top = 6.dp).staggeredEntrance(0, "header", tracker)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ScreenTitle("Recetas", Modifier.weight(1f))
+                    IconButton(onClick = onConverter) {
+                        Icon(AppIcons.Converter, contentDescription = "Conversor de medidas", tint = c.ink)
+                    }
                     IconButton(onClick = onToggleLayout) {
                         Icon(
                             if (state.grid) AppIcons.List else AppIcons.Grid,

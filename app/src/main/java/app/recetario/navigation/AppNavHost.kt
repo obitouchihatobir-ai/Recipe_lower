@@ -30,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.recetario.AppContainer
 import app.recetario.cooking.CookingRoute
+import app.recetario.converter.ConverterRoute
 import app.recetario.core.ui.components.LocalNavAnimatedVisibilityScope
 import app.recetario.core.ui.components.LocalSharePhotos
 import app.recetario.core.ui.components.LocalSharedTransitionScope
@@ -114,6 +115,7 @@ fun AppNavHost(
                                 onAdd = { categoryId ->
                                     navController.from(from) { navigate(RecipeEditor(categoryId = categoryId)) }
                                 },
+                                onConverter = { navController.from(from) { navigate(Converter) } },
                             )
                         }
                     }
@@ -133,6 +135,9 @@ fun AppNavHost(
                     }
                     composable<Cooking> { from ->
                         CookingRoute(container, onClose = { navController.from(from) { popBackStack() } })
+                    }
+                    composable<Converter> { from ->
+                        ConverterRoute(container, onBack = { navController.from(from) { popBackStack() } })
                     }
                     composable<Settings> { from ->
                         SettingsRoute(

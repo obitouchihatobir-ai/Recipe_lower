@@ -43,6 +43,7 @@ object AppIcons {
         circle(7.5f, 11f, 1f), circle(9.5f, 7.5f, 1f), circle(14.5f, 7.5f, 1f),
     )
     val Sort = stroke("Ordenar", "M7 4v16", "M4 17l3 3 3-3", "M17 20V4", "M14 7l3-3 3 3")
+    val Converter = stroke("Conversor", "M4 8h14", "M14 4l4 4-4 4", "M20 16H6", "M10 12l-4 4 4 4")
     val Pause = stroke("Pausa", "M9 6v12", "M15 6v12")
     val Play = stroke("Reanudar", "M8 5.5v13l10.5-6.5z")
 }

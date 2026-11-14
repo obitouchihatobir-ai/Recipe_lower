@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextReplacement
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -22,6 +23,7 @@ import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.AppNavHost
 import app.recetario.navigation.Appearance
 import app.recetario.navigation.Categories
+import app.recetario.navigation.Converter
 import app.recetario.navigation.Cooking
 import app.recetario.navigation.Settings
 import app.recetario.navigation.RecipeDetail
@@ -122,7 +124,25 @@ class CapturasTest {
         rule.waitFor(hasTestTag("category-panel"))
         save("categorias-nueva-$name")
 
+        captureConverter(nav, name)
         captureCooking(c, nav, name)
+    }
+
+    /** Conversor (1 taza de harina) y la hoja de equivalencias del detalle al tocar «1½ tazas». */
+    private fun captureConverter(nav: NavHostController, name: String) {
+        rule.runOnIdle { nav.navigate(Converter) }
+        rule.waitFor(hasTestTag("converter-screen"))
+        rule.onNodeWithTag("converter-value").performTextReplacement("1")
+        rule.onNodeWithTag("converter-ingredient").performTextReplacement("harina")
+        rule.waitFor(hasTestTag("converter-result"))
+        save("conversor-$name")
+
+        rule.runOnIdle { nav.navigate(RecipeDetail("crema")) }
+        rule.waitFor(hasTestTag("detail-list"))
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("1½ tazas"))
+        rule.onNodeWithText("1½ tazas").performClick()
+        rule.waitFor(hasTestTag("conversions-panel"))
+        save("detalle-equivalencias-$name")
     }
 
     /** Modo cocina: arriba con los ingredientes, el paso 2 expandido con su temporizador en marcha y «¡Listo!». */
@@ -183,6 +203,7 @@ class CapturasTest {
                 ingredient("i3", "Ajo", 2.0, MeasureUnit.CLOVE),
                 ingredient("i4", "Caldo de verduras", 750.0, MeasureUnit.MILLILITER),
                 ingredient("i5", "Nata", 100.0, MeasureUnit.MILLILITER, section = "Para servir"),
+                ingredient("i6", "Harina", 1.5, MeasureUnit.CUP),
             ),
             steps = listOf(
                 Step("s1", "Pela la calabaza, quítale las semillas y córtala en cubos medianos.", emptyList(), null, setOf("i1")),

@@ -188,6 +188,7 @@ fun IngredientRow(
     showDivider: Boolean,
     onToggle: () -> Unit,
     onQuantityTap: () -> Unit,
+    convertible: Boolean = false,
 ) {
     val c = LocalRecetarioColors.current
     Column {
@@ -211,7 +212,8 @@ fun IngredientRow(
                 Box(
                     Modifier
                         .heightIn(min = 48.dp)
-                        .clickable(onClick = onQuantityTap)
+                        // Solo las cantidades de masa o volumen abren la hoja de equivalencias.
+                        .let { if (convertible) it.clickable(role = Role.Button, onClickLabel = "Ver equivalencias", onClick = onQuantityTap) else it }
                         .padding(start = 8.dp),
                     contentAlignment = Alignment.CenterEnd,
                 ) { FlashingQuantity(quantity) }
