@@ -276,12 +276,22 @@ class CookingScreenTest {
 
     @Test
     fun progress_isALiveRegionThatStaysOnScreen() {
-        open()
+        // Receta larga: tras dos «Hecho ✓» la lista ha bajado mucho más que la altura de la cabecera.
+        runBlocking {
+            container.recipeRepository.save(
+                sampleRecipe(
+                    "larga", "Guiso largo",
+                    ingredients = (1..12).map { ingredient("l$it", "Ingrediente $it", 10.0 * it, MeasureUnit.GRAM) },
+                    steps = (1..5).map { Step("p$it", "Paso largo número $it: remueve, prueba y ajusta.", emptyList(), null, emptySet()) },
+                ),
+            )
+        }
+        open(recipeId = "larga")
         done(1)
         done(2)
         rule.waitFor(hasContentDescription("Marcar el paso 3 como hecho"))
         // Sin desplazar la lista: la cabecera fija sigue ahí y TalkBack la anuncia al cambiar.
-        rule.onNode(hasText("Paso 3 de 3") and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        rule.onNode(hasText("Paso 3 de 5") and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
             .assertIsDisplayed()
     }
 
