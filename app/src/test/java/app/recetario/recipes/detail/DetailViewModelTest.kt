@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
 import app.recetario.core.data.DefaultCategories
+import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.quantity.MeasureUnit
 import app.recetario.testing.ingredient
 import app.recetario.testing.installTestContainer
@@ -80,14 +81,14 @@ class DetailViewModelTest {
     }
 
     @Test
-    fun setServings_isClampedTo1And24() {
+    fun setServings_isClampedTo1And99() {
         save(ingredient("i1", "Calabaza", 800.0, MeasureUnit.GRAM))
         val vm = vm()
         vm.loaded()
         vm.setServings(0)
         assertThat(vm.state.value.servings).isEqualTo(1)
-        vm.setServings(99)
-        assertThat(vm.state.value.servings).isEqualTo(24)
+        vm.setServings(150)
+        assertThat(vm.state.value.servings).isEqualTo(99)
     }
 
     @Test
@@ -132,8 +133,38 @@ class DetailViewModelTest {
         save()
         val vm = vm()
         vm.loaded()
-        runBlocking { vm.delete() }
+        vm.delete()
+        assertThat(runBlocking { withTimeout(10_000) { vm.events.first() } }).isEqualTo(DetailEvent.Deleted)
         assertThat(runBlocking { container.recipeRepository.observeRecipe("r1").first() }).isNull()
+    }
+
+    @Test
+    fun delete_whenTheRepositoryFails_reportsFailureWithoutCrashing() {
+        save()
+        val failing = object : RecipeRepository by container.recipeRepository {
+            override suspend fun delete(id: String) = throw IllegalStateException("disk I/O error")
+        }
+        val vm = DetailViewModel("r1", failing, container.shoppingRepository, container.photoStore, SavedStateHandle())
+        vm.loaded()
+        vm.delete()
+        assertThat(runBlocking { withTimeout(10_000) { vm.events.first() } }).isEqualTo(DetailEvent.DeleteFailed)
+        assertThat(runBlocking { container.recipeRepository.observeRecipe("r1").first() }).isNotNull()
+    }
+
+    @Test
+    fun baseServingsAbove24_canGoUpAndDown() {
+        runBlocking {
+            container.recipeRepository.save(
+                sampleRecipe("r1", "Paella", ingredients = listOf(ingredient("i1", "Arroz", 300.0, MeasureUnit.GRAM)))
+                    .copy(servings = 30),
+            )
+        }
+        val vm = vm()
+        assertThat(vm.loaded().servings).isEqualTo(30)
+        vm.setServings(vm.state.value.servings + 1)
+        assertThat(vm.state.value.servings).isEqualTo(31)
+        vm.setServings(vm.state.value.servings - 2)
+        assertThat(vm.state.value.servings).isEqualTo(29)
     }
 
     @Test

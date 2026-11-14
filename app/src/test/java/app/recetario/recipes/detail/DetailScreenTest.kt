@@ -66,6 +66,7 @@ class DetailScreenTest {
         count: Int = 8,
         cover: String? = null,
         notes: String = "",
+        description: String = "",
     ) = runBlocking {
         container.recipeRepository.save(
             sampleRecipe(
@@ -74,7 +75,7 @@ class DetailScreenTest {
                     ingredient("i$it", if (it == 1) "Calabaza" else "Ingrediente $it", if (it == 1) 800.0 else 10.0 * it, MeasureUnit.GRAM)
                 },
                 steps = listOf(Step("s1", "Pela la calabaza.", emptyList(), null, emptySet())),
-            ).copy(coverPhoto = cover, notes = notes),
+            ).copy(coverPhoto = cover, notes = notes, description = description),
         )
     }
 
@@ -187,5 +188,53 @@ class DetailScreenTest {
         rule.waitFor(hasContentDescription("Marcar como favorita"))
         rule.onNodeWithContentDescription("Marcar como favorita").performClick()
         rule.waitFor(hasContentDescription("Quitar de favoritas"))
+    }
+
+    @Test
+    fun description_isShownUnderTheTitle_onlyWhenNotBlank() {
+        save(description = "Una crema suave de otoño")
+        launch()
+        rule.waitFor(hasText("Una crema suave de otoño"))
+        rule.onNodeWithText("Una crema suave de otoño").assertIsDisplayed()
+    }
+
+    @Test
+    fun noIngredients_hidesTheNeedButton() {
+        save(count = 0)
+        launch()
+        rule.waitFor(hasText("Crema de calabaza"))
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Pela la calabaza."))
+        assertThat(rule.onAllNodes(hasText("🛒 Lo que necesito → a la compra")).fetchSemanticsNodes()).isEmpty()
+    }
+
+    @Test
+    fun need_secondCompletedTap_showsTheToastAgainAndRestartsItsTimer() {
+        save()
+        launch()
+        rule.waitFor(hasText("Calabaza"))
+        rule.mainClock.autoAdvance = false
+        val message = hasText("✓ 8 ingredientes añadidos a tu lista de compra")
+        fun toastShown() = rule.onAllNodes(message).fetchSemanticsNodes().isNotEmpty()
+        fun pump(until: () -> Boolean) {
+            repeat(500) {
+                rule.mainClock.advanceTimeByFrame()
+                if (until()) return
+                Thread.sleep(10)
+            }
+            error("condición no cumplida")
+        }
+        fun calabazaGrams() = runBlocking { container.shoppingRepository.observe().first() }
+            .values.flatten().firstOrNull { it.name == "Calabaza" }?.quantity
+
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("🛒 Lo que necesito → a la compra"))
+        rule.onNodeWithText("🛒 Lo que necesito → a la compra").performClick()
+        pump(::toastShown)
+        rule.mainClock.advanceTimeBy(2_000)
+        rule.onNodeWithText("🛒 Lo que necesito → a la compra").performClick()
+        pump { calabazaGrams() == 1600.0 }
+        pump { true } // deja recomponer el nuevo aviso
+        // 1 s después del segundo toque (3 s tras el primero) el aviso sigue: su temporizador se reinició.
+        rule.mainClock.advanceTimeBy(1_000)
+        assertThat(toastShown()).isTrue()
     }
 }
