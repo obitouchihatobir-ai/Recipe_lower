@@ -8,11 +8,15 @@ import org.junit.Test
 
 class CategoryFormTest {
     @Test
-    fun firstGrapheme_keepsOnlyTheFirstVisibleCharacter() {
-        assertEquals("🍲", firstGrapheme("🍲🍕"))
-        assertEquals("e\u0301", firstGrapheme("e\u0301x"))
-        assertEquals("", firstGrapheme(""))
-        assertEquals("a", firstGrapheme("a"))
+    fun lastGrapheme_keepsOnlyTheLastVisibleCharacter() {
+        assertEquals("\uD83C\uDF55", lastGrapheme("\uD83C\uDF72\uD83C\uDF55"))
+        // Emoji prellenado + el nuevo que se escribe: se queda el nuevo.
+        assertEquals("\uD83C\uDF2E", lastGrapheme("\uD83C\uDF7D\uFE0F\uD83C\uDF2E"))
+        // Un emoji combinado (hombre + cocinero) sigue entero.
+        assertEquals("\uD83D\uDC68\u200D\uD83C\uDF73", lastGrapheme("\uD83C\uDF55\uD83D\uDC68\u200D\uD83C\uDF73"))
+        assertEquals("e\u0301", lastGrapheme("xe\u0301"))
+        assertEquals("", lastGrapheme(""))
+        assertEquals("a", lastGrapheme("a"))
     }
 
     @Test

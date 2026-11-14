@@ -1,11 +1,13 @@
 package app.recetario.settings
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
+import app.recetario.core.ui.theme.LocalThemeRevealOrigin
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.core.ui.theme.ThemeRevealHost
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -61,8 +65,10 @@ class AppearanceScreenTest {
         theme = resolved
         var origin by remember { mutableStateOf<Offset?>(null) }
         if (resolved != null) {
-            ThemeRevealHost(resolved, origin) {
-                RecetarioTheme(resolved) { AppearanceRoute(container, onBack = {}) }
+            CompositionLocalProvider(LocalThemeRevealOrigin provides { o: Offset? -> origin = o; revealOrigin = o }) {
+                ThemeRevealHost(resolved, origin, onOriginConsumed = { origin = null }) { shown ->
+                    RecetarioTheme(shown) { AppearanceRoute(container, onBack = {}) }
+                }
             }
         }
     }
@@ -78,6 +84,8 @@ class AppearanceScreenTest {
 
         rule.onNodeWithTag("theme-FRESCO").performClick()
         rule.waitUntil(5_000) { theme == ThemeChoice.FRESCO }
+        // La pantalla avisó al host de desde dónde se tocó.
+        rule.runOnIdle { assertNotNull(revealOrigin) }
         rule.onNodeWithTag("theme-FRESCO").assertIsSelected()
         // Automático sigue activado: Fresco pasa a ser el tema claro de día.
         assertEquals(true, settings().auto)
@@ -115,5 +123,17 @@ class AppearanceScreenTest {
         rule.waitFor(hasText("07:00"))
         rule.onNodeWithTag("night-start-plus").performClick()
         rule.waitUntil(5_000) { settings().nightStart == LocalTime.of(20, 30) }
+    }
+
+    @Test
+    fun appearance_nightWindow_cannotBecomeEmpty() {
+        runBlocking { container.settingsRepository.setNightWindow(LocalTime.of(20, 0), LocalTime.of(20, 30)) }
+        launch()
+        rule.waitFor(hasText("20:30"))
+        // Bajar el final o subir el inicio los igualaría: Automático nunca llegaría a la noche.
+        rule.onNodeWithTag("night-end-minus").assertIsNotEnabled()
+        rule.onNodeWithTag("night-start-plus").assertIsNotEnabled()
+        rule.onNodeWithTag("night-start-minus").performClick()
+        rule.waitUntil(5_000) { settings().nightStart == LocalTime.of(19, 30) }
     }
 }

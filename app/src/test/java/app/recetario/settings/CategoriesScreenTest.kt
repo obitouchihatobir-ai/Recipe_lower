@@ -14,6 +14,7 @@ import app.recetario.AppContainer
 import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
+import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.model.BaseType
 import app.recetario.recipes.model.Category
 import app.recetario.testing.installTestContainer
@@ -28,6 +29,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import java.io.IOException
 
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
@@ -98,5 +100,19 @@ class CategoriesScreenTest {
         assertEquals("🍽️", saved.emoji)
         assertEquals(false, saved.isDefault)
         rule.waitFor(hasText("Cenas"))
+    }
+
+    @Test
+    fun categories_saveFailure_showsASnackbarInsteadOfCrashing() {
+        val failing = object : RecipeRepository by container.recipeRepository {
+            override suspend fun saveCategory(category: Category) = throw IOException("disco lleno")
+        }
+        rule.setContent { RecetarioTheme(ThemeChoice.CALIDO) { CategoriesRoute(container, onBack = {}, repo = failing) } }
+        rule.waitFor(hasText("Comidas"))
+        rule.onNodeWithTag("category-add").performClick()
+        rule.waitFor(hasTestTag("category-name"))
+        rule.onNodeWithTag("category-name").performTextInput("Cenas")
+        rule.onNodeWithTag("category-save").performClick()
+        rule.waitFor(hasText("No se pudo guardar la categoría."))
     }
 }

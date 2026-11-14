@@ -46,6 +46,24 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun corruptFile_fallsBackToDefaults() = runTest {
+        val file = folder.newFile("corrupto.preferences_pb")
+        file.writeBytes(ByteArray(64) { (it * 31 + 7).toByte() })
+        val corruptScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        try {
+            val corrupt = SettingsRepository(createSettingsDataStore(corruptScope) { file })
+            assertEquals(ThemeSettings(), corrupt.themeSettings.first())
+            assertEquals(240, corrupt.cupMl.first())
+            assertEquals(BackupStatus(), corrupt.backupStatus.first())
+            // Y se puede volver a guardar.
+            corrupt.setCupMl(250)
+            assertEquals(250, corrupt.cupMl.first())
+        } finally {
+            corruptScope.cancel()
+        }
+    }
+
+    @Test
     fun setTheme_persists() = runTest {
         repo.setTheme(ThemeChoice.NOCTURNO)
         repo.setAuto(false)
