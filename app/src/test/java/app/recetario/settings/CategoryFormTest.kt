@@ -10,7 +10,7 @@ class CategoryFormTest {
     @Test
     fun firstGrapheme_keepsOnlyTheFirstVisibleCharacter() {
         assertEquals("🍲", firstGrapheme("🍲🍕"))
-        assertEquals("é", firstGrapheme("éx"))
+        assertEquals("e\u0301", firstGrapheme("e\u0301x"))
         assertEquals("", firstGrapheme(""))
         assertEquals("a", firstGrapheme("a"))
     }
