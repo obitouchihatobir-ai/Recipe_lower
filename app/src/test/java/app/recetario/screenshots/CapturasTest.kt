@@ -3,10 +3,12 @@ package app.recetario.screenshots
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -20,6 +22,7 @@ import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.AppNavHost
 import app.recetario.navigation.Appearance
 import app.recetario.navigation.Categories
+import app.recetario.navigation.Cooking
 import app.recetario.navigation.Settings
 import app.recetario.navigation.RecipeDetail
 import app.recetario.navigation.RecipeEditor
@@ -42,7 +45,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * Capturas de Inicio, Recetas, el editor, el detalle, Ajustes, Apariencia y Categorías en los tres temas, en `app/build/capturas/` (CI las sube como
+ * Capturas de Inicio, Recetas, el editor, el detalle, Ajustes, Apariencia, Categorías y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -118,6 +121,38 @@ class CapturasTest {
         rule.onNodeWithTag("category-add").performClick()
         rule.waitFor(hasTestTag("category-panel"))
         save("categorias-nueva-$name")
+
+        captureCooking(c, nav, name)
+    }
+
+    /** Modo cocina: arriba con los ingredientes, el paso 2 expandido con su temporizador en marcha y «¡Listo!». */
+    private fun captureCooking(c: AppContainer, nav: NavHostController, name: String) {
+        rule.runOnIdle { nav.navigate(Cooking("calabaza", 4)) }
+        rule.waitFor(hasTestTag("cooking-list"))
+        rule.waitFor(hasText("Paso 1 de 4"))
+        save("cocina-$name")
+
+        rule.onNodeWithText("Ingredientes").performClick()
+        markDone(1)
+        rule.waitFor(hasContentDescription("Marcar el paso 2 como hecho"))
+        rule.onNodeWithTag("cooking-list").performScrollToNode(hasText("⏱ Iniciar 10:00"))
+        rule.onNodeWithText("⏱ Iniciar 10:00").performClick()
+        rule.waitFor(hasText("⏸ ", substring = true))
+        save("cocina-temporizador-$name")
+
+        markDone(2)
+        markDone(3)
+        markDone(4)
+        rule.waitFor(hasText("¡Listo!"))
+        save("cocina-listo-$name")
+        rule.runOnIdle { c.timerManager.cancel("p2") }
+    }
+
+    private fun markDone(step: Int) {
+        val button = hasContentDescription("Marcar el paso $step como hecho")
+        rule.waitFor(button)
+        rule.onNodeWithTag("cooking-list").performScrollToNode(button)
+        rule.onNode(button).performClick()
     }
 
     private fun save(name: String) {

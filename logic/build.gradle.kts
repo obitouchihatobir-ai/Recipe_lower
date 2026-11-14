@@ -20,6 +20,10 @@ kotlin {
 }
 
 dependencies {
+    // StateFlow y SharedFlow forman parte de la API de los temporizadores (cooking/).
+    api(libs.kotlinx.coroutines.core)
+
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
