@@ -5,6 +5,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -73,7 +74,11 @@ class CookingScreenTest {
     }
 
     @After
-    fun tearDown() = container.database.close()
+    fun tearDown() {
+        // Sin temporizadores en marcha, el bucle de este contenedor deja de avanzar.
+        container.timerManager.timers.value.forEach { container.timerManager.cancel(it.id) }
+        container.database.close()
+    }
 
     private fun open(recipeId: String = "r1", servings: Int = 4) {
         rule.setContent {
@@ -85,6 +90,9 @@ class CookingScreenTest {
     }
 
     private fun scrollTo(matcher: SemanticsMatcher) = rule.onNodeWithTag("cooking-list").performScrollToNode(matcher)
+
+    private val running = hasContentDescription("Pausar el temporizador del paso 2", substring = true)
+    private val paused = hasContentDescription("Reanudar el temporizador del paso 2", substring = true)
 
     private fun done(step: Int) {
         val button = hasContentDescription("Marcar el paso $step como hecho")
@@ -175,7 +183,8 @@ class CookingScreenTest {
         scrollTo(idle)
         rule.onNode(idle).performClick()
 
-        rule.waitFor(hasText("⏸ ", substring = true))
+        rule.waitFor(running)
+        rule.onNode(running).assertTextEquals("5:00")
         assertThat(container.timerManager.timers.value.single().isRunning).isTrue()
         assertThat(container.timerManager.timers.value.single().label).isEqualTo("Paso 2: Sofríe la cebolla y el ajo…")
         // El primer temporizador arranca el servicio en primer plano.
@@ -185,12 +194,13 @@ class CookingScreenTest {
         rule.onNodeWithContentDescription("Sumar un minuto al temporizador del paso 2").performClick()
         rule.runOnIdle { assertThat(container.timerManager.timers.value.single().totalSeconds).isEqualTo(360) }
 
-        rule.onNode(hasText("⏸ ", substring = true)).performClick()
-        rule.waitFor(hasText("▶ ", substring = true))
+        rule.onNode(running).performClick()
+        rule.waitFor(paused)
+        rule.onNode(paused).assertTextEquals("6:00")
         assertThat(container.timerManager.timers.value.single().isPaused).isTrue()
 
-        rule.onNode(hasText("▶ ", substring = true)).performClick()
-        rule.waitFor(hasText("⏸ ", substring = true))
+        rule.onNode(paused).performClick()
+        rule.waitFor(running)
         rule.runOnIdle { container.timerManager.tick(container.timerManager.now() + 3_600_000) }
         rule.waitFor(hasText("✓ ¡Tiempo!"))
 
@@ -207,11 +217,11 @@ class CookingScreenTest {
         rule.waitFor(idle)
         scrollTo(idle)
         rule.onNode(idle).performClick()
-        rule.waitFor(hasText("⏸ ", substring = true))
+        rule.waitFor(running)
         done(2)
         rule.waitFor(hasContentDescription("Marcar el paso 3 como hecho"))
         // El paso 2 ya no está expandido, pero su temporizador sigue a la vista.
-        rule.onNodeWithContentDescription("Pausar el temporizador del paso 2", substring = true).assertExists()
+        rule.onNode(running).assertExists()
     }
 
     @Test

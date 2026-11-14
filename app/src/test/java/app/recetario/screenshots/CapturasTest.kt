@@ -137,7 +137,7 @@ class CapturasTest {
         rule.waitFor(hasContentDescription("Marcar el paso 2 como hecho"))
         rule.onNodeWithTag("cooking-list").performScrollToNode(hasText("⏱ Iniciar 10:00"))
         rule.onNodeWithText("⏱ Iniciar 10:00").performClick()
-        rule.waitFor(hasText("⏸ ", substring = true))
+        rule.waitFor(hasContentDescription("Pausar el temporizador del paso 2", substring = true))
         save("cocina-temporizador-$name")
 
         markDone(2)

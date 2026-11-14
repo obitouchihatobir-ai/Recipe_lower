@@ -53,6 +53,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -369,7 +370,7 @@ private fun StepPhotos(photos: List<String>, photoStore: PhotoStore, emoji: Stri
 
 /**
  * Botón del temporizador: «⏱ Iniciar 5:00» → «⏸ 4:58» (relleno y latiendo; tocar pausa) → «▶ 4:58» (en pausa;
- * tocar reanuda) → «✓ ¡Tiempo!» (tocar apaga el aviso).
+ * tocar reanuda) → «✓ ¡Tiempo!» (tocar apaga el aviso). ⏸ y ▶ se dibujan con iconos de trazo.
  */
 @Composable
 internal fun StepTimerButton(
@@ -388,30 +389,37 @@ internal fun StepTimerButton(
     val finished = timer?.finished == true
     val clock = formatTimerClock(timer?.remainingMs(now()) ?: (seconds * 1000L))
     val text: String
+    // Pausa y reanudar van con iconos de trazo: los caracteres ⏸ y ▶ salen como emojis de color.
+    val icon: ImageVector?
     val description: String
     val onClick: () -> Unit
     when {
         timer == null -> {
             text = "⏱ Iniciar $clock"
+            icon = null
             description = "Iniciar el temporizador del paso $stepNumber, ${formatDurationSeconds(seconds)}"
             onClick = onStart
         }
         finished -> {
             text = "✓ ¡Tiempo!"
+            icon = null
             description = "¡Tiempo! Apagar el aviso del paso $stepNumber"
             onClick = onDismiss
         }
         running -> {
-            text = "⏸ $clock"
+            text = clock
+            icon = AppIcons.Pause
             description = "Pausar el temporizador del paso $stepNumber. Quedan $clock"
             onClick = onToggle
         }
         else -> {
-            text = "▶ $clock"
+            text = clock
+            icon = AppIcons.Play
             description = "Reanudar el temporizador del paso $stepNumber. Quedan $clock"
             onClick = onToggle
         }
     }
+    val ink = if (running) c.onAccent else c.accent
     // Late mientras corre: un halo que crece y vuelve (como en el boceto); nada si se quitaron las animaciones.
     val halo = if (running && !reduced) {
         rememberInfiniteTransition(label = "timerPulse").animateFloat(
@@ -448,12 +456,18 @@ internal fun StepTimerButton(
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text,
-            color = if (running) c.onAccent else c.accent,
-            style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.W700, fontFeatureSettings = "tnum"),
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = ink)
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text,
+                color = ink,
+                style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.W700, fontFeatureSettings = "tnum"),
+                maxLines = 1,
+            )
+        }
     }
 }
 

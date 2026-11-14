@@ -36,7 +36,10 @@ class TimerServiceTest {
     }
 
     @After
-    fun tearDown() = container.database.close()
+    fun tearDown() {
+        container.timerManager.timers.value.forEach { container.timerManager.cancel(it.id) }
+        container.database.close()
+    }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
