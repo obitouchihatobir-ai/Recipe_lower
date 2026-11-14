@@ -93,7 +93,7 @@ class CapturasTest {
 
         rule.runOnIdle { nav.navigate(RecipeDetail("calabaza")) }
         rule.waitFor(hasTestTag("detail-list"))
-        rule.waitFor(hasText("Sal y pimienta"))
+        rule.waitFor(hasText("Vegetariana"))
         save("detalle-$name")
         rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Sal y pimienta"))
         save("detalle-ingredientes-$name")
