@@ -40,6 +40,9 @@ docs/superpowers/plans/   Planes de implementación
 ## Lista de compra
 Lógica pura en `logic/.../shopping/` (`ShoppingModels`, `SectionClassifier`, `mergeInto`, `asShareText`); Room (`shopping_items`, `ShoppingDao`), `ShoppingRepository` y pantalla en `app/.../shopping/`. `addFromRecipe` escala, clasifica y funde en una transacción y devuelve cuántos ingredientes añadió. Borrar y «Vaciar marcados» ofrecen «Deshacer» (`restore`). La taza viene de `cupMl: Flow<Int>` (por ahora `flowOf(240)`; la Tarea 12 lo conecta a Ajustes). Añadir a mano usa un panel inferior con `BackHandler`. Observación: un primer intento con `AlertDialog` y campos de texto colgó una prueba de Robolectric (sin causa investigada). Cada fila ofrece pulsación larga para cambiar de sección y acciones de accesibilidad «Borrar» y «Cambiar de sección»; borrar devuelve la fila leída en la misma transacción para restaurarla tal cual. Si cambias una tabla de Room y no puedes compilar en local, el paso «Comprobar que el esquema…» de CI imprime el JSON generado: cópialo a `app/schemas/…/1.json` (sin la línea final `##[error]`).
 
+## Detalle de receta
+`recipes/detail/`: `DetailRoute` (ViewModel) y `DetailContent` (sin estado, lo usan las capturas), `DetailParts.kt` (botones redondos, corazón animado, tarjeta de sabor, fila de ingrediente, cantidad que destella 300 ms, botón discontinuo, aviso). `formatRecipeAsText` (texto para compartir) vive en `logic/.../recipes/detail/`. Porciones y casillas van en `SavedStateHandle` (sobreviven al giro, no se guardan en disco). La cabecera con la clave `photo-$id` se compone siempre, también mientras carga (sin marcador 🍽 de más); la ruta conserva el último cuadro al borrar. `onQuantityTap` está sin conectar (Tarea 14) y `Cooking` es un marcador (Tarea 13).
+
 ## Editor de recetas
 El borrador se guarda en `filesDir/drafts/` (`new.json` o `<idReceta>.json`) con 500 ms de espera y se borra al guardar o descartar (`EditorViewModel`, `DraftStore`).
 
