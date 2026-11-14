@@ -29,6 +29,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.recetario.AppContainer
+import app.recetario.cooking.CookingRoute
 import app.recetario.core.ui.components.LocalNavAnimatedVisibilityScope
 import app.recetario.core.ui.components.LocalSharePhotos
 import app.recetario.core.ui.components.LocalSharedTransitionScope
@@ -36,7 +37,6 @@ import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.home.HomeRoute
 import app.recetario.pairing.PairingPlaceholderScreen
-import app.recetario.pairing.ComingSoon
 import app.recetario.recipes.detail.DetailRoute
 import app.recetario.recipes.editor.EditorRoute
 import app.recetario.recipes.list.RecipesRoute
@@ -131,9 +131,8 @@ fun AppNavHost(
                             )
                         }
                     }
-                    // Marcador de la Tarea 13, que lo sustituye por el modo cocina.
-                    composable<Cooking> {
-                        ComingSoon(emoji = "🍳", title = "Modo cocina", text = "Muy pronto: modo cocina")
+                    composable<Cooking> { from ->
+                        CookingRoute(container, onClose = { navController.from(from) { popBackStack() } })
                     }
                     composable<Settings> { from ->
                         SettingsRoute(

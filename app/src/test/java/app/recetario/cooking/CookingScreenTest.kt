@@ -103,6 +103,8 @@ class CookingScreenTest {
 
         rule.waitFor(hasContentDescription("Marcar el paso 2 como hecho"))
         rule.onNodeWithContentDescription("Marcar el paso 1 como hecho").assertDoesNotExist()
+        // La lista se desplazó sola hasta el paso 2: la cabecera, con «Paso 2 de 3», queda arriba.
+        scrollTo(hasText("Paso 2 de 3"))
         rule.onNodeWithText("Paso 2 de 3").assertIsDisplayed()
         // El paso 2 expandido muestra sus ingredientes y su temporizador.
         scrollTo(hasText("⏱ Iniciar 5:00"))
@@ -128,6 +130,8 @@ class CookingScreenTest {
         scrollTo(hasText("Pela la calabaza y córtala en cubos."))
         rule.onNodeWithText("Pela la calabaza y córtala en cubos.").performClick()
         rule.waitFor(hasContentDescription("Marcar el paso 1 como hecho"))
+        rule.onNodeWithContentDescription("Marcar el paso 2 como hecho").assertDoesNotExist()
+        scrollTo(hasText("Paso 1 de 3"))
         rule.onNodeWithText("Paso 1 de 3").assertIsDisplayed()
     }
 
