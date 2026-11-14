@@ -178,6 +178,7 @@ fun DetailContent(
             contentPadding = PaddingValues(bottom = 120.dp),
         ) {
             item(key = "hero") {
+                Box {
                 Box(Modifier.sharedRecipePhoto(recipeId).fillMaxWidth().height(220.dp)) {
                     if (recipe != null) {
                         PhotoOrPlaceholder(
@@ -191,6 +192,38 @@ fun DetailContent(
                     } else {
                         Box(Modifier.fillMaxSize().background(c.heroBrush))
                     }
+                }
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                RoundButton("Volver", onBack) { Icon(AppIcons.Back, contentDescription = null, modifier = Modifier.size(18.dp), tint = c.ink) }
+                if (recipe != null) {
+                    Row {
+                        RoundButton(
+                            if (recipe.favorite) "Quitar de favoritas" else "Marcar como favorita",
+                            onFavorite,
+                        ) { FavoriteHeart(recipe.favorite) }
+                        Box {
+                            RoundButton("Más opciones", { menuOpen = true }) { Text("⋯", color = c.ink, fontSize = 17.sp) }
+                            DropdownMenu(menuOpen, { menuOpen = false }, containerColor = c.surface) {
+                                DropdownMenuItem(
+                                    text = { Text("Editar", color = c.ink) },
+                                    onClick = { menuOpen = false; onEdit() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Compartir", color = c.ink) },
+                                    onClick = { menuOpen = false; onShare() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Borrar", color = MaterialTheme.colorScheme.error) },
+                                    onClick = { menuOpen = false; confirmDelete = true },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
                 }
             }
             if (recipe == null) {
@@ -322,39 +355,6 @@ fun DetailContent(
                                     .background(c.surface)
                                     .border(1.dp, c.line, RoundedCornerShape(radius))
                                     .padding(12.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Botones de la cabecera (flotan sobre la foto y no se desplazan con ella).
-        Row(
-            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            RoundButton("Volver", onBack) { Icon(AppIcons.Back, contentDescription = null, modifier = Modifier.size(18.dp), tint = c.ink) }
-            if (recipe != null) {
-                Row {
-                    RoundButton(
-                        if (recipe.favorite) "Quitar de favoritas" else "Marcar como favorita",
-                        onFavorite,
-                    ) { FavoriteHeart(recipe.favorite) }
-                    Box {
-                        RoundButton("Más opciones", { menuOpen = true }) { Text("⋯", color = c.ink, fontSize = 17.sp) }
-                        DropdownMenu(menuOpen, { menuOpen = false }, containerColor = c.surface) {
-                            DropdownMenuItem(
-                                text = { Text("Editar", color = c.ink) },
-                                onClick = { menuOpen = false; onEdit() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Compartir", color = c.ink) },
-                                onClick = { menuOpen = false; onShare() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Borrar", color = MaterialTheme.colorScheme.error) },
-                                onClick = { menuOpen = false; confirmDelete = true },
                             )
                         }
                     }
