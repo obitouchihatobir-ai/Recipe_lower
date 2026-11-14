@@ -18,6 +18,9 @@ import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.AppNavHost
+import app.recetario.navigation.Appearance
+import app.recetario.navigation.Categories
+import app.recetario.navigation.Settings
 import app.recetario.navigation.RecipeDetail
 import app.recetario.navigation.RecipeEditor
 import app.recetario.recipes.model.FlavorProfile
@@ -39,7 +42,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * Capturas de Inicio, Recetas y el editor en los tres temas, en `app/build/capturas/` (CI las sube como
+ * Capturas de Inicio, Recetas, el editor, el detalle, Ajustes, Apariencia y Categorías en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -99,6 +102,22 @@ class CapturasTest {
         save("detalle-ingredientes-$name")
         rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Mis notas"))
         save("detalle-pasos-notas-$name")
+
+        rule.runOnIdle { nav.navigate(Settings) }
+        rule.waitFor(hasTestTag("settings-screen"))
+        save("ajustes-$name")
+
+        rule.runOnIdle { nav.navigate(Appearance) }
+        rule.waitFor(hasTestTag("appearance-screen"))
+        rule.waitFor(hasTestTag("auto-note"))
+        save("apariencia-$name")
+
+        rule.runOnIdle { nav.navigate(Categories) }
+        rule.waitFor(hasText("Postres"))
+        save("categorias-$name")
+        rule.onNodeWithTag("category-add").performClick()
+        rule.waitFor(hasTestTag("category-panel"))
+        save("categorias-nueva-$name")
     }
 
     private fun save(name: String) {

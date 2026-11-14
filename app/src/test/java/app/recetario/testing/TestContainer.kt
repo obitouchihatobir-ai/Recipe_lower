@@ -1,6 +1,14 @@
 package app.recetario.testing
 
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import java.io.File
+import java.nio.file.Files
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -29,8 +37,15 @@ fun installTestContainer(clock: Clock = testClock): AppContainer {
     val db = Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
         .addCallback(DefaultCategories.callback)
         .build()
-    return AppContainer(app, clock = clock, database = db).also { app.container = it }
+    return AppContainer(app, clock = clock, database = db, settingsDataStore = testSettingsDataStore())
+        .also { app.container = it }
 }
+
+/** Ajustes en un archivo temporal propio de cada contenedor de prueba. */
+private fun testSettingsDataStore(): DataStore<Preferences> = PreferenceDataStoreFactory.create(
+    scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    produceFile = { File(Files.createTempDirectory("ajustes").toFile(), "ajustes.preferences_pb") },
+)
 
 fun sampleRecipe(
     id: String,

@@ -40,6 +40,11 @@ import app.recetario.pairing.ComingSoon
 import app.recetario.recipes.detail.DetailRoute
 import app.recetario.recipes.editor.EditorRoute
 import app.recetario.recipes.list.RecipesRoute
+import app.recetario.settings.AboutRoute
+import app.recetario.settings.AppearanceRoute
+import app.recetario.settings.CategoriesRoute
+import app.recetario.settings.SettingsRoute
+import app.recetario.settings.TagsRoute
 import app.recetario.shopping.ShoppingRoute
 
 private const val FADE_MS = 250
@@ -96,6 +101,8 @@ fun AppNavHost(
                                 onCategory = { id -> navController.from(from) { openRecipesFiltered(id) } },
                                 onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
                                 onAdd = { navController.from(from) { navigate(RecipeEditor()) } },
+                                onSettings = { navController.from(from) { navigate(Settings) } },
+                                onAppearance = { navController.from(from) { navigate(Appearance) } },
                             )
                         }
                     }
@@ -127,6 +134,28 @@ fun AppNavHost(
                     // Marcador de la Tarea 13, que lo sustituye por el modo cocina.
                     composable<Cooking> {
                         ComingSoon(emoji = "🍳", title = "Modo cocina", text = "Muy pronto: modo cocina")
+                    }
+                    composable<Settings> { from ->
+                        SettingsRoute(
+                            container = container,
+                            onBack = { navController.from(from) { popBackStack() } },
+                            onAppearance = { navController.from(from) { navigate(Appearance) } },
+                            onCategories = { navController.from(from) { navigate(Categories) } },
+                            onTags = { navController.from(from) { navigate(Tags) } },
+                            onAbout = { navController.from(from) { navigate(About) } },
+                        )
+                    }
+                    composable<Appearance> { from ->
+                        AppearanceRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                    }
+                    composable<Categories> { from ->
+                        CategoriesRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                    }
+                    composable<Tags> { from ->
+                        TagsRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                    }
+                    composable<About> { from ->
+                        AboutRoute(onBack = { navController.from(from) { popBackStack() } })
                     }
                     composable<RecipeEditor> { from ->
                         val route = from.toRoute<RecipeEditor>()

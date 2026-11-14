@@ -8,7 +8,14 @@ import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.data.RoomRecipeRepository
 import app.recetario.shopping.RoomShoppingRepository
 import app.recetario.shopping.ShoppingRepository
-import kotlinx.coroutines.flow.flowOf
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
+import app.recetario.settings.SettingsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import java.io.File
 import java.time.Clock
 
@@ -29,11 +36,20 @@ class AppContainer(
     context: Context,
     val clock: Clock = Clock.systemDefaultZone(),
     val database: AppDatabase = AppDatabase.create(context),
+    settingsDataStore: DataStore<Preferences> = createSettingsDataStore(context),
 ) {
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")
     val recipeRepository: RecipeRepository = RoomRecipeRepository(database, photoStore, clock)
 
-    /** El tamaño de la taza (240 ml) lo conectará a los ajustes la Tarea 12. */
-    val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, flowOf(240))
+    val settingsRepository = SettingsRepository(settingsDataStore)
+
+    /** El tamaño de la taza sale de los ajustes. */
+    val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, settingsRepository.cupMl)
 }
+
+/** DataStore de los ajustes: archivo `ajustes` en `filesDir/datastore/`. */
+private fun createSettingsDataStore(context: Context): DataStore<Preferences> = PreferenceDataStoreFactory.create(
+    scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    produceFile = { context.preferencesDataStoreFile("ajustes") },
+)

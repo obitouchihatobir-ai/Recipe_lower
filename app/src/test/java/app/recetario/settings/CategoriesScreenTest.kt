@@ -1,12 +1,14 @@
 package app.recetario.settings
 
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
 import app.recetario.core.data.DefaultCategories
@@ -82,6 +84,19 @@ class CategoriesScreenTest {
         rule.waitFor(hasText("Comidas"))
         rule.onNodeWithTag("category-add").performClick()
         rule.waitFor(hasTestTag("category-name"))
-        rule.onNodeWithTag("category-name").assertIsDisplayed()
+        rule.onNodeWithTag("category-save").assertIsNotEnabled()
+        rule.onNodeWithTag("category-name").performTextInput("Cenas")
+        rule.onNodeWithTag("category-color-4A6FA5").performClick()
+        rule.onNodeWithTag("category-base-DESSERT").performClick()
+        rule.onNodeWithTag("category-save").assertIsEnabled().performClick()
+        rule.waitUntil(5_000) {
+            runBlocking { container.recipeRepository.observeCategories().first() }.any { it.name == "Cenas" }
+        }
+        val saved = runBlocking { container.recipeRepository.observeCategories().first() }.first { it.name == "Cenas" }
+        assertEquals("#4A6FA5", saved.colorHex)
+        assertEquals(BaseType.DESSERT, saved.baseType)
+        assertEquals("🍽️", saved.emoji)
+        assertEquals(false, saved.isDefault)
+        rule.waitFor(hasText("Cenas"))
     }
 }

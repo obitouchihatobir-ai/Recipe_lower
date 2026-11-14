@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -56,7 +56,7 @@ class SettingsRepositoryTest {
 
     @Test
     fun setDayTheme_nocturno_isRejected() = runTest {
-        assertThrows(IllegalArgumentException::class.java) { runTest { repo.setDayTheme(ThemeChoice.NOCTURNO) } }
+        assertTrue(runCatching { repo.setDayTheme(ThemeChoice.NOCTURNO) }.exceptionOrNull() is IllegalArgumentException)
         repo.setDayTheme(ThemeChoice.FRESCO)
         assertEquals(ThemeChoice.FRESCO, repo.themeSettings.first().dayTheme)
     }
@@ -73,7 +73,7 @@ class SettingsRepositoryTest {
     fun cupMl_acceptsOnly240Or250() = runTest {
         repo.setCupMl(250)
         assertEquals(250, repo.cupMl.first())
-        assertThrows(IllegalArgumentException::class.java) { runTest { repo.setCupMl(300) } }
+        assertTrue(runCatching { repo.setCupMl(300) }.exceptionOrNull() is IllegalArgumentException)
         assertEquals(250, repo.cupMl.first())
     }
 

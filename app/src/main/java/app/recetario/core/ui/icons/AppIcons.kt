@@ -32,6 +32,16 @@ object AppIcons {
     val ChevronDown = stroke("Desplegar", "M6 9l6 6 6-6")
     val Note = stroke("Nota", "M6 4h9l3 3v13H6z", "M9 11h6", "M9 15h4")
     val Share = stroke("Compartir", "M12 15V4", "M8 8l4-4 4 4", "M5 13v6h14v-6")
+    val Settings = stroke(
+        "Ajustes",
+        "M10.3 3h3.4l.5 2.3 1.6.9 2.2-.8 1.7 2.9-1.7 1.6v1.8l1.7 1.6-1.7 2.9-2.2-.8-1.6.9-.5 2.3h-3.4l-.5-2.3-1.6-.9-2.2.8-1.7-2.9 1.7-1.6v-1.8L4.3 8.3 6 5.4l2.2.8 1.6-.9z",
+        circle(12f, 12f, 3f),
+    )
+    val Palette = stroke(
+        "Apariencia",
+        "M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8.1-9-8.1z",
+        circle(7.5f, 11f, 1f), circle(9.5f, 7.5f, 1f), circle(14.5f, 7.5f, 1f),
+    )
     val Sort = stroke("Ordenar", "M7 4v16", "M4 17l3 3 3-3", "M17 20V4", "M14 7l3-3 3 3")
 }
 

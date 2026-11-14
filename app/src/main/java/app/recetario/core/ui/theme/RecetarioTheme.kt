@@ -1,6 +1,5 @@
 package app.recetario.core.ui.theme
 
-import android.provider.Settings
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -9,19 +8,15 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.platform.LocalContext
 import app.recetario.core.ui.motion.LocalReducedMotion
+import app.recetario.core.ui.motion.rememberSystemReducedMotion
 
 @Composable
 fun RecetarioTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
     val colors = paletteFor(choice)
     val shapes = shapesFor(choice)
-    val context = LocalContext.current
-    val reducedMotion = remember(context) {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val reducedMotion = rememberSystemReducedMotion()
     val colorScheme = colorSchemeFor(choice, colors)
     val r = shapes.radius
     CompositionLocalProvider(

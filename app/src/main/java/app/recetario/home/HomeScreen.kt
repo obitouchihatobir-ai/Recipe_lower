@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,12 +21,15 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,6 +44,7 @@ import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.ScreenTitle
 import app.recetario.core.ui.components.SectionTitle
 import app.recetario.core.ui.components.rememberEntranceTracker
+import app.recetario.core.ui.icons.AppIcons
 import app.recetario.core.ui.components.staggeredEntrance
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.recipes.data.PhotoStore
@@ -52,10 +57,12 @@ fun HomeRoute(
     onCategory: (String) -> Unit,
     onRecipe: (String) -> Unit,
     onAdd: () -> Unit,
+    onSettings: () -> Unit = {},
+    onAppearance: () -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel(factory = HomeViewModel.factory(container.recipeRepository, container.clock))
     val state by vm.state.collectAsStateWithLifecycle()
-    HomeContent(state, container.photoStore, onCategory, onRecipe, onAdd)
+    HomeContent(state, container.photoStore, onCategory, onRecipe, onAdd, onSettings, onAppearance)
 }
 
 /** Inicio de la etapa 1: saludo, chips de categorías, recientes y favoritas (§6.3). */
@@ -66,6 +73,8 @@ fun HomeContent(
     onCategory: (String) -> Unit,
     onRecipe: (String) -> Unit,
     onAdd: () -> Unit,
+    onSettings: () -> Unit = {},
+    onAppearance: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val c = LocalRecetarioColors.current
@@ -79,7 +88,7 @@ fun HomeContent(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             fullWidth("header") {
-                Header(state.greeting, Modifier.staggeredEntrance(0, "header", tracker))
+                Header(state.greeting, onSettings, onAppearance, Modifier.staggeredEntrance(0, "header", tracker))
             }
             when {
                 !state.loaded -> Unit
@@ -150,11 +159,21 @@ private fun LazyGridScope.section(
 }
 
 @Composable
-private fun Header(greeting: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        MutedText(greeting)
-        Spacer(Modifier.height(2.dp))
-        ScreenTitle("¿Qué cocinamos hoy?")
+private fun Header(greeting: String, onSettings: () -> Unit, onAppearance: () -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalRecetarioColors.current
+    Row(modifier, verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            MutedText(greeting)
+            Spacer(Modifier.height(2.dp))
+            ScreenTitle("¿Qué cocinamos hoy?")
+        }
+        // Zonas táctiles de 48 dp; el margen negativo del final alinea los iconos con el borde de la cuadrícula.
+        IconButton(onClick = onAppearance, modifier = Modifier.testTag("home-appearance")) {
+            Icon(AppIcons.Palette, contentDescription = "Apariencia", tint = c.ink)
+        }
+        IconButton(onClick = onSettings, modifier = Modifier.testTag("home-settings")) {
+            Icon(AppIcons.Settings, contentDescription = "Ajustes", tint = c.ink)
+        }
     }
 }
 
