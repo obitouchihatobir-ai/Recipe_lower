@@ -1,5 +1,6 @@
 package app.recetario.testing
 
+import android.os.SystemClock
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -31,13 +32,16 @@ import java.time.ZoneId
 /** 21:40 en Madrid: «Buenas noches». */
 val testClock: Clock = Clock.fixed(Instant.parse("2026-11-13T20:40:00Z"), ZoneId.of("Europe/Madrid"))
 
-/** Sustituye el contenedor de la app por uno con la base de datos en memoria (con las categorías de serie). */
-fun installTestContainer(clock: Clock = testClock): AppContainer {
+/**
+ * Sustituye el contenedor de la app por uno con la base de datos en memoria (con las categorías de serie).
+ * [elapsedRealtime] es el reloj de los temporizadores.
+ */
+fun installTestContainer(clock: Clock = testClock, elapsedRealtime: () -> Long = SystemClock::elapsedRealtime): AppContainer {
     val app = ApplicationProvider.getApplicationContext<RecetarioApp>()
     val db = Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
         .addCallback(DefaultCategories.callback)
         .build()
-    return AppContainer(app, clock = clock, database = db, settingsDataStore = testSettingsDataStore())
+    return AppContainer(app, clock = clock, database = db, settingsDataStore = testSettingsDataStore(), elapsedRealtime = elapsedRealtime)
         .also { app.container = it }
 }
 

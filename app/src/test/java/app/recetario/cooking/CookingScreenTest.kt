@@ -1,8 +1,25 @@
 package app.recetario.cooking
 
+import android.Manifest
 import android.app.Application
+import android.os.Looper
+import android.os.SystemClock
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
+import androidx.activity.result.ActivityResultRegistry
+import androidx.activity.result.ActivityResultRegistryOwner
+import androidx.activity.result.contract.ActivityResultContract
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.isFocused
+import androidx.core.app.ActivityOptionsCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
@@ -54,6 +71,10 @@ class CookingScreenTest {
     @Before
     fun setUp() {
         container = installTestContainer()
+        saveRecipe()
+    }
+
+    private fun saveRecipe() {
         runBlocking {
             container.recipeRepository.save(
                 sampleRecipe(
@@ -80,13 +101,28 @@ class CookingScreenTest {
         container.database.close()
     }
 
-    private fun open(recipeId: String = "r1", servings: Int = 4) {
+    /** [wrap] rodea la app (para cambiar un CompositionLocal en una prueba). */
+    private fun open(
+        recipeId: String = "r1",
+        servings: Int = 4,
+        wrap: @Composable (@Composable () -> Unit) -> Unit = { it() },
+    ) {
         rule.setContent {
             nav = rememberNavController()
-            RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(container, navController = nav) }
+            wrap { RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(container, navController = nav) } }
         }
         rule.runOnIdle { nav.navigate(Cooking(recipeId, servings)) }
         rule.waitFor(hasTestTag("cooking-list"))
+    }
+
+    /** Marca el paso 1 y arranca el temporizador de 5 min del paso 2. */
+    private fun startStep2Timer() {
+        done(1)
+        val idle = hasText("⏱ Iniciar 5:00")
+        rule.waitFor(idle)
+        scrollTo(idle)
+        rule.onNode(idle).performClick()
+        rule.waitFor(running)
     }
 
     private fun scrollTo(matcher: SemanticsMatcher) = rule.onNodeWithTag("cooking-list").performScrollToNode(matcher)
@@ -111,8 +147,7 @@ class CookingScreenTest {
 
         rule.waitFor(hasContentDescription("Marcar el paso 2 como hecho"))
         rule.onNodeWithContentDescription("Marcar el paso 1 como hecho").assertDoesNotExist()
-        // La lista se desplazó sola hasta el paso 2: la cabecera, con «Paso 2 de 3», queda arriba.
-        scrollTo(hasText("Paso 2 de 3"))
+        // La cabecera, con «Paso 2 de 3», está fija: no se va al desplazarse la lista.
         rule.onNodeWithText("Paso 2 de 3").assertIsDisplayed()
         // El paso 2 expandido muestra sus ingredientes y su temporizador.
         scrollTo(hasText("⏱ Iniciar 5:00"))
@@ -139,7 +174,6 @@ class CookingScreenTest {
         rule.onNodeWithText("Pela la calabaza y córtala en cubos.").performClick()
         rule.waitFor(hasContentDescription("Marcar el paso 1 como hecho"))
         rule.onNodeWithContentDescription("Marcar el paso 2 como hecho").assertDoesNotExist()
-        scrollTo(hasText("Paso 1 de 3"))
         rule.onNodeWithText("Paso 1 de 3").assertIsDisplayed()
     }
 
@@ -238,6 +272,94 @@ class CookingScreenTest {
             val flags = rule.activity.window.attributes.flags
             assertThat(flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON).isEqualTo(0)
         }
+    }
+
+    @Test
+    fun progress_isALiveRegionThatStaysOnScreen() {
+        open()
+        done(1)
+        done(2)
+        rule.waitFor(hasContentDescription("Marcar el paso 3 como hecho"))
+        // Sin desplazar la lista: la cabecera fija sigue ahí y TalkBack la anuncia al cambiar.
+        rule.onNode(hasText("Paso 3 de 3") and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun withTalkBack_focusMovesToTheNewCurrentStep() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        shadowOf(app.getSystemService(AccessibilityManager::class.java)).setTouchExplorationEnabled(true)
+        open()
+        done(1)
+        rule.waitFor(hasContentDescription("Marcar el paso 2 como hecho"))
+        // El botón tocado desaparece: el foco pasa a la tarjeta del paso nuevo.
+        rule.waitUntil(5_000) {
+            rule.onAllNodes(hasTestTag("current-step") and isFocused()).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @Test
+    fun notificationPermission_isAskedOnlyOnceEver() {
+        val asked = mutableListOf<Any?>()
+        val registryOwner = object : ActivityResultRegistryOwner {
+            override val activityResultRegistry = object : ActivityResultRegistry() {
+                override fun <I, O> onLaunch(
+                    requestCode: Int,
+                    contract: ActivityResultContract<I, O>,
+                    input: I,
+                    options: ActivityOptionsCompat?,
+                ) {
+                    asked += input
+                }
+            }
+        }
+        open { content -> CompositionLocalProvider(LocalActivityResultRegistryOwner provides registryOwner) { content() } }
+        startStep2Timer()
+        rule.runOnIdle { assertThat(asked).containsExactly(Manifest.permission.POST_NOTIFICATIONS) }
+
+        // Otra vez en el modo cocina (otra sesión de la pantalla): ya no se pregunta.
+        rule.runOnIdle {
+            container.timerManager.cancel("s2")
+            nav.popBackStack()
+        }
+        rule.waitForGone(hasTestTag("cooking-list"))
+        rule.runOnIdle { nav.navigate(Cooking("r1", 4)) }
+        rule.waitFor(hasTestTag("cooking-list"))
+        startStep2Timer()
+        rule.runOnIdle { assertThat(asked).hasSize(1) }
+    }
+
+    @Test
+    fun countdown_stopsReadingTheClockWhileTheScreenIsInTheBackground() {
+        // Solo cuentan las lecturas del hilo principal (las de la pantalla); el bucle de la app va en otro hilo.
+        var mainReads = 0
+        container.database.close()
+        container = installTestContainer(elapsedRealtime = {
+            if (Looper.myLooper() == Looper.getMainLooper()) mainReads++
+            SystemClock.elapsedRealtime()
+        })
+        saveRecipe()
+        val owner = FakeLifecycleOwner()
+        open { content -> CompositionLocalProvider(LocalLifecycleOwner provides owner) { content() } }
+        startStep2Timer()
+        val before = mainReads
+        rule.mainClock.advanceTimeBy(2_000)
+        assertThat(mainReads).isGreaterThan(before)
+
+        rule.runOnUiThread { owner.registry.currentState = Lifecycle.State.CREATED }
+        rule.mainClock.advanceTimeBy(1_000)
+        val stopped = mainReads
+        rule.mainClock.advanceTimeBy(10_000)
+        assertThat(mainReads).isEqualTo(stopped)
+
+        rule.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
+        rule.mainClock.advanceTimeBy(2_000)
+        assertThat(mainReads).isGreaterThan(stopped)
+    }
+
+    private class FakeLifecycleOwner : LifecycleOwner {
+        val registry = LifecycleRegistry(this).apply { currentState = Lifecycle.State.RESUMED }
+        override val lifecycle: Lifecycle get() = registry
     }
 
     @Test

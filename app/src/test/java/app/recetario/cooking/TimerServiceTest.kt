@@ -3,15 +3,19 @@ package app.recetario.cooking
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.os.Looper
+import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
+import app.recetario.MainActivity
 import app.recetario.RecetarioApp
 import app.recetario.testing.installTestContainer
 import com.google.common.truth.Truth.assertThat
@@ -21,7 +25,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowMediaPlayer
 import org.robolectric.shadows.ShadowPowerManager
+import java.time.Duration
 
 @RunWith(AndroidJUnit4::class)
 class TimerServiceTest {
@@ -146,6 +152,75 @@ class TimerServiceTest {
         container.timerManager.cancel("s2")
         idle()
         assertThat(shadowOf(service).isStoppedBySelf).isTrue()
+    }
+
+    /** Termina los temporizadores [ids] (arrancados con 5 min) y devuelve su aviso de fin. */
+    private fun finished(vararg ids: String): List<Notification> {
+        ids.forEach { container.timerManager.start("Paso 2: Sofríe la cebolla…", 300, id = it) }
+        container.timerManager.tick(container.timerManager.now() + 300_000)
+        return ids.map { id -> TimerNotifications.finished(app, container.timerManager.timers.value.single { it.id == id }) }
+    }
+
+    @Test
+    fun finishedNotification_stopsAlertingAfterTenMinutes() {
+        assertThat(finished("s2").single().timeoutAfter).isEqualTo(10 * 60_000L)
+    }
+
+    @Test
+    fun tappingTheFinishedNotification_opensTheAppAndTurnsThatTimerOff() {
+        val (forS2, _) = finished("s2", "s3")
+        val open = shadowOf(forS2.contentIntent).savedIntent
+        assertThat(open.component?.className).isEqualTo(MainActivity::class.java.name)
+        ActivityScenario.launch<MainActivity>(open).use { idle() }
+        // Solo se apaga el suyo.
+        assertThat(container.timerManager.timers.value.map { it.id }).containsExactly("s3")
+    }
+
+    @Test
+    fun dismissingTheFinishedNotification_turnsThatTimerOff() {
+        val (forS2, forS3) = finished("s2", "s3")
+        assertThat(forS2.deleteIntent).isNotNull()
+        assertThat(forS2.deleteIntent).isNotEqualTo(forS3.deleteIntent)
+        val delete = shadowOf(forS2.deleteIntent)
+        assertThat(delete.isBroadcast).isTrue()
+        val intent = delete.savedIntent
+        val receiver = Class.forName(intent.component!!.className).getDeclaredConstructor().newInstance() as BroadcastReceiver
+        receiver.onReceive(app, intent)
+        assertThat(container.timerManager.timers.value.map { it.id }).containsExactly("s3")
+    }
+
+    @Test
+    fun withoutNotificationPermission_theAlarmRingsForTenMinutesAtMost() {
+        shadowOf(app).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        container.timerManager.start("Paso 2: Sofríe la cebolla…", 300, id = "s2")
+        val service = startService()
+        container.timerManager.tick(container.timerManager.now() + 300_000)
+        idle()
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(9))
+        assertThat(shadowOf(service).isStoppedBySelf).isFalse() // sigue sonando
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(1).plusSeconds(1))
+        assertThat(shadowOf(service).isStoppedBySelf).isTrue()
+    }
+
+    @Test
+    fun alarmRinger_loopsTheAlarmSoundWithAMediaPlayerUntilStopped() {
+        ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(30_000, 0) }
+        val players = mutableListOf<MediaPlayer>()
+        ShadowMediaPlayer.setCreateListener { player, _ -> players += player }
+        val ringer = AlarmRinger(app)
+
+        ringer.start()
+        idle()
+
+        // Un MediaPlayer en bucle funciona en todas las versiones (Ringtone.setLooping solo desde Android 9).
+        val player = players.single()
+        assertThat(player.isLooping).isTrue()
+        assertThat(shadowOf(player).state).isEqualTo(ShadowMediaPlayer.State.STARTED)
+        assertThat(shadowOf(player).audioAttributes.usage).isEqualTo(AudioAttributes.USAGE_ALARM)
+
+        ringer.stop()
+        assertThat(shadowOf(player).state).isEqualTo(ShadowMediaPlayer.State.END)
     }
 
     @Test
