@@ -27,7 +27,7 @@ fun rememberNow(clock: Clock): LocalTime {
 /** El tema que toca ahora (§6.1), o null mientras se leen los ajustes. */
 @Composable
 fun rememberResolvedTheme(container: AppContainer): ThemeChoice? {
-    val settings by container.settingsRepository.themeSettings.collectAsState<ThemeSettings?>(initial = null)
+    val settings by container.settingsRepository.themeSettings.collectAsState<ThemeSettings, ThemeSettings?>(initial = null)
     val now = rememberNow(container.clock)
     val dark = isSystemInDarkTheme()
     return settings?.let { resolveTheme(it, now, dark) }

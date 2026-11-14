@@ -76,7 +76,7 @@ fun ThemeRevealHost(
     val generation = state.generation
     LaunchedEffect(generation) {
         if (generation == 0) return@LaunchedEffect
-        val spec = if (state.circle) tween<Float>(REVEAL_MS, easing = FastOutSlowInEasing) else tween(FADE_MS, easing = LinearEasing)
+        val spec = if (state.circle) tween<Float>(REVEAL_MS, easing = FastOutSlowInEasing) else tween<Float>(FADE_MS, easing = LinearEasing)
         animate(0f, 1f, animationSpec = spec) { value, _ -> state.progress = value }
         state.animating = false
     }
