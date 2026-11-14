@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,6 +33,7 @@ import app.recetario.core.ui.components.AppTextField
 import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.SectionTitle
 import app.recetario.core.ui.theme.LocalRecetarioColors
+import app.recetario.recipes.data.RecipeRepository
 import kotlinx.coroutines.launch
 
 private sealed interface TagPanel {
@@ -40,20 +42,22 @@ private sealed interface TagPanel {
 }
 
 @Composable
-fun TagsRoute(container: AppContainer, onBack: () -> Unit) {
-    val repo = container.recipeRepository
+fun TagsRoute(container: AppContainer, onBack: () -> Unit, repo: RecipeRepository = container.recipeRepository) {
     val tags by repo.observeTags().collectAsStateWithLifecycle(initialValue = null)
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
     TagsContent(
+        snackbar = snackbar,
         tags = tags,
         onBack = onBack,
-        onRename = { old, new -> scope.launch { repo.renameTag(old, new) } },
-        onDelete = { tag -> scope.launch { repo.deleteTag(tag) } },
+        onRename = { old, new -> scope.launch { snackbar.reportFailure("No se pudo cambiar la etiqueta.") { repo.renameTag(old, new) } } },
+        onDelete = { tag -> scope.launch { snackbar.reportFailure("No se pudo borrar la etiqueta.") { repo.deleteTag(tag) } } },
     )
 }
 
 @Composable
 fun TagsContent(
+    snackbar: SnackbarHostState,
     tags: List<String>?,
     onBack: () -> Unit,
     onRename: (old: String, new: String) -> Unit,
@@ -67,6 +71,7 @@ fun TagsContent(
         onBack = onBack,
         tag = "tags-screen",
         modifier = modifier,
+        snackbar = snackbar,
         overlay = {
             when (val p = panel) {
                 is TagPanel.Rename -> RenameTagPanel(

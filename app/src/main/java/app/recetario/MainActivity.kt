@@ -47,8 +47,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
             CompositionLocalProvider(LocalThemeRevealOrigin provides remember { { o: Offset? -> origin = o } }) {
-                ThemeRevealHost(theme, origin, onOriginConsumed = { origin = null }) {
-                    RecetarioTheme(theme) { AppNavHost(container) }
+                ThemeRevealHost(theme, origin, onOriginConsumed = { origin = null }) { shown ->
+                    RecetarioTheme(shown) { AppNavHost(container) }
                 }
             }
         }

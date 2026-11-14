@@ -239,12 +239,14 @@ private fun NightHours(settings: ThemeSettings, onChange: (LocalTime, LocalTime)
         HourStepper(
             label = "Empieza la noche",
             time = settings.nightStart,
+            other = settings.nightEnd,
             tag = "night-start",
             onTime = { onChange(it, settings.nightEnd) },
         )
         HourStepper(
             label = "Termina la noche",
             time = settings.nightEnd,
+            other = settings.nightStart,
             tag = "night-end",
             onTime = { onChange(settings.nightStart, it) },
         )
@@ -252,7 +254,7 @@ private fun NightHours(settings: ThemeSettings, onChange: (LocalTime, LocalTime)
 }
 
 @Composable
-private fun HourStepper(label: String, time: LocalTime, tag: String, onTime: (LocalTime) -> Unit) {
+private fun HourStepper(label: String, time: LocalTime, other: LocalTime, tag: String, onTime: (LocalTime) -> Unit) {
     val c = LocalRecetarioColors.current
     Row(
         Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag(tag),
@@ -261,8 +263,10 @@ private fun HourStepper(label: String, time: LocalTime, tag: String, onTime: (Lo
         Text(label, Modifier.weight(1f), color = c.ink, style = MaterialTheme.typography.bodyLarge)
         Surface(shape = CircleShape, color = c.surface, border = BorderStroke(1.dp, c.line)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Si empiezo y termino a la misma hora, la noche queda vacía y Automático nunca la alcanza.
                 TextButton(
                     onClick = { onTime(time.minusMinutes(NIGHT_STEP_MINUTES)) },
+                    enabled = time.minusMinutes(NIGHT_STEP_MINUTES) != other,
                     modifier = Modifier.semantics { contentDescription = "$label: media hora antes" }.testTag("$tag-minus"),
                 ) { Text("−", style = MaterialTheme.typography.titleMedium) }
                 Text(
@@ -274,6 +278,7 @@ private fun HourStepper(label: String, time: LocalTime, tag: String, onTime: (Lo
                 )
                 TextButton(
                     onClick = { onTime(time.plusMinutes(NIGHT_STEP_MINUTES)) },
+                    enabled = time.plusMinutes(NIGHT_STEP_MINUTES) != other,
                     modifier = Modifier.semantics { contentDescription = "$label: media hora después" }.testTag("$tag-plus"),
                 ) { Text("+", style = MaterialTheme.typography.titleMedium) }
             }

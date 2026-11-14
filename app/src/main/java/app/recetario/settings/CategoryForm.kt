@@ -19,14 +19,14 @@ val categoryColors: List<Pair<String, String>> = listOf(
 
 const val DEFAULT_CATEGORY_EMOJI = "🍽️"
 
-/** Solo el primer carácter visible (un emoji con sus modificadores cuenta como uno). */
-fun firstGrapheme(text: String): String {
+/** Solo el último carácter visible: al escribir un emoji sobre otro, se queda el nuevo (un emoji combinado cuenta como uno). */
+fun lastGrapheme(text: String): String {
     if (text.isEmpty()) return ""
     val it = BreakIterator.getCharacterInstance()
     it.setText(text)
-    val start = it.first()
-    val end = it.next()
-    return if (end == BreakIterator.DONE) text else text.substring(start, end)
+    val end = it.last()
+    val start = it.previous()
+    return if (start == BreakIterator.DONE) text else text.substring(start, end)
 }
 
 /** La categoría de serie que recibe las recetas de una borrada: la del mismo tipo base si sigue ahí. */

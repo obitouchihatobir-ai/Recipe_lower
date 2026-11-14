@@ -9,10 +9,10 @@ import app.recetario.recipes.data.RoomRecipeRepository
 import app.recetario.shopping.RoomShoppingRepository
 import app.recetario.shopping.ShoppingRepository
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import app.recetario.settings.SettingsRepository
+import app.recetario.settings.createSettingsDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,7 +49,7 @@ class AppContainer(
 }
 
 /** DataStore de los ajustes: archivo `ajustes` en `filesDir/datastore/`. */
-private fun createSettingsDataStore(context: Context): DataStore<Preferences> = PreferenceDataStoreFactory.create(
+private fun createSettingsDataStore(context: Context): DataStore<Preferences> = createSettingsDataStore(
     scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     produceFile = { context.preferencesDataStoreFile("ajustes") },
 )

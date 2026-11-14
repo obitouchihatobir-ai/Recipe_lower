@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -44,6 +46,7 @@ fun SettingsPage(
     tag: String,
     modifier: Modifier = Modifier,
     actions: @Composable () -> Unit = {},
+    snackbar: SnackbarHostState? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -60,6 +63,7 @@ fun SettingsPage(
             Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         }
         overlay()
+        if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp))
     }
 }
 
@@ -114,4 +118,16 @@ fun BoxScope.BottomPanel(onDismiss: () -> Unit, tag: String, content: @Composabl
         verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content,
     )
+}
+
+/** Ejecuta [block]; si falla (salvo cancelación) avisa con [message] en vez de tumbar la app. */
+suspend fun SnackbarHostState.reportFailure(message: String, block: suspend () -> Unit) {
+    try {
+        block()
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        currentSnackbarData?.dismiss()
+        showSnackbar(message)
+    }
 }

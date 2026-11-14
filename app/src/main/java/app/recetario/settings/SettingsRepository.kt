@@ -9,7 +9,14 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.core.ui.theme.ThemeSettings
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.emptyPreferences
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.time.Instant
@@ -27,7 +34,10 @@ data class BackupStatus(
 class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     private val defaults = ThemeSettings()
 
-    val themeSettings: Flow<ThemeSettings> = dataStore.data.map { p ->
+    /** Un archivo ilegible se lee como vacío (ajustes de serie) en vez de tumbar la app. */
+    private val data: Flow<Preferences> = dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+
+    val themeSettings: Flow<ThemeSettings> = data.map { p ->
         ThemeSettings(
             auto = p[AUTO] ?: defaults.auto,
             choice = p[CHOICE].toTheme() ?: defaults.choice,
@@ -59,14 +69,14 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     }
 
     /** Tamaño de la taza en mililitros: 240 por defecto, o 250. */
-    val cupMl: Flow<Int> = dataStore.data.map { p -> p[CUP_ML]?.takeIf { it in CUP_SIZES } ?: DEFAULT_CUP_ML }.distinctUntilChanged()
+    val cupMl: Flow<Int> = data.map { p -> p[CUP_ML]?.takeIf { it in CUP_SIZES } ?: DEFAULT_CUP_ML }.distinctUntilChanged()
 
     suspend fun setCupMl(ml: Int) {
         require(ml in CUP_SIZES) { "La taza es de 240 o 250 ml" }
         dataStore.edit { it[CUP_ML] = ml }
     }
 
-    val backupStatus: Flow<BackupStatus> = dataStore.data.map { it.toBackupStatus() }.distinctUntilChanged()
+    val backupStatus: Flow<BackupStatus> = data.map { it.toBackupStatus() }.distinctUntilChanged()
 
     suspend fun updateBackupStatus(transform: (BackupStatus) -> BackupStatus) {
         dataStore.edit { p ->
@@ -108,3 +118,11 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         val LAST_ERROR = stringPreferencesKey("backup_last_error")
     }
 }
+
+/** DataStore de los ajustes; si el archivo está corrupto se sustituye por uno vacío. */
+fun createSettingsDataStore(scope: CoroutineScope, produceFile: () -> File): DataStore<Preferences> =
+    PreferenceDataStoreFactory.create(
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+        scope = scope,
+        produceFile = produceFile,
+    )

@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,6 +52,7 @@ import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.SectionTitle
 import app.recetario.core.ui.components.appTextFieldColors
 import app.recetario.core.ui.theme.LocalRecetarioColors
+import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.model.BaseType
 import app.recetario.recipes.model.Category
 import kotlinx.coroutines.flow.map
@@ -64,24 +66,28 @@ private sealed interface CategoryPanel {
 }
 
 @Composable
-fun CategoriesRoute(container: AppContainer, onBack: () -> Unit) {
-    val repo = container.recipeRepository
+fun CategoriesRoute(container: AppContainer, onBack: () -> Unit, repo: RecipeRepository = container.recipeRepository) {
     val categories by repo.observeCategories().collectAsStateWithLifecycle(initialValue = emptyList())
     val counts by remember(repo) {
         repo.observeSummaries().map { list -> list.groupingBy { it.categoryId }.eachCount() }
     }.collectAsStateWithLifecycle(initialValue = emptyMap())
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
     CategoriesContent(
+        snackbar = snackbar,
         categories = categories,
         recipeCounts = counts,
         onBack = onBack,
-        onSave = { category -> scope.launch { repo.saveCategory(category) } },
-        onDelete = { id, reassignTo -> scope.launch { repo.deleteCategory(id, reassignTo) } },
+        onSave = { category -> scope.launch { snackbar.reportFailure("No se pudo guardar la categoría.") { repo.saveCategory(category) } } },
+        onDelete = { id, reassignTo ->
+            scope.launch { snackbar.reportFailure("No se pudo borrar la categoría.") { repo.deleteCategory(id, reassignTo) } }
+        },
     )
 }
 
 @Composable
 fun CategoriesContent(
+    snackbar: SnackbarHostState,
     categories: List<Category>,
     recipeCounts: Map<String, Int>,
     onBack: () -> Unit,
@@ -96,6 +102,7 @@ fun CategoriesContent(
         onBack = onBack,
         tag = "categories-screen",
         modifier = modifier,
+        snackbar = snackbar,
         actions = {
             TextButton(onClick = { panel = CategoryPanel.Edit(null) }, modifier = Modifier.testTag("category-add")) {
                 Text("Nueva", color = c.accent)
@@ -189,7 +196,7 @@ private fun BoxScope.EditCategoryPanel(
         )
         OutlinedTextField(
             value = emoji,
-            onValueChange = { emoji = firstGrapheme(it) },
+            onValueChange = { emoji = lastGrapheme(it) },
             label = { Text("Emoji") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("category-emoji"),
