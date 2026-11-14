@@ -20,7 +20,7 @@ import app.recetario.core.ui.theme.LocalRecetarioColors
 internal fun servingsText(n: Int): String = if (n == 1) "1 porción" else "$n porciones"
 
 @Composable
-fun ServingsStepper(value: Int, onChange: (Int) -> Unit, range: IntRange = 1..24, modifier: Modifier = Modifier) {
+fun ServingsStepper(value: Int, onChange: (Int) -> Unit, range: IntRange = 1..99, modifier: Modifier = Modifier) {
     val c = LocalRecetarioColors.current
     Surface(modifier, shape = CircleShape, color = c.surface, border = BorderStroke(1.dp, c.line)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

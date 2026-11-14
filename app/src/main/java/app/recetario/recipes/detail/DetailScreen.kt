@@ -32,6 +32,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -100,10 +103,23 @@ fun DetailRoute(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var toast by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(toast) {
+    // Se reinicia con cada aviso terminado (aunque el texto sea el mismo): la clave es el contador, no el texto.
+    var toastCount by rememberSaveable { mutableStateOf(0) }
+    LaunchedEffect(toastCount) {
         if (toast != null) {
             delay(TOAST_MILLIS)
             toast = null
+        }
+    }
+    var adding by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val currentOnBack by rememberUpdatedState(onBack)
+    LaunchedEffect(vm) {
+        vm.events.collect {
+            when (it) {
+                DetailEvent.Deleted -> currentOnBack()
+                DetailEvent.DeleteFailed -> snackbar.showSnackbar("No se pudo borrar la receta.")
+            }
         }
     }
 
@@ -116,16 +132,24 @@ fun DetailRoute(
         onFavorite = vm::toggleFavorite,
         onEdit = onEdit,
         onShare = { shareRecipe(context, vm.shareText()) },
-        onDelete = {
-            scope.launch {
-                vm.delete()
-                onBack()
-            }
-        },
+        onDelete = vm::delete,
         onServings = vm::setServings,
         onToggleIngredient = vm::toggleIngredient,
         onQuantityTap = onQuantityTap,
-        onNeed = { scope.launch { toast = addedMessage(vm.sendMissingToShopping()) } },
+        onNeed = {
+            if (!adding) {
+                adding = true
+                scope.launch {
+                    try {
+                        toast = addedMessage(vm.sendMissingToShopping())
+                        toastCount++
+                    } finally {
+                        adding = false
+                    }
+                }
+            }
+        },
+        snackbar = snackbar,
         onCooking = { onCooking(state.servings) },
     )
 }
@@ -155,6 +179,7 @@ fun DetailContent(
     recipeId: String,
     photoStore: PhotoStore,
     toast: String?,
+    snackbar: SnackbarHostState,
     onBack: () -> Unit,
     onFavorite: () -> Unit,
     onEdit: () -> Unit,
@@ -244,6 +269,10 @@ fun DetailContent(
                             .padding(start = 18.dp, end = 18.dp, top = 16.dp),
                     ) {
                         ScreenTitle(recipe.title)
+                        if (recipe.description.isNotBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(recipe.description, color = c.muted, style = MaterialTheme.typography.bodyMedium)
+                        }
                         Spacer(Modifier.height(10.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             recipe.totalMinutes?.let { TagPill("⏱ ${formatMinutes(it)}") }
@@ -295,8 +324,10 @@ fun DetailContent(
                         )
                     }
                 }
-                item(key = "need") {
-                    NeedButton(onNeed, Modifier.padding(horizontal = 18.dp).padding(top = 12.dp))
+                if (recipe.ingredients.isNotEmpty()) {
+                    item(key = "need") {
+                        NeedButton(onNeed, Modifier.padding(horizontal = 18.dp).padding(top = 12.dp))
+                    }
                 }
                 item(key = "steps-title") {
                     Row(
@@ -366,6 +397,7 @@ fun DetailContent(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp).padding(bottom = 18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            SnackbarHost(snackbar)
             Toast(toast)
             if (recipe != null) {
                 Button(

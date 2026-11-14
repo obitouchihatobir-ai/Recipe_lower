@@ -15,11 +15,19 @@ import app.recetario.recipes.model.Recipe
 import app.recetario.recipes.quantity.formatQuantity
 import app.recetario.recipes.quantity.scaleQuantity
 import app.recetario.shopping.ShoppingRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+enum class DetailEvent { Deleted, DeleteFailed }
 
 data class DetailUiState(
     /** True hasta que llegan la receta y las categorías (la pantalla no pinta el marcador de posición antes). */
@@ -90,7 +98,28 @@ class DetailViewModel(
         viewModelScope.launch { repo.setFavorite(id, !recipe.favorite) }
     }
 
-    suspend fun delete() = repo.delete(id)
+    private val _events = Channel<DetailEvent>(Channel.BUFFERED)
+
+    /** Resultado del borrado (una sola vez cada uno). */
+    val events: Flow<DetailEvent> = _events.receiveAsFlow()
+
+    /**
+     * Borra la receta. Corre en el ámbito del ViewModel y no se cancela aunque la pantalla se cierre tras
+     * confirmar; un fallo se avisa con [DetailEvent.DeleteFailed] en vez de cerrar la app.
+     */
+    fun delete() {
+        viewModelScope.launch {
+            val event = try {
+                withContext(NonCancellable) { repo.delete(id) }
+                DetailEvent.Deleted
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                DetailEvent.DeleteFailed
+            }
+            _events.trySend(event)
+        }
+    }
 
     /** Texto para compartir con las porciones elegidas; vacío si la receta no está cargada. */
     fun shareText(): String {
@@ -101,7 +130,7 @@ class DetailViewModel(
 
     companion object {
         const val MIN_SERVINGS = 1
-        const val MAX_SERVINGS = 24
+        const val MAX_SERVINGS = 99
         private const val SERVINGS_KEY = "servings"
         private const val CHECKED_KEY = "checked"
 
