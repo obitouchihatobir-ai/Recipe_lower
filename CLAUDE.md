@@ -43,6 +43,9 @@ Lógica pura en `logic/.../shopping/` (`ShoppingModels`, `SectionClassifier`, `m
 ## Detalle de receta
 `recipes/detail/`: `DetailRoute` (ViewModel) y `DetailContent` (sin estado, lo usan las capturas), `DetailParts.kt` (botones redondos, corazón animado, tarjeta de sabor, fila de ingrediente, cantidad que destella 300 ms, botón discontinuo, aviso). `formatRecipeAsText` (texto para compartir) vive en `logic/.../recipes/detail/`. Porciones y casillas van en `SavedStateHandle` (sobreviven al giro, no se guardan en disco). La cabecera con la clave `photo-$id` se compone siempre, también mientras carga (sin marcador 🍽 de más); la ruta conserva el último cuadro al borrar. `onQuantityTap` está sin conectar (Tarea 14) y `Cooking` es un marcador (Tarea 13).
 
+## Ajustes y tema
+`SettingsRepository` (DataStore `ajustes`, creado en `AppContainer`; las pruebas pasan uno temporal) guarda el tema (Automático, tema claro de día, horas de noche), la taza (240 o 250 ml, que alimenta a `ShoppingRepository`) y `BackupStatus` para las copias. `MainActivity` no pinta nada hasta leer los ajustes (las pruebas con `MainActivity` esperan con `waitFor`) y obtiene el tema con `rememberResolvedTheme` (se reevalúa cada minuto). `ThemeRevealHost` rodea a `RecetarioTheme`: Apariencia avisa del punto tocado con `LocalThemeRevealOrigin` y el cambio se abre en círculo; sin aviso o con movimiento reducido es un fundido. Apariencia es una pantalla completa (Ajustes y el icono de Inicio); las horas de noche se editan con «−/+» de media hora. Categorías y Etiquetas usan `BottomPanel` (panel inferior con `BackHandler`, sin `AlertDialog`); borrar una categoría pregunta a cuál pasan sus recetas.
+
 ## Editor de recetas
 El borrador se guarda en `filesDir/drafts/` (`new.json` o `<idReceta>.json`) con 500 ms de espera y se borra al guardar o descartar (`EditorViewModel`, `DraftStore`).
 
