@@ -72,7 +72,16 @@ fun ThemeRevealHost(
         if (choice == state.displayed) return@LaunchedEffect
         val tapped = latestOrigin
         // La capa aún tiene lo grabado con el tema anterior: se convierte en imagen antes de cambiar.
-        val snapshot = layer.toImageBitmap()
+        // Si el dispositivo no puede hacerlo, el tema cambia de golpe en vez de fallar.
+        val snapshot = try {
+            layer.toImageBitmap()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            state.displayed = choice
+            if (tapped != null) onOriginConsumed()
+            return@LaunchedEffect
+        }
         state.frozen = snapshot
         state.circle = tapped != null && !reduced
         state.origin = (tapped ?: Offset.Zero) - hostOffset
