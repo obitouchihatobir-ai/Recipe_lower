@@ -29,6 +29,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import app.recetario.AppContainer
+import app.recetario.backup.BackupRoute
 import app.recetario.cooking.CookingRoute
 import app.recetario.converter.ConverterRoute
 import app.recetario.core.ui.components.LocalNavAnimatedVisibilityScope
@@ -146,6 +147,7 @@ fun AppNavHost(
                             onAppearance = { navController.from(from) { navigate(Appearance) } },
                             onCategories = { navController.from(from) { navigate(Categories) } },
                             onTags = { navController.from(from) { navigate(Tags) } },
+                            onBackup = { navController.from(from) { navigate(Backup) } },
                             onAbout = { navController.from(from) { navigate(About) } },
                         )
                     }
@@ -157,6 +159,9 @@ fun AppNavHost(
                     }
                     composable<Tags> { from ->
                         TagsRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                    }
+                    composable<Backup> { from ->
+                        BackupRoute(container, onBack = { navController.from(from) { popBackStack() } })
                     }
                     composable<About> { from ->
                         AboutRoute(onBack = { navController.from(from) { popBackStack() } })

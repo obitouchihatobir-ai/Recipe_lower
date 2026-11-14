@@ -59,33 +59,7 @@ class RoomRecipeRepository(
         db.withTransaction {
             recipes.coverPhoto(recipe.id)?.let(previous::add)
             previous += recipes.stepPhotos(recipe.id)
-            recipes.upsert(recipe.toEntity(updatedAt = clock.instant()))
-            recipes.deleteIngredients(recipe.id)
-            recipes.deleteSteps(recipe.id)
-            recipes.deleteRecipeTags(recipe.id)
-
-            recipes.insertIngredients(recipe.ingredients.mapIndexed { i, it -> it.toEntity(recipe.id, i) })
-            val ingredientIds = recipe.ingredients.mapTo(HashSet()) { it.id }
-            recipes.insertSteps(recipe.steps.mapIndexed { i, it -> it.toEntity(recipe.id, i) })
-            recipes.insertStepPhotos(
-                recipe.steps.flatMap { s -> s.photos.mapIndexed { i, f -> StepPhotoEntity(s.id, i, f) } },
-            )
-            recipes.insertStepIngredients(
-                recipe.steps.flatMap { s ->
-                    s.ingredientIds.filter { it in ingredientIds }.map { StepIngredientEntity(s.id, it) }
-                },
-            )
-
-            val links = LinkedHashMap<Long, RecipeTagEntity>()
-            for (name in recipe.tags) {
-                val display = name.trim()
-                val key = normalize(display)
-                if (key.isEmpty()) continue
-                val tag = tags.findByNormalized(key)
-                    ?: TagEntity(name = display, normalized = key).let { it.copy(id = tags.insert(it)) }
-                links.getOrPut(tag.id) { RecipeTagEntity(recipe.id, tag.id, links.size) }
-            }
-            tags.linkAll(links.values.toList())
+            writeRecipeAggregate(db, recipe, updatedAt = clock.instant())
             tags.deleteOrphans()
         }
         // Tras confirmar la transacción: fotos que la receta ya no usa y que nadie más referencia.
@@ -150,6 +124,44 @@ class RoomRecipeRepository(
     override suspend fun isPhotoReferenced(name: String): Boolean = recipes.isPhotoReferenced(name)
 }
 
+/**
+ * Escribe la receta completa (fila, ingredientes, pasos con sus fotos y enlaces, y etiquetas) en lugar de la que
+ * hubiera con el mismo id. Las etiquetas se reúsan por nombre normalizado. Va dentro de una transacción del
+ * llamador; no borra archivos de foto ni etiquetas que se queden sin recetas. La usan [RoomRecipeRepository.save]
+ * y la importación de copias de seguridad.
+ */
+internal suspend fun writeRecipeAggregate(db: AppDatabase, recipe: Recipe, updatedAt: java.time.Instant) {
+    val recipes = db.recipeDao()
+    val tags = db.tagDao()
+    recipes.upsert(recipe.toEntity(updatedAt = updatedAt))
+    recipes.deleteIngredients(recipe.id)
+    recipes.deleteSteps(recipe.id)
+    recipes.deleteRecipeTags(recipe.id)
+
+    recipes.insertIngredients(recipe.ingredients.mapIndexed { i, it -> it.toEntity(recipe.id, i) })
+    val ingredientIds = recipe.ingredients.mapTo(HashSet()) { it.id }
+    recipes.insertSteps(recipe.steps.mapIndexed { i, it -> it.toEntity(recipe.id, i) })
+    recipes.insertStepPhotos(
+        recipe.steps.flatMap { s -> s.photos.mapIndexed { i, f -> StepPhotoEntity(s.id, i, f) } },
+    )
+    recipes.insertStepIngredients(
+        recipe.steps.flatMap { s ->
+            s.ingredientIds.filter { it in ingredientIds }.map { StepIngredientEntity(s.id, it) }
+        },
+    )
+
+    val links = LinkedHashMap<Long, RecipeTagEntity>()
+    for (name in recipe.tags) {
+        val display = name.trim()
+        val key = normalize(display)
+        if (key.isEmpty()) continue
+        val tag = tags.findByNormalized(key)
+            ?: TagEntity(name = display, normalized = key).let { it.copy(id = tags.insert(it)) }
+        links.getOrPut(tag.id) { RecipeTagEntity(recipe.id, tag.id, links.size) }
+    }
+    tags.linkAll(links.values.toList())
+}
+
 private fun Recipe.toEntity(updatedAt: java.time.Instant) = RecipeEntity(
     id = id, title = title, categoryId = categoryId, coverPhoto = coverPhoto, description = description,
     totalMinutes = totalMinutes, servings = servings, difficulty = difficulty,
@@ -173,7 +185,7 @@ private fun RecipeEntity.flavor() = FlavorProfile(sweet, salty, sour, bitter, sp
 
 private fun List<RecipeTagWithTag>.names() = sortedBy { it.link.position }.map { it.tag.name }
 
-private fun RecipeWithChildren.toRecipe() = Recipe(
+internal fun RecipeWithChildren.toRecipe() = Recipe(
     id = recipe.id, title = recipe.title, categoryId = recipe.categoryId, coverPhoto = recipe.coverPhoto,
     description = recipe.description, totalMinutes = recipe.totalMinutes, servings = recipe.servings,
     difficulty = recipe.difficulty, flavor = recipe.flavor(), serveTemp = recipe.serveTemp,
@@ -201,6 +213,6 @@ private fun RecipeListRow.toSummary() = RecipeSummary(
     updatedAt = recipe.updatedAt,
 )
 
-private fun CategoryEntity.toModel() = Category(id, name, emoji, colorHex, baseType, sortOrder, isDefault)
+internal fun CategoryEntity.toModel() = Category(id, name, emoji, colorHex, baseType, sortOrder, isDefault)
 
-private fun Category.toEntity() = CategoryEntity(id, name, emoji, colorHex, baseType, sortOrder, isDefault)
+internal fun Category.toEntity() = CategoryEntity(id, name, emoji, colorHex, baseType, sortOrder, isDefault)

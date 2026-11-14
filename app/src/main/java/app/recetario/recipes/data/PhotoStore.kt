@@ -14,7 +14,7 @@ import java.util.UUID
 import kotlin.math.roundToInt
 
 /** Guarda las fotos como JPEG reducido en [dir]; las recetas solo recuerdan el nombre del archivo. */
-class PhotoStore(private val dir: File) {
+class PhotoStore(val dir: File) {
 
     /** Reduce la imagen (lado mayor ≤ 1600 px), la guarda como JPEG de calidad 85 y devuelve el nombre del archivo. */
     suspend fun import(source: InputStream): String = withContext(Dispatchers.IO) {

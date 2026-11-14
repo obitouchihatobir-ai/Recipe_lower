@@ -3,6 +3,7 @@ package app.recetario
 import android.app.Application
 import android.content.Context
 import android.os.SystemClock
+import app.recetario.backup.BackupManager
 import app.recetario.cooking.TimerManager
 import app.recetario.cooking.launchTimerTicker
 import app.recetario.core.data.AppDatabase
@@ -52,6 +53,17 @@ class AppContainer(
     /** El tamaño de la taza sale de los ajustes. */
     val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, settingsRepository.cupMl)
 
+    /** Copias de seguridad: zip temporal de importación en la caché, copias del teléfono en `filesDir/backups/`. */
+    val backupManager = BackupManager(
+        db = database,
+        photoStore = photoStore,
+        settings = settingsRepository,
+        clock = clock,
+        cacheDir = context.cacheDir,
+        filesDir = context.filesDir,
+        appVersion = appVersionName(context),
+    )
+
     /**
      * Temporizadores del modo cocina: uno para toda la app, así sobreviven al giro y a salir de la pantalla.
      * Un único bucle de la app los hace avanzar cada 250 ms, solo mientras alguno corre.
@@ -62,6 +74,9 @@ class AppContainer(
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launchTimerTicker(timerManager)
     }
 }
+
+private fun appVersionName(context: Context): String =
+    runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
 
 /** DataStore de los ajustes: archivo `ajustes` en `filesDir/datastore/`. */
 private fun createSettingsDataStore(context: Context): DataStore<Preferences> = createSettingsDataStore(

@@ -1,6 +1,13 @@
 package app.recetario.screenshots
 
 import android.graphics.Bitmap
+import android.net.Uri
+import androidx.activity.compose.LocalActivityResultRegistryOwner
+import androidx.activity.result.ActivityResultRegistry
+import androidx.activity.result.ActivityResultRegistryOwner
+import androidx.activity.result.contract.ActivityResultContract
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.core.app.ActivityOptionsCompat
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
@@ -22,6 +29,7 @@ import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.AppNavHost
 import app.recetario.navigation.Appearance
+import app.recetario.navigation.Backup
 import app.recetario.navigation.Categories
 import app.recetario.navigation.Converter
 import app.recetario.navigation.Cooking
@@ -45,9 +53,10 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.time.Instant
 
 /**
- * Capturas de Inicio, Recetas, el editor, el detalle, Ajustes, Apariencia, Categorías y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
+ * Capturas de Inicio, Recetas, el editor, el detalle, Ajustes, Apariencia, Categorías, Copias de seguridad y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -77,9 +86,12 @@ class CapturasTest {
         val c = installTestContainer().also { container = it }
         runBlocking { sampleRecipes().forEach { c.recipeRepository.save(it) } }
         lateinit var nav: NavHostController
+        val picker = FilePicker()
         rule.setContent {
             nav = rememberNavController()
-            RecetarioTheme(theme) { AppNavHost(c, navController = nav) }
+            CompositionLocalProvider(LocalActivityResultRegistryOwner provides picker) {
+                RecetarioTheme(theme) { AppNavHost(c, navController = nav) }
+            }
         }
         val name = theme.name.lowercase()
         rule.waitFor(hasText("Limonada con hierbabuena"))
@@ -125,7 +137,32 @@ class CapturasTest {
         save("categorias-nueva-$name")
 
         captureConverter(nav, name)
+        captureBackup(c, nav, name)
         captureCooking(c, nav, name)
+    }
+
+    /** Copias de seguridad, el panel de «Importar copia» y la confirmación roja de «Reemplazar todo». */
+    private fun captureBackup(c: AppContainer, nav: NavHostController, name: String) {
+        runBlocking { c.settingsRepository.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-10T18:05:00Z")) } }
+        rule.runOnIdle { nav.navigate(Backup) }
+        rule.waitFor(hasTestTag("backup-last-external"))
+        save("copias-$name")
+        rule.onNodeWithTag("backup-import").performClick()
+        rule.waitFor(hasTestTag("import-mode-panel"))
+        save("copias-importar-$name")
+        rule.onNodeWithTag("import-replace").performClick()
+        rule.waitFor(hasTestTag("replace-confirm-panel"))
+        save("copias-reemplazar-$name")
+        rule.onNodeWithTag("replace-cancel").performClick()
+    }
+
+    /** Selector de archivos del sistema falso: «elige» un zip al momento (no se llega a abrir). */
+    private class FilePicker : ActivityResultRegistryOwner {
+        override val activityResultRegistry = object : ActivityResultRegistry() {
+            override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {
+                dispatchResult(requestCode, Uri.parse("content://capturas/Recetario-2026-11-13.zip"))
+            }
+        }
     }
 
     /** Conversor (1 taza de harina) y la hoja de equivalencias del detalle al tocar «1½ tazas». */

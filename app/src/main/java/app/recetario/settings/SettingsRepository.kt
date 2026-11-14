@@ -76,6 +76,21 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[CUP_ML] = ml }
     }
 
+    /**
+     * Ajustes que trae una copia de seguridad al «Reemplazar todo» (tema y taza), en una sola escritura.
+     * Lo que la app no admite se queda como estaba: Nocturno como tema de día o una taza que no es de 240 o 250 ml.
+     */
+    suspend fun restoreFromBackup(theme: ThemeSettings, cupMl: Int) {
+        dataStore.edit {
+            it[AUTO] = theme.auto
+            it[CHOICE] = theme.choice.name
+            if (theme.dayTheme != ThemeChoice.NOCTURNO) it[DAY_THEME] = theme.dayTheme.name
+            it[NIGHT_START] = theme.nightStart.toSecondOfDay() / 60
+            it[NIGHT_END] = theme.nightEnd.toSecondOfDay() / 60
+            if (cupMl in CUP_SIZES) it[CUP_ML] = cupMl
+        }
+    }
+
     /** Si ya se pidió el permiso de notificaciones (se pide una sola vez, al iniciar el primer temporizador). */
     val notificationPermissionAsked: Flow<Boolean> =
         data.map { it[NOTIFICATIONS_ASKED] ?: false }.distinctUntilChanged()

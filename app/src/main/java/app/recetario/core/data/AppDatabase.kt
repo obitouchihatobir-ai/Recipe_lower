@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import app.recetario.backup.BackupDao
 import app.recetario.recipes.data.CategoryDao
 import app.recetario.recipes.data.CategoryEntity
 import app.recetario.recipes.data.IngredientEntity
@@ -40,6 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun tagDao(): TagDao
     abstract fun shoppingDao(): ShoppingDao
+    abstract fun backupDao(): BackupDao
 
     companion object {
         // Sin fallbackToDestructiveMigration: un cambio de esquema exige migración.

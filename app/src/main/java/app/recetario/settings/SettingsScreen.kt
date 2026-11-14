@@ -27,6 +27,7 @@ fun SettingsRoute(
     onAppearance: () -> Unit,
     onCategories: () -> Unit,
     onTags: () -> Unit,
+    onBackup: () -> Unit,
     onAbout: () -> Unit,
 ) {
     val repo = container.settingsRepository
@@ -41,11 +42,12 @@ fun SettingsRoute(
         onAppearance = onAppearance,
         onCategories = onCategories,
         onTags = onTags,
+        onBackup = onBackup,
         onAbout = onAbout,
     )
 }
 
-/** Ajustes de la etapa 1 (§6.3): apariencia, unidades, categorías, etiquetas y «Acerca de». */
+/** Ajustes de la etapa 1 (§6.3): apariencia, unidades, categorías, etiquetas, copias de seguridad y «Acerca de». */
 @Composable
 fun SettingsContent(
     appearanceSummary: String,
@@ -55,6 +57,7 @@ fun SettingsContent(
     onAppearance: () -> Unit,
     onCategories: () -> Unit,
     onTags: () -> Unit,
+    onBackup: () -> Unit,
     onAbout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -76,6 +79,7 @@ fun SettingsContent(
             }
             SettingsRow("Categorías", "Tus tipos de receta, con su emoji y su color", Modifier.testTag("settings-categories"), onClick = onCategories)
             SettingsRow("Etiquetas", "Renombra o borra las etiquetas de tus recetas", Modifier.testTag("settings-tags"), onClick = onTags)
+            SettingsRow("Copias de seguridad", "Guarda o recupera tus recetas y sus fotos", Modifier.testTag("settings-backup"), onClick = onBackup)
             SettingsRow("Acerca de", "Versión, créditos y licencias", Modifier.testTag("settings-about"), onClick = onAbout)
         }
     }

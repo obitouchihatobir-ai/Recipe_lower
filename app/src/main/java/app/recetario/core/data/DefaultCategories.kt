@@ -2,6 +2,7 @@ package app.recetario.core.data
 
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import app.recetario.recipes.model.BaseType
 
 /** Categorías de serie: IDs fijos, se pueden renombrar pero no borrar. */
 object DefaultCategories {
@@ -10,6 +11,13 @@ object DefaultCategories {
     const val DESSERT_ID = "cat-postres"
 
     val ids = setOf(FOOD_ID, DRINK_ID, DESSERT_ID)
+
+    /** La categoría de serie de cada tipo base; «Otro» y lo desconocido van a Comidas. */
+    fun idFor(baseType: BaseType?): String = when (baseType) {
+        BaseType.DRINK -> DRINK_ID
+        BaseType.DESSERT -> DESSERT_ID
+        BaseType.FOOD, BaseType.OTHER, null -> FOOD_ID
+    }
 
     private data class Seed(val id: String, val name: String, val emoji: String, val color: String, val baseType: String)
 
