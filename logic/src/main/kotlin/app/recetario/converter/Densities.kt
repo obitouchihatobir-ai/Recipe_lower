@@ -19,6 +19,9 @@ object Densities {
         "sal" to 1.2,
     )
 
+    /** Palabras clave de la tabla (sin acentos), para sugerir ingredientes en el conversor. */
+    val keywords: List<String> = table.keys.sorted()
+
     /** La palabra clave más larga contenida (como palabra completa) en el nombre gana. */
     fun gramsPerMl(ingredient: String): Double? {
         val name = " ${normalize(ingredient)} "
