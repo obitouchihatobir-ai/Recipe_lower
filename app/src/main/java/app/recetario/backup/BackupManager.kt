@@ -86,6 +86,8 @@ class BackupManager(
         return try {
             val dir = localBackupsDir
             if (!dir.isDirectory && !dir.mkdirs()) return false
+            // Temporales de una copia previa que Android cortó a medias (nunca son copias terminadas).
+            dir.listFiles { f -> f.name.startsWith(SAFETY_PREFIX) && f.name.endsWith(".zip.tmp") }?.forEach { it.delete() }
             val target = freeFile(dir, safetyCopyFileName(LocalDateTime.now(clock)))
             val partial = File(dir, "${target.name}.tmp").also { tmp = it }
             FileOutputStream(partial).use { out ->
@@ -123,5 +125,6 @@ class BackupManager(
 
     private companion object {
         const val TAG = "BackupManager"
+        const val SAFETY_PREFIX = "antes-de-importar-"
     }
 }

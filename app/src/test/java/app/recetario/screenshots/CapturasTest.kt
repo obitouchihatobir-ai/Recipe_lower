@@ -6,6 +6,7 @@ import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.app.ActivityOptionsCompat
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -156,11 +157,16 @@ class CapturasTest {
         rule.onNodeWithTag("replace-cancel").performClick()
     }
 
-    /** Selector de archivos del sistema falso: «elige» un zip al momento (no se llega a abrir). */
+    /**
+     * Selector de archivos del sistema falso: «elige» un zip al momento (no se llega a abrir). Lo demás (el permiso
+     * de notificaciones del modo cocina) se queda sin respuesta, como con el registro real en Robolectric.
+     */
     private class FilePicker : ActivityResultRegistryOwner {
         override val activityResultRegistry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {
-                dispatchResult(requestCode, Uri.parse("content://capturas/Recetario-2026-11-13.zip"))
+                if (contract is ActivityResultContracts.OpenDocument || contract is ActivityResultContracts.CreateDocument) {
+                    dispatchResult(requestCode, Uri.parse("content://capturas/Recetario-2026-11-13.zip"))
+                }
             }
         }
     }

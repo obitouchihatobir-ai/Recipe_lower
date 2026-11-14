@@ -57,7 +57,7 @@ class BackupRoundTripTest {
     )
 
     @Test
-    fun export_wipe_import_replace_restoresIdenticalData() = runBlocking {
+    fun export_wipe_import_replace_restoresIdenticalData() = runBlocking<Unit> {
         val a = env()
         a.recipes.saveCategory(Category("cat-salsas", "Salsas", "🥫", "#4A6FA5", BaseType.OTHER, 3, false))
         // Las de serie van con su nombre actual.
@@ -95,7 +95,7 @@ class BackupRoundTripTest {
     }
 
     @Test
-    fun export_zipHasTheJsonAndTheImages() = runBlocking {
+    fun export_zipHasTheJsonAndTheImages() = runBlocking<Unit> {
         val a = env()
         a.writePhoto("portada.jpg", fakePhoto(1))
         a.saveAt(fullRecipe("r1", DefaultCategories.FOOD_ID, "portada.jpg", emptyList(), emptyList()), Instant.parse("2026-11-01T10:00:00Z"))
@@ -113,7 +113,7 @@ class BackupRoundTripTest {
     }
 
     @Test
-    fun export_skipsMissingPhotoFiles() = runBlocking {
+    fun export_skipsMissingPhotoFiles() = runBlocking<Unit> {
         val a = env()
         a.writePhoto("esta.jpg", fakePhoto(1))
         a.saveAt(fullRecipe("r1", DefaultCategories.FOOD_ID, "esta.jpg", listOf("falta.jpg"), emptyList()), Instant.parse("2026-11-01T10:00:00Z"))
@@ -132,7 +132,7 @@ class BackupRoundTripTest {
     }
 
     @Test
-    fun export_doesNotIncludeBackupStatusOrNotificationFlag() = runBlocking {
+    fun export_doesNotIncludeBackupStatusOrNotificationFlag() = runBlocking<Unit> {
         val a = env()
         a.settings.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-01T10:00:00Z"), driveUri = "content://drive/x") }
         a.settings.setNotificationPermissionAsked()

@@ -78,7 +78,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun merge_newerUpdatedAtWins() = runBlocking {
+    fun merge_newerUpdatedAtWins() = runBlocking<Unit> {
         local.saveAt(recipe("r1", "Local", t1), t1)
         local.saveAt(recipe("r2", "Local nueva", t3), t3)
         val incomingR1 = recipe("r1", "Copia", t2)
@@ -97,7 +97,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun merge_sameUpdatedAt_keepsLocal() = runBlocking {
+    fun merge_sameUpdatedAt_keepsLocal() = runBlocking<Unit> {
         local.saveAt(recipe("r1", "Local", t2), t2)
 
         val result = local.import(backupZip(backupOf(recipe("r1", "Copia", t2))), ImportMode.MERGE)
@@ -107,7 +107,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun merge_neverDeletesLocalOnly() = runBlocking {
+    fun merge_neverDeletesLocalOnly() = runBlocking<Unit> {
         seedLocal()
         local.saveAt(recipe("en-cenas", "Crema", t1, categoryId = "cat-local"), t1)
         val before = local.snapshot()
@@ -137,7 +137,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun merge_doesNotChangeLocalSettings() = runBlocking {
+    fun merge_doesNotChangeLocalSettings() = runBlocking<Unit> {
         seedLocal()
         val theme = local.settings.themeSettings.first()
         val backup = backupOf(recipe("copia", "Paella", t2)).copy(
@@ -151,7 +151,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun merge_copiesOnlyMissingImagesThatSomeRecipeUses() = runBlocking {
+    fun merge_copiesOnlyMissingImagesThatSomeRecipeUses() = runBlocking<Unit> {
         local.writePhoto("comun.jpg", fakePhoto(1))
         local.saveAt(recipe("local", "Tortilla", t1, cover = "comun.jpg"), t1)
         val backup = backupOf(recipe("copia", "Paella", t2, cover = "nueva.jpg"), recipe("otra", "Gazpacho", t2, cover = "comun.jpg"))
@@ -168,7 +168,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun merge_recipeWithUnknownCategory_goesToDefaultOfSameBaseType() = runBlocking {
+    fun merge_recipeWithUnknownCategory_goesToDefaultOfSameBaseType() = runBlocking<Unit> {
         val backup = backupOf(
             recipe("bebida", "Mojito", t2, categoryId = "cat-perdida-1"),
             recipe("postre", "Flan", t2, categoryId = "cat-perdida-2"),
@@ -189,7 +189,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun replaceAll_recipeWithUnknownCategory_goesToDefaultOfSameBaseType_andDefaultsAlwaysExist() = runBlocking {
+    fun replaceAll_recipeWithUnknownCategory_goesToDefaultOfSameBaseType_andDefaultsAlwaysExist() = runBlocking<Unit> {
         val backup = backupOf(recipe("postre", "Flan", t2, categoryId = "cat-perdida"), categories = emptyList())
         val withType = backup.copy(recipes = backup.recipes.map { it.copy(categoryBaseType = BaseType.DESSERT) })
 
@@ -202,7 +202,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun corruptZip_returnsError_andDataUnchanged() = runBlocking {
+    fun corruptZip_returnsError_andDataUnchanged() = runBlocking<Unit> {
         seedLocal()
         val valid = validZip
         val badDate = backupOf(recipe("copia", "Paella", t2)).let { it.copy(recipes = it.recipes.map { r -> r.copy(updatedAt = "ayer") }) }
@@ -221,7 +221,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun newerSchema_returnsError_andDataUnchanged() = runBlocking {
+    fun newerSchema_returnsError_andDataUnchanged() = runBlocking<Unit> {
         seedLocal()
         val newer = """{"schemaVersion":2,"appVersion":"9.0.0","recetas":[{"id":"x"}]}"""
         assertRejectedWithoutChanges(
@@ -231,7 +231,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun zipSlipEntry_isRejected_andDataUnchanged() = runBlocking {
+    fun zipSlipEntry_isRejected_andDataUnchanged() = runBlocking<Unit> {
         seedLocal()
         val json = "backup.json" to encodeBackup(backupOf(recipe("copia", "Paella", t2))).toByteArray()
         for (evil in listOf("../evil.jpg", "/evil.jpg", "images/../../evil.jpg", "images/../evil.jpg", "images/sub/evil.jpg", "images\\evil.jpg", "fotos/evil.jpg")) {
@@ -242,7 +242,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun replaceAll_writesSafetyBackupFirst() = runBlocking {
+    fun replaceAll_writesSafetyBackupFirst() = runBlocking<Unit> {
         seedLocal()
         val before = local.snapshot()
 
@@ -265,7 +265,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun replaceAll_safetyCopyFailure_abortsWithoutChanges() = runBlocking {
+    fun replaceAll_safetyCopyFailure_abortsWithoutChanges() = runBlocking<Unit> {
         seedLocal()
         // «backups» es un archivo: no se puede crear la carpeta de la copia previa.
         local.backupsDir.writeText("no soy una carpeta")
@@ -280,7 +280,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun replaceAll_deletesOnlyPhotosThatTheOldRecipesUsed() = runBlocking {
+    fun replaceAll_deletesOnlyPhotosThatTheOldRecipesUsed() = runBlocking<Unit> {
         seedLocal()
         // Foto de un borrador del editor: no es de ninguna receta guardada y no se toca.
         local.writePhoto("borrador.jpg", fakePhoto(3))
@@ -291,7 +291,7 @@ class BackupImporterTest {
     }
 
     @Test
-    fun replaceAll_appliesSettingsFromTheBackup() = runBlocking {
+    fun replaceAll_appliesSettingsFromTheBackup() = runBlocking<Unit> {
         seedLocal()
         val backup = backupOf(recipe("copia", "Paella", t2)).copy(
             settings = BackupSettings(BackupThemeSettings(true, ThemeChoice.CALIDO, ThemeChoice.FRESCO, "22:00", "07:30"), 240),
@@ -308,7 +308,22 @@ class BackupImporterTest {
     }
 
     @Test
-    fun importingTwice_isStable() = runBlocking {
+    fun import_removesLeftoversOfAnInterruptedOne_butKeepsFinishedCopies() = runBlocking<Unit> {
+        seedLocal()
+        File(local.cacheDir, "importar-viejo").mkdirs()
+        File(local.cacheDir, "importar-viejo/a.jpg").writeBytes(fakePhoto(1))
+        local.backupsDir.mkdirs()
+        File(local.backupsDir, "antes-de-importar-2026-11-01-1000.zip.tmp").writeText("a medias")
+        File(local.backupsDir, "antes-de-importar-2026-11-01-0900.zip").writeText("terminada")
+
+        assertThat(local.import(validZip, ImportMode.REPLACE_ALL)).isEqualTo(ImportResult.Ok(recipes = 1, images = 1))
+
+        assertThat(local.cacheFiles()).isEmpty()
+        assertThat(local.backups()).containsExactly("antes-de-importar-2026-11-01-0900.zip", "antes-de-importar-2026-11-13-2140.zip")
+    }
+
+    @Test
+    fun importingTwice_isStable() = runBlocking<Unit> {
         seedLocal()
         val zip = local.exportBytes()
         val before = local.snapshot()

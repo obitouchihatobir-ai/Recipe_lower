@@ -52,7 +52,9 @@ internal class BackupImporter(
     private class Archive(val backup: BackupFile, val images: Map<String, File>)
 
     suspend fun import(input: InputStream, mode: ImportMode): ImportResult {
-        val staging = File(cacheDir, "importar-${UUID.randomUUID()}")
+        // Restos de una importación que Android cortó a medias (las importaciones van de una en una).
+        cacheDir.listFiles { f -> f.name.startsWith(STAGING_PREFIX) }?.forEach { it.deleteRecursively() }
+        val staging = File(cacheDir, "$STAGING_PREFIX${UUID.randomUUID()}")
         return try {
             val archive = readArchive(input, staging)
             val data = try {
@@ -266,6 +268,7 @@ internal class BackupImporter(
     private companion object {
         const val TAG = "BackupImporter"
         const val BUFFER = 64 * 1024
+        const val STAGING_PREFIX = "importar-"
 
         /** Un `backup.json` mayor no es nuestro (500 recetas ocupan unos pocos MB). */
         const val MAX_JSON_BYTES = 64 * 1024 * 1024
