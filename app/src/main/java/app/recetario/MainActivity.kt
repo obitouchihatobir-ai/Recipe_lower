@@ -1,5 +1,6 @@
 package app.recetario
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import app.recetario.cooking.TimerNotifications
 import app.recetario.core.ui.theme.LocalThemeRevealOrigin
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
@@ -27,6 +29,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as RecetarioApp).container
+        // Abierta desde un aviso «⏱ ¡Tiempo!»: ese temporizador se apaga (solo la primera vez, no al girar).
+        if (savedInstanceState == null) TimerNotifications.dismissFromIntent(intent, container.timerManager)
         setContent {
             // Primera vez: Automático con Cálido de día (§6.1). Hasta leer los ajustes no se pinta nada.
             val theme = rememberResolvedTheme(container) ?: return@setContent
@@ -52,5 +56,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        TimerNotifications.dismissFromIntent(intent, (application as RecetarioApp).container.timerManager)
     }
 }

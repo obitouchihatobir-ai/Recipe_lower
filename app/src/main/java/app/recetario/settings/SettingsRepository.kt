@@ -76,6 +76,14 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[CUP_ML] = ml }
     }
 
+    /** Si ya se pidió el permiso de notificaciones (se pide una sola vez, al iniciar el primer temporizador). */
+    val notificationPermissionAsked: Flow<Boolean> =
+        data.map { it[NOTIFICATIONS_ASKED] ?: false }.distinctUntilChanged()
+
+    suspend fun setNotificationPermissionAsked() {
+        dataStore.edit { it[NOTIFICATIONS_ASKED] = true }
+    }
+
     val backupStatus: Flow<BackupStatus> = data.map { it.toBackupStatus() }.distinctUntilChanged()
 
     suspend fun updateBackupStatus(transform: (BackupStatus) -> BackupStatus) {
@@ -116,6 +124,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         val LAST_EXTERNAL = longPreferencesKey("backup_last_external")
         val DRIVE_URI = stringPreferencesKey("backup_drive_uri")
         val LAST_ERROR = stringPreferencesKey("backup_last_error")
+        val NOTIFICATIONS_ASKED = booleanPreferencesKey("notifications_permission_asked")
     }
 }
 

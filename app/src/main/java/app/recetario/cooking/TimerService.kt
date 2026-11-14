@@ -4,8 +4,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.media.Ringtone
+import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -33,7 +34,7 @@ import kotlinx.coroutines.launch
  *   con la pantalla apagada la CPU se duerme y el aviso llegaría tarde.
  * - Cuando uno termina publica «⏱ ¡Tiempo! — …» (alarma y vibración del canal). Si las notificaciones no pueden
  *   sonar (permiso denegado o bloqueadas), hace sonar la alarma del sistema él mismo hasta que se apaga en la app
- *   o pasa un minuto.
+ *   o pasan 10 minutos (lo mismo que dura el aviso de la notificación, `TimerNotifications.ALARM_MS`).
  *
  * Observa `TimerManager.timers`: los avisos salen de la transición a terminado en la misma pasada que decide si
  * el servicio sigue, así nunca se para antes de avisar.
@@ -120,7 +121,7 @@ class TimerService : Service() {
                 ringer.start()
                 ringTimeout?.cancel()
                 ringTimeout = scope.launch {
-                    delay(RING_MS)
+                    delay(TimerNotifications.ALARM_MS)
                     ringingFor.clear()
                     ringer.stop()
                     refresh.value++
@@ -150,7 +151,7 @@ class TimerService : Service() {
         val longest = timers.filter { it.isRunning }.maxOfOrNull { it.remainingMs(now) }
         val ms = when {
             longest != null -> longest + 60_000
-            ringingFor.isNotEmpty() -> RING_MS + 5_000
+            ringingFor.isNotEmpty() -> TimerNotifications.ALARM_MS + 5_000
             else -> null
         }
         if (ms == null) {
@@ -169,8 +170,6 @@ class TimerService : Service() {
     }
 
     companion object {
-        /** Lo que suena la alarma del propio servicio si nadie la apaga. */
-        private const val RING_MS = 60_000L
         private const val MAX_WAKE_MS = 12 * 60 * 60 * 1000L
 
         /** Arranca (o despierta) el servicio. Llamar desde la app en primer plano, al tocar un temporizador. */
@@ -184,20 +183,17 @@ class TimerService : Service() {
     }
 }
 
-/** La alarma del sistema en bucle, con vibración, cuando el aviso de fin no puede sonar por sí mismo. */
+/**
+ * La alarma del sistema en bucle, con vibración, cuando el aviso de fin no puede sonar por sí mismo. Usa un
+ * MediaPlayer en bucle con uso de alarma: funciona en todas las versiones (Ringtone.setLooping es de Android 9).
+ */
 internal class AlarmRinger(private val context: Context) {
-    private var ringtone: Ringtone? = null
+    private var player: MediaPlayer? = null
     private var vibrating = false
 
     fun start() {
-        if (ringtone != null || vibrating) return
-        ringtone = runCatching {
-            RingtoneManager.getRingtone(context, TimerNotifications.alarmSound())?.apply {
-                audioAttributes = TimerNotifications.alarmAttributes
-                if (Build.VERSION.SDK_INT >= 28) isLooping = true
-                play()
-            }
-        }.getOrNull()
+        if (player != null || vibrating) return
+        player = loop(TimerNotifications.alarmSound()) ?: loop(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
         val vibrator = vibrator()
         if (vibrator?.hasVibrator() == true) {
             runCatching {
@@ -208,9 +204,29 @@ internal class AlarmRinger(private val context: Context) {
         }
     }
 
+    /** Prepara y arranca [sound] en bucle; null si no se puede (sin sonido de alarma elegido, archivo ilegible…). */
+    private fun loop(sound: Uri): MediaPlayer? {
+        val mediaPlayer = MediaPlayer()
+        return try {
+            mediaPlayer.setAudioAttributes(TimerNotifications.alarmAttributes)
+            mediaPlayer.setDataSource(context, sound)
+            mediaPlayer.isLooping = true
+            mediaPlayer.setOnPreparedListener { it.start() }
+            mediaPlayer.prepareAsync()
+            mediaPlayer
+        } catch (_: Exception) {
+            // IOException, IllegalStateException, IllegalArgumentException o SecurityException: sin este sonido.
+            mediaPlayer.release()
+            null
+        }
+    }
+
     fun stop() {
-        runCatching { ringtone?.stop() }
-        ringtone = null
+        player?.let {
+            runCatching { it.stop() } // en preparación no se puede parar: basta con liberarlo
+            it.release()
+        }
+        player = null
         if (vibrating) runCatching { vibrator()?.cancel() }
         vibrating = false
     }

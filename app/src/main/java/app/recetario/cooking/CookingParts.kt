@@ -14,6 +14,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -88,11 +91,14 @@ internal enum class StepStatus { DONE, CURRENT, PENDING }
 
 private val EaseOut = CubicBezierEasing(0.2f, 0.9f, 0.2f, 1f)
 
-/** ✕, el título de la receta con «Paso 2 de 4» (se anuncia al cambiar) y ☀ (la pantalla no se apaga). */
+/**
+ * Cabecera fija (fuera de la lista): ✕, el título de la receta con «Paso 2 de 4» y ☀ (la pantalla no se apaga).
+ * «Paso 2 de 4» es una región viva: como siempre está compuesta, TalkBack lo anuncia en cada cambio.
+ */
 @Composable
-internal fun CookingTopBar(title: String, progress: String, onClose: () -> Unit) {
+internal fun CookingTopBar(title: String, progress: String, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val c = LocalRecetarioColors.current
-    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         RoundButton("Cerrar modo cocina", onClose) {
             Icon(AppIcons.Close, contentDescription = null, modifier = Modifier.size(18.dp), tint = c.ink)
         }
@@ -165,10 +171,11 @@ internal fun CookingIngredientRow(
         ) {
             AnimatedCheck(checked)
             Spacer(Modifier.width(10.dp))
+            // Tachado y en gris del tema, sin transparencia: el contraste sigue en 4,5:1 o más.
             Text(
                 ingredient.name,
-                modifier = Modifier.weight(1f).graphicsLayer { alpha = if (checked) 0.5f else 1f },
-                color = c.ink,
+                modifier = Modifier.weight(1f),
+                color = if (checked) c.muted else c.ink,
                 style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 21.sp),
                 textDecoration = if (checked) TextDecoration.LineThrough else null,
             )
@@ -194,8 +201,9 @@ internal fun StepsTitle(count: Int) {
 
 /**
  * Un paso de la lista: número (✓ si está hecho), texto y, si es el actual, expandido con letra grande, fotos,
- * ingredientes, temporizador y «Hecho ✓». Los demás se pueden tocar para volver a ellos; los hechos se atenúan
- * y, si tienen un temporizador, lo siguen mostrando.
+ * ingredientes, temporizador y «Hecho ✓». Los demás se pueden tocar para volver a ellos y, si tienen un
+ * temporizador, lo siguen mostrando. Nada se atenúa con transparencia (contraste de 4,5:1): los hechos se
+ * distinguen por el círculo relleno con ✓. [focus] permite llevar el foco (TalkBack) a la tarjeta del actual.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -214,12 +222,11 @@ internal fun CookingStep(
     onToggleTimer: () -> Unit,
     onAddMinute: () -> Unit,
     onDismissTimer: () -> Unit,
+    focus: FocusRequester? = null,
 ) {
     val c = LocalRecetarioColors.current
-    val reduced = LocalReducedMotion.current
     val radius = LocalRecetarioShapes.current.radius
     val current = status == StepStatus.CURRENT
-    val dim by animateFloatAsState(if (status == StepStatus.DONE) 0.55f else 1f, tween(if (reduced) 0 else 300), label = "stepDim")
     val seconds = step.timerSeconds?.takeIf { it > 0 }
     Row(
         Modifier
@@ -240,8 +247,7 @@ internal fun CookingStep(
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // Los hechos se atenúan (número y texto; su temporizador, si lo tienen, sigue bien visible).
-        Box(Modifier.width(30.dp).graphicsLayer { alpha = dim }) { StepNumber(number, status) }
+        Box(Modifier.width(30.dp)) { StepNumber(number, status) }
         if (current) {
             val shape = RoundedCornerShape(radius)
             Column(
@@ -251,6 +257,9 @@ internal fun CookingStep(
                     .background(c.surface)
                     .border(1.dp, c.line, shape)
                     .padding(12.dp)
+                    .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
+                    .focusable()
+                    .semantics(mergeDescendants = true) {}
                     .testTag("current-step"),
             ) {
                 Text(
@@ -286,7 +295,6 @@ internal fun CookingStep(
                     step.text,
                     color = c.muted,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
-                    modifier = Modifier.graphicsLayer { alpha = dim },
                 )
                 if (seconds != null && timer != null) {
                     StepTimerButton(number, seconds, timer, now, onStartTimer, onToggleTimer, onDismissTimer, Modifier.padding(top = 8.dp))
@@ -296,7 +304,7 @@ internal fun CookingStep(
     }
 }
 
-/** Círculo de 28 dp: número (gris), con borde de acento si es el actual, o ✓ relleno si está hecho. */
+/** Círculo de 28 dp: número (gris), con borde de acento si es el actual, o ✓ sobre relleno de acento (opaco) si está hecho. */
 @Composable
 private fun StepNumber(number: Int, status: StepStatus) {
     val c = LocalRecetarioColors.current
@@ -506,12 +514,18 @@ private fun DoneButton(stepNumber: Int, onClick: () -> Unit, modifier: Modifier 
     }
 }
 
-/** 🎉 «¡Listo!» con «Volver a la receta». */
+/** 🎉 «¡Listo!» con «Volver a la receta». [focus] lleva aquí el foco (TalkBack) al terminar. */
 @Composable
-internal fun FinishCard(onBack: () -> Unit) {
+internal fun FinishCard(onBack: () -> Unit, focus: FocusRequester? = null) {
     val c = LocalRecetarioColors.current
     Column(
-        Modifier.fillMaxWidth().fadeUpOnAppear().padding(horizontal = 8.dp, vertical = 24.dp),
+        Modifier
+            .fillMaxWidth()
+            .fadeUpOnAppear()
+            .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
+            .focusable()
+            .semantics(mergeDescendants = true) {}
+            .padding(horizontal = 8.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("🎉", fontSize = 46.sp, modifier = Modifier.clearAndSetSemantics {})

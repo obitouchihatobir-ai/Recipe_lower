@@ -64,6 +64,13 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun notificationPermissionAsked_startsFalse_andStaysTrueOnceSet() = runTest {
+        assertEquals(false, repo.notificationPermissionAsked.first())
+        repo.setNotificationPermissionAsked()
+        assertEquals(true, repo.notificationPermissionAsked.first())
+    }
+
+    @Test
     fun setTheme_persists() = runTest {
         repo.setTheme(ThemeChoice.NOCTURNO)
         repo.setAuto(false)

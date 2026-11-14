@@ -33,6 +33,12 @@ object TimerNotifications {
     /** Id de los avisos de fin; cada temporizador lo publica con su propio id como etiqueta. */
     const val FINISHED_ID = 1002
 
+    /** Lo que suena como mucho un aviso de fin (el de la notificación y la alarma del propio servicio). */
+    const val ALARM_MS = 10 * 60_000L
+
+    /** Extra con el id del temporizador cuyo aviso se tocó (lo lee MainActivity) o se descartó. */
+    const val EXTRA_TIMER_ID = "app.recetario.extra.TIMER_ID"
+
     /** Medio segundo de vibración, una pausa y otra vez. */
     val VIBRATION = longArrayOf(0, 500, 400, 500, 400, 800)
 
@@ -118,7 +124,10 @@ object TimerNotifications {
             .build()
     }
 
-    /** «⏱ ¡Tiempo! — Paso 2: Sofríe la cebolla…», con alarma y vibración, que suena hasta que se atiende. */
+    /**
+     * «⏱ ¡Tiempo! — Paso 2: Sofríe la cebolla…», con alarma y vibración, que suena hasta que se atiende o pasan
+     * [ALARM_MS]. Tocarlo abre la app y descartarlo apaga ese temporizador (deja de mostrar «¡Tiempo!»).
+     */
     fun finished(context: Context, timer: CookingTimer): Notification =
         NotificationCompat.Builder(context, CHANNEL_DONE)
             .setSmallIcon(R.drawable.ic_stat_timer)
@@ -127,7 +136,9 @@ object TimerNotifications {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             // El sonido y la vibración los pone el canal (minSdk 26).
             .setAutoCancel(true)
-            .setContentIntent(openApp(context))
+            .setTimeoutAfter(ALARM_MS)
+            .setContentIntent(openApp(context, dismissTimerId = timer.id))
+            .setDeleteIntent(dismissTimer(context, timer.id))
             .build()
             .apply { flags = flags or Notification.FLAG_INSISTENT }
 
@@ -146,12 +157,42 @@ object TimerNotifications {
         NotificationManagerCompat.from(context).cancel(timerId, FINISHED_ID)
     }
 
-    /** Vuelve a la app tal como estaba (normalmente, al modo cocina). */
-    private fun openApp(context: Context): PendingIntent {
+    /**
+     * Vuelve a la app tal como estaba (normalmente, al modo cocina). Con [dismissTimerId], MainActivity apaga ese
+     * temporizador; cada temporizador tiene su propio PendingIntent (código de petición distinto).
+     */
+    private fun openApp(context: Context, dismissTimerId: String? = null): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .setAction(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LAUNCHER)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        if (dismissTimerId != null) intent.putExtra(EXTRA_TIMER_ID, dismissTimerId)
+        return PendingIntent.getActivity(
+            context,
+            dismissTimerId?.let(::requestCodeFor) ?: 0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
+    /** Al descartar el aviso de fin, [TimerDismissReceiver] apaga ese temporizador. */
+    private fun dismissTimer(context: Context, timerId: String): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        requestCodeFor(timerId),
+        Intent(context, TimerDismissReceiver::class.java).putExtra(EXTRA_TIMER_ID, timerId),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /** Distinto de 0 (el de abrir la app sin más) y estable para cada temporizador. */
+    private fun requestCodeFor(timerId: String): Int = timerId.hashCode().let { if (it == 0) 1 else it }
+
+    /**
+     * Si [intent] viene de tocar un aviso de fin, apaga ese temporizador y quita el extra (para no repetirlo).
+     * Lo llama MainActivity al abrirse desde el aviso.
+     */
+    fun dismissFromIntent(intent: Intent?, manager: TimerManager) {
+        val id = intent?.getStringExtra(EXTRA_TIMER_ID) ?: return
+        intent.removeExtra(EXTRA_TIMER_ID)
+        manager.cancel(id)
     }
 }

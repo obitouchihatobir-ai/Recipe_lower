@@ -36,6 +36,11 @@
                 android:value="cooking_timer" />
         </service>
 
+        <!-- Descartar el aviso «⏱ ¡Tiempo!» apaga ese temporizador. -->
+        <receiver
+            android:name=".cooking.TimerDismissReceiver"
+            android:exported="false" />
+
         <!-- La cámara guarda la foto en cacheDir/camera/ (file_paths.xml) a través de este proveedor. -->
         <provider
             android:name="androidx.core.content.FileProvider"
