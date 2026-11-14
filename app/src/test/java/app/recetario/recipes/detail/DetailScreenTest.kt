@@ -212,6 +212,8 @@ class DetailScreenTest {
         save()
         launch()
         rule.waitFor(hasText("Calabaza"))
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("🛒 Lo que necesito → a la compra"))
+        rule.waitForIdle()
         rule.mainClock.autoAdvance = false
         val message = hasText("✓ 8 ingredientes añadidos a tu lista de compra")
         fun toastShown() = rule.onAllNodes(message).fetchSemanticsNodes().isNotEmpty()
@@ -226,7 +228,6 @@ class DetailScreenTest {
         fun calabazaGrams() = runBlocking { container.shoppingRepository.observe().first() }
             .values.flatten().firstOrNull { it.name == "Calabaza" }?.quantity
 
-        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("🛒 Lo que necesito → a la compra"))
         rule.onNodeWithText("🛒 Lo que necesito → a la compra").performClick()
         pump(::toastShown)
         rule.mainClock.advanceTimeBy(2_000)
