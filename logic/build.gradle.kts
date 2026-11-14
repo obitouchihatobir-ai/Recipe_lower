@@ -22,6 +22,8 @@ kotlin {
 dependencies {
     // StateFlow y SharedFlow forman parte de la API de los temporizadores (cooking/).
     api(libs.kotlinx.coroutines.core)
+    // Formato de las copias de seguridad (backup/BackupModel.kt): sus clases @Serializable son API pública.
+    api(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)
