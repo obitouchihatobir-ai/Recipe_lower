@@ -16,7 +16,6 @@ import app.recetario.recipes.quantity.formatQuantity
 import app.recetario.recipes.quantity.scaleQuantity
 import app.recetario.shopping.ShoppingRepository
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -25,7 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 enum class DetailEvent { Deleted, DeleteFailed }
 
@@ -104,13 +102,12 @@ class DetailViewModel(
     val events: Flow<DetailEvent> = _events.receiveAsFlow()
 
     /**
-     * Borra la receta. Corre en el ámbito del ViewModel y no se cancela aunque la pantalla se cierre tras
-     * confirmar; un fallo se avisa con [DetailEvent.DeleteFailed] en vez de cerrar la app.
+     * Borra la receta. Corre en el ámbito del ViewModel (no en el de la pantalla); un fallo se avisa con [DetailEvent.DeleteFailed] en vez de cerrar la app.
      */
     fun delete() {
         viewModelScope.launch {
             val event = try {
-                withContext(NonCancellable) { repo.delete(id) }
+                repo.delete(id)
                 DetailEvent.Deleted
             } catch (e: CancellationException) {
                 throw e

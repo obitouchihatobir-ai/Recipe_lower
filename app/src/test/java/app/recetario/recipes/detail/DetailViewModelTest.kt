@@ -52,6 +52,10 @@ class DetailViewModelTest {
     private fun DetailViewModel.loaded(): DetailUiState =
         runBlocking { withTimeout(10_000) { state.first { !it.loading } } }
 
+    /** Espera a que el estado cumpla [predicate] (la combinación de flujos puede tardar un instante en otro hilo). */
+    private fun DetailViewModel.await(predicate: (DetailUiState) -> Boolean): DetailUiState =
+        runBlocking { withTimeout(10_000) { state.first(predicate) } }
+
     @Test
     fun stateStartsLoadingWithoutRecipe() {
         save()
@@ -76,8 +80,7 @@ class DetailViewModelTest {
         val vm = vm()
         vm.loaded()
         vm.setServings(6)
-        assertThat(vm.state.value.servings).isEqualTo(6)
-        assertThat(vm.state.value.quantities["i1"]).isEqualTo("1,2 kg")
+        assertThat(vm.await { it.servings == 6 }.quantities["i1"]).isEqualTo("1,2 kg")
     }
 
     @Test
@@ -86,9 +89,9 @@ class DetailViewModelTest {
         val vm = vm()
         vm.loaded()
         vm.setServings(0)
-        assertThat(vm.state.value.servings).isEqualTo(1)
+        vm.await { it.servings == 1 }
         vm.setServings(150)
-        assertThat(vm.state.value.servings).isEqualTo(99)
+        vm.await { it.servings == 99 }
     }
 
     @Test
@@ -98,10 +101,10 @@ class DetailViewModelTest {
         val vm = vm(handle)
         vm.loaded()
         vm.toggleIngredient("i3")
-        assertThat(vm.state.value.checkedIngredientIds).containsExactly("i3")
+        assertThat(vm.await { "i3" in it.checkedIngredientIds }.checkedIngredientIds).containsExactly("i3")
         assertThat(vm(handle).loaded().checkedIngredientIds).containsExactly("i3")
         vm.toggleIngredient("i3")
-        assertThat(vm.state.value.checkedIngredientIds).isEmpty()
+        vm.await { it.checkedIngredientIds.isEmpty() }
     }
 
     @Test
@@ -162,9 +165,9 @@ class DetailViewModelTest {
         val vm = vm()
         assertThat(vm.loaded().servings).isEqualTo(30)
         vm.setServings(vm.state.value.servings + 1)
-        assertThat(vm.state.value.servings).isEqualTo(31)
+        vm.await { it.servings == 31 }
         vm.setServings(vm.state.value.servings - 2)
-        assertThat(vm.state.value.servings).isEqualTo(29)
+        vm.await { it.servings == 29 }
     }
 
     @Test
@@ -173,6 +176,7 @@ class DetailViewModelTest {
         val vm = vm()
         vm.loaded()
         vm.setServings(6)
+        vm.await { it.servings == 6 }
         assertThat(vm.shareText()).contains("• Calabaza — 1,2 kg")
     }
 }
