@@ -196,24 +196,27 @@ private fun BoxScope.EditCategoryPanel(
             colors = appTextFieldColors(),
         )
         FieldLabel("Color")
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(categoryColors, key = { it.second }) { (colorName, hex) ->
-                val selected = hex == colorHex
-                Box(
-                    Modifier
-                        .size(48.dp)
-                        .selectable(selected = selected, role = Role.RadioButton, onClick = { colorHex = hex })
-                        .semantics { contentDescription = "Color $colorName" }
-                        .testTag("category-color-${hex.removePrefix("#")}"),
-                    contentAlignment = Alignment.Center,
-                ) {
+        // Ocho colores en dos filas de cuatro, para que se vean todos sin desplazar.
+        for (row in categoryColors.chunked(4)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for ((colorName, hex) in row) {
+                    val selected = hex == colorHex
                     Box(
                         Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(parseColor(hex))
-                            .border(if (selected) 3.dp else 1.dp, if (selected) c.ink else c.line, CircleShape),
-                    )
+                            .size(48.dp)
+                            .selectable(selected = selected, role = Role.RadioButton, onClick = { colorHex = hex })
+                            .semantics { contentDescription = "Color $colorName" }
+                            .testTag("category-color-${hex.removePrefix("#")}"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(parseColor(hex))
+                                .border(if (selected) 3.dp else 1.dp, if (selected) c.ink else c.line, CircleShape),
+                        )
+                    }
                 }
             }
         }
