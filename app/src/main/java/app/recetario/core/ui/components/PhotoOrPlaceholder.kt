@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.recipes.data.PhotoStore
@@ -22,12 +23,13 @@ fun PhotoOrPlaceholder(
     emoji: String,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    emojiSize: TextUnit = 40.sp,
 ) {
     val colors = LocalRecetarioColors.current
     val file = remember(fileName) { fileName?.let { photoStore.file(it) }?.takeIf { it.exists() } }
     val placeholder: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize().background(colors.heroBrush), contentAlignment = Alignment.Center) {
-            Text(emoji, fontSize = 40.sp)
+            Text(emoji, fontSize = emojiSize)
         }
     }
     Box(modifier) {

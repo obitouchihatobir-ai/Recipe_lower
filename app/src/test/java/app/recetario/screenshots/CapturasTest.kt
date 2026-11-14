@@ -18,6 +18,7 @@ import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.AppNavHost
+import app.recetario.navigation.RecipeDetail
 import app.recetario.navigation.RecipeEditor
 import app.recetario.recipes.model.FlavorProfile
 import app.recetario.recipes.model.Moment
@@ -89,6 +90,15 @@ class CapturasTest {
         save("editor-ingredientes-$name")
         rule.onNodeWithTag("editor-list").performScrollToNode(hasTestTag("step-text"))
         save("editor-pasos-$name")
+
+        rule.runOnIdle { nav.navigate(RecipeDetail("calabaza")) }
+        rule.waitFor(hasTestTag("detail-list"))
+        rule.waitFor(hasText("Sal y pimienta"))
+        save("detalle-$name")
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Sal y pimienta"))
+        save("detalle-ingredientes-$name")
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Mis notas"))
+        save("detalle-pasos-notas-$name")
     }
 
     private fun save(name: String) {
@@ -125,6 +135,27 @@ class CapturasTest {
                 Step("s2", "Añade la calabaza y el caldo. Cuece 20 minutos a fuego medio.", emptyList(), null, setOf("i1", "i4")),
             ),
         ),
+        sampleRecipe(
+            "calabaza", "Crema de calabaza", DefaultCategories.FOOD_ID, minutes = 35,
+            flavor = FlavorProfile(sweet = 3, salty = 3, sour = 1, spicy = 1), updatedAt = 450, favorite = true,
+            serveTemp = ServeTemp.HOT, tags = listOf("Vegetariana"),
+            ingredients = listOf(
+                ingredient("c1", "Calabaza", 800.0, MeasureUnit.GRAM),
+                ingredient("c2", "Cebolla", 1.0, MeasureUnit.PIECE),
+                ingredient("c3", "Ajo", 2.0, MeasureUnit.CLOVE),
+                ingredient("c4", "Caldo de verduras", 750.0, MeasureUnit.MILLILITER),
+                ingredient("c5", "Crema / nata", 100.0, MeasureUnit.MILLILITER),
+                ingredient("c6", "Mantequilla", 20.0, MeasureUnit.GRAM),
+                ingredient("c7", "Nuez moscada", null, MeasureUnit.PINCH),
+                ingredient("c8", "Sal y pimienta", null, MeasureUnit.TO_TASTE),
+            ),
+            steps = listOf(
+                Step("p1", "Pela la calabaza, quítale las semillas y córtala en cubos medianos.", emptyList(), null, setOf("c1")),
+                Step("p2", "Sofríe la cebolla y el ajo picados en la mantequilla hasta que se ablanden.", emptyList(), 600, setOf("c2", "c3", "c6")),
+                Step("p3", "Añade la calabaza y el caldo. Cuece 20 minutos a fuego medio.", emptyList(), 1200, setOf("c1", "c4")),
+                Step("p4", "Tritura, añade la nata, la nuez moscada, sal y pimienta, y sirve caliente.", emptyList(), null, setOf("c5", "c7", "c8")),
+            ),
+        ).copy(notes = "La próxima vez: un toque de jengibre y menos caldo."),
         sampleRecipe(
             "flan", "Flan casero de la abuela con caramelo líquido y un toque de vainilla", DefaultCategories.DESSERT_ID,
             minutes = 50, flavor = FlavorProfile(sweet = 3), updatedAt = 300,

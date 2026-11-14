@@ -36,7 +36,8 @@ import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.home.HomeRoute
 import app.recetario.pairing.PairingPlaceholderScreen
-import app.recetario.recipes.detail.DetailPlaceholderScreen
+import app.recetario.pairing.ComingSoon
+import app.recetario.recipes.detail.DetailRoute
 import app.recetario.recipes.editor.EditorRoute
 import app.recetario.recipes.list.RecipesRoute
 import app.recetario.shopping.ShoppingRoute
@@ -114,13 +115,18 @@ fun AppNavHost(
                     composable<RecipeDetail> { from ->
                         val route = from.toRoute<RecipeDetail>()
                         CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
-                            DetailPlaceholderScreen(
+                            DetailRoute(
                                 container = container,
                                 recipeId = route.id,
                                 onBack = { navController.from(from) { popBackStack() } },
                                 onEdit = { navController.from(from) { navigate(RecipeEditor(id = route.id)) } },
+                                onCooking = { servings -> navController.from(from) { navigate(Cooking(route.id, servings)) } },
                             )
                         }
+                    }
+                    // Marcador de la Tarea 13, que lo sustituye por el modo cocina.
+                    composable<Cooking> {
+                        ComingSoon(emoji = "🍳", title = "Modo cocina", text = "Muy pronto: modo cocina")
                     }
                     composable<RecipeEditor> { from ->
                         val route = from.toRoute<RecipeEditor>()
