@@ -117,7 +117,7 @@ class HomeBackupCardTest {
         rule.onNodeWithTag("home-backup-dismiss").performClick()
         rule.waitForGone(hasTestTag("home-backup-card"))
 
-        restoration.emulateSaveAndRestore()
+        restoration.emulateSavedInstanceStateRestore()
         rule.waitFor(hasText("Tortilla de patatas"))
         rule.onNodeWithTag("home-backup-card").assertDoesNotExist()
     }
