@@ -199,9 +199,9 @@ class AutoBackupWorkerTest {
 
     /** En la prueba de la programación no se ejecuta la copia de verdad. */
     private class NoOpWorkerFactory : WorkerFactory() {
-        override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters) =
+        override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
             object : Worker(appContext, workerParameters) {
-                override fun doWork() = Result.success()
+                override fun doWork(): Result = Result.success()
             }
     }
 

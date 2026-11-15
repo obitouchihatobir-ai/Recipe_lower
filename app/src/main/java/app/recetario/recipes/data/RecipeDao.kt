@@ -92,6 +92,10 @@ interface RecipeDao {
     )
     suspend fun isPhotoReferenced(name: String): Boolean
 
+    /** `createdAt` (en milisegundos) de la receta más antigua, o null si no hay ninguna. */
+    @Query("SELECT MIN(createdAt) FROM recipes")
+    fun observeFirstCreatedAt(): Flow<Long?>
+
     @Query("UPDATE recipes SET favorite = :favorite WHERE id = :id")
     suspend fun setFavorite(id: String, favorite: Boolean)
 

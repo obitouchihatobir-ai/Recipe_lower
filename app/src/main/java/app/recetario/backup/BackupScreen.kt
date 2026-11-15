@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -65,13 +66,11 @@ import java.time.ZoneId
 /** Tipos que ofrece el selector al importar (algunos proveedores marcan los .zip de otra forma o como binario genérico). */
 private val IMPORT_TYPES = arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
 
-/** «Copias de seguridad»: exportar e importar un zip. [documents] null usa los del sistema. */
+/** «Copias de seguridad»: exportar e importar un zip, la copia automática (teléfono y Drive) y las copias del teléfono. */
 @Composable
-fun BackupRoute(container: AppContainer, onBack: () -> Unit, documents: BackupDocuments? = null) {
-    val context = LocalContext.current
-    val docs = documents ?: remember(context) { ContentResolverDocuments(context.applicationContext.contentResolver) }
+fun BackupRoute(container: AppContainer, onBack: () -> Unit) {
     val vm: BackupViewModel = viewModel(
-        factory = BackupViewModel.factory(container.backupManager, container.settingsRepository, container.clock, docs),
+        factory = BackupViewModel.factory(container.backupManager, container.settingsRepository, container.clock, container.backupDocuments),
     )
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -92,6 +91,10 @@ fun BackupRoute(container: AppContainer, onBack: () -> Unit, documents: BackupDo
     }
     val saveOutsideLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.saveOutside(uri.toString())
+    }
+    // El archivo de Drive de la copia automática: se crea una vez y se sobrescribe cada semana.
+    val driveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) vm.onDriveDocumentCreated(uri.toString())
     }
     BackupContent(
         state = state,
@@ -125,6 +128,14 @@ fun BackupRoute(container: AppContainer, onBack: () -> Unit, documents: BackupDo
         onChooseReplace = vm::chooseReplace,
         onConfirmReplace = vm::confirmReplace,
         onDismissPanel = vm::dismissPanel,
+        onChooseDriveFile = {
+            try {
+                driveLauncher.launch(DRIVE_DOCUMENT_NAME)
+            } catch (_: ActivityNotFoundException) {
+                say(BackupMessages.NO_PICKER)
+            }
+        },
+        onRetryDrive = vm::retryDrive,
     )
 }
 
@@ -142,6 +153,8 @@ fun BackupContent(
     onChooseReplace: () -> Unit,
     onConfirmReplace: () -> Unit,
     onDismissPanel: () -> Unit,
+    onChooseDriveFile: () -> Unit = {},
+    onRetryDrive: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val c = LocalRecetarioColors.current
@@ -189,6 +202,7 @@ fun BackupContent(
                     MutedText(lastExternalText(state.lastExternal, zone), Modifier.testTag("backup-last-external"))
                 }
             }
+            AutomaticBackupCard(state, zone, busy, onChooseDriveFile, onRetryDrive)
             BackupCard(
                 title = "Recuperar una copia",
                 text = "Abre un archivo .zip del Recetario. Podrás combinarlo con lo que ya tienes o reemplazarlo todo.",
@@ -202,10 +216,11 @@ fun BackupContent(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = c.accent),
                 ) { Text("Importar copia", fontSize = 15.sp, fontWeight = FontWeight.W700) }
             }
-            if (state.work != null) WorkingRow(state.work)
+            if (state.work != null && state.work != BackupWork.DRIVE) WorkingRow(state.work)
             BackupCard(
                 title = "Copias en el teléfono",
-                text = "Se guarda una antes de reemplazar o actualizar recetas al importar. Puedes volver a ella o guardarla fuera.",
+                text = "Las copias automáticas de cada semana (las 4 últimas) y las que se guardan antes de reemplazar " +
+                    "o actualizar recetas al importar (las 3 últimas). Puedes volver a ellas o guardarlas fuera.",
             ) {
                 val local = state.localBackups
                 if (local != null && local.isEmpty()) {
@@ -217,6 +232,62 @@ fun BackupContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * Copia automática: cada semana en el teléfono y, si se eligió un archivo de Google Drive, también allí. Muestra la
+ * fecha de cada una; si Drive falló, el error con «Reintentar» y «Elegir otro archivo» (solo esta si se perdió el
+ * permiso del archivo).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AutomaticBackupCard(state: BackupUiState, zone: ZoneId, busy: Boolean, onChooseDriveFile: () -> Unit, onRetryDrive: () -> Unit) {
+    val c = LocalRecetarioColors.current
+    BackupCard(
+        title = "Copia automática",
+        text = "Cada semana se guarda una copia en el teléfono. Si eliges un archivo de Google Drive, también se guarda " +
+            "allí: se sobrescribe cada semana con la más reciente.",
+    ) {
+        if (state.statusLoaded) {
+            MutedText(lastLocalText(state.lastLocal, zone), Modifier.testTag("backup-last-local"))
+            if (state.driveUri == null) {
+                OutlinedButton(
+                    onClick = onChooseDriveFile,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("drive-setup"),
+                    shape = CircleShape,
+                    border = BorderStroke(1.5.dp, if (busy) c.line else c.accent),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = c.accent),
+                ) { Text("Guardar también en Google Drive", fontSize = 15.sp, fontWeight = FontWeight.W700) }
+            } else {
+                MutedText(lastDriveText(state.lastDrive, zone), Modifier.testTag("backup-last-drive"))
+                state.driveError?.let { error ->
+                    Text(
+                        error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.W600,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("drive-error"),
+                    )
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (!state.driveAccessLost) {
+                        TextButton(
+                            onClick = onRetryDrive,
+                            enabled = !busy,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("drive-retry"),
+                        ) { Text("Reintentar", color = if (busy) c.muted else c.accent, fontWeight = FontWeight.W700) }
+                    }
+                    TextButton(
+                        onClick = onChooseDriveFile,
+                        enabled = !busy,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("drive-choose"),
+                    ) { Text("Elegir otro archivo", color = if (busy) c.muted else c.accent, fontWeight = FontWeight.W700) }
+                }
+            }
+        }
+        if (state.work == BackupWork.DRIVE) WorkingRow(BackupWork.DRIVE)
     }
 }
 
@@ -280,6 +351,7 @@ private fun WorkingRow(work: BackupWork) {
                 BackupWork.EXPORTING -> "Guardando la copia…"
                 BackupWork.CHECKING -> "Comprobando la copia…"
                 BackupWork.IMPORTING -> "Importando la copia…"
+                BackupWork.DRIVE -> "Guardando…"
             },
             color = c.ink,
             style = MaterialTheme.typography.bodyLarge,

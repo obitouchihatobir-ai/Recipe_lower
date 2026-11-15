@@ -105,6 +105,7 @@ fun AppNavHost(
                                 onAdd = { navController.from(from) { navigate(RecipeEditor()) } },
                                 onSettings = { navController.from(from) { navigate(Settings) } },
                                 onAppearance = { navController.from(from) { navigate(Appearance) } },
+                                onBackup = { navController.from(from) { navigate(Backup) } },
                             )
                         }
                     }

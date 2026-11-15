@@ -13,6 +13,7 @@ import app.recetario.recipes.model.Step
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.time.Clock
+import java.time.Instant
 
 interface RecipeRepository {
     fun observeSummaries(): Flow<List<RecipeSummary>>
@@ -37,6 +38,9 @@ interface RecipeRepository {
 
     /** True si alguna receta (portada o paso) usa ese archivo de foto. */
     suspend fun isPhotoReferenced(name: String): Boolean
+
+    /** Cuándo se apuntó la receta más antigua (para el recordatorio de copias), o null si no hay recetas. */
+    fun observeFirstRecipeAt(): Flow<Instant?>
 }
 
 class RoomRecipeRepository(
@@ -53,6 +57,9 @@ class RoomRecipeRepository(
 
     override fun observeRecipe(id: String): Flow<Recipe?> =
         recipes.observeRecipe(id).map { it?.toRecipe() }
+
+    override fun observeFirstRecipeAt(): Flow<Instant?> =
+        recipes.observeFirstCreatedAt().map { millis -> millis?.let(Instant::ofEpochMilli) }
 
     override suspend fun save(recipe: Recipe) {
         val previous = HashSet<String>()

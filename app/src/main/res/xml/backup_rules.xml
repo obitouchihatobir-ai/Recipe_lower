@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copia de seguridad de Android hasta Android 11 (android:fullBackupContent). Mismas reglas que
+  data_extraction_rules.xml (Android 12 y posteriores): cambia los dos archivos a la vez.
+
+  Solo los textos (§8.5): la base de datos (con su registro -wal, que puede tener los últimos cambios) y los ajustes
+  (files/datastore/ajustes.preferences_pb). Nunca las fotos (no caben en los 25 MB de la copia de Android), las
+  copias del teléfono ni los borradores. La caché nunca entra en la copia de Android, ni la base de datos de
+  WorkManager (no se incluye).
+  Se incluye files/ entero y se excluye lo que no va: lint (FullBackupContent) exige que cada exclusión esté dentro de
+  algo incluido. Si una tarea guarda algo nuevo en files/, decide aquí si va o no (cuenta para los 25 MB).
+  Etapa 3: excluir aquí el archivo con la clave de la IA (nunca va en ninguna copia).
+-->
+<full-backup-content>
+    <include domain="database" path="recetario.db" />
+    <include domain="database" path="recetario.db-wal" />
+    <include domain="file" path="." />
+    <exclude domain="file" path="photos/" />
+    <exclude domain="file" path="backups/" />
+    <exclude domain="file" path="drafts/" />
+</full-backup-content>

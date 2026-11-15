@@ -3,10 +3,13 @@ package app.recetario.backup
 import android.util.Log
 import app.recetario.core.data.AppDatabase
 import app.recetario.recipes.data.PhotoStore
+import app.recetario.settings.BackupStatus
 import app.recetario.settings.SettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -16,9 +19,11 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.util.UUID
 import java.util.zip.ZipFile
 
 enum class ImportMode { REPLACE_ALL, MERGE }
@@ -46,17 +51,34 @@ sealed interface ExportResult {
     data class Error(val message: String) : ExportResult
 }
 
+/** Cómo terminó una copia automática ([BackupManager.backupNow]). */
+sealed interface AutoBackupResult {
+    /** No hay recetas: no se escribe nada (las copias anteriores se conservan tal cual). */
+    data object NothingToSave : AutoBackupResult
+
+    /** No se pudo escribir o comprobar la copia del teléfono: no se ha copiado nada a Drive. */
+    data object LocalFailed : AutoBackupResult
+
+    /** [file]: la copia semanal, ya comprobada. [drive]: null si no hay archivo de Drive; si no, si se copió. */
+    data class Saved(val file: File, val drive: Boolean?) : AutoBackupResult
+}
+
 /**
- * Copias de seguridad manuales (exportar e importar un zip). Todo el trabajo va en [io] y de una en una: una
- * exportación nunca lee a medias una importación. Nunca lanza excepciones salvo la cancelación.
+ * Copias de seguridad: exportar e importar un zip, las copias del teléfono (`filesDir/backups/`: las semanales
+ * `Recetario-…zip` y las previas a importar `antes-de-importar-…zip`) y la copia en Drive. Todo el trabajo va en
+ * [io] y de una en una: una exportación nunca lee a medias una importación y una rotación nunca borra la copia que
+ * se está restaurando. Una copia solo se da por buena (y solo sale del teléfono) si se puede restaurar ([inspect]).
+ * Nunca lanza excepciones salvo la cancelación.
  */
 class BackupManager(
-    db: AppDatabase,
+    private val db: AppDatabase,
     photoStore: PhotoStore,
-    settings: SettingsRepository,
+    private val settings: SettingsRepository,
     private val clock: Clock,
-    cacheDir: File,
+    private val cacheDir: File,
     filesDir: File,
+    /** Los documentos de fuera: el de Drive de la copia automática y los que se eligen al exportar. */
+    private val documents: BackupDocuments,
     appVersion: String = "",
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -67,20 +89,56 @@ class BackupManager(
     /** Copias guardadas en el teléfono (`filesDir/backups/`). */
     val localBackupsDir = File(filesDir, "backups")
 
+    /** Copia del teléfono que se está restaurando (la rotación no la borra). Solo se usa con [mutex]. */
+    private var restoring: String? = null
+
     /** Nombre que se propone al exportar: `Recetario-AAAA-MM-DD.zip`. */
     fun suggestedExportName(): String = exportFileName(LocalDate.now(clock))
 
-    /** Escribe la copia en [out] (sin cerrarlo). */
+    /**
+     * Escribe en [out] (sin cerrarlo) una copia de lo actual ya comprobada: primero se escribe en un temporal y se
+     * comprueba como al importar; si no vale, no llega nada a [out].
+     */
     suspend fun export(out: OutputStream): ExportResult = mutex.withLock {
         withContext(io) {
+            val temp = writeExportTemp() ?: return@withContext ExportResult.Error(BackupMessages.EXPORT_FAILED)
             try {
-                exporter.write(out)
+                FileInputStream(temp).use { it.copyTo(out, BUFFER) }
+                out.flush()
                 ExportResult.Ok
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "No se pudo exportar", e)
                 ExportResult.Error(BackupMessages.EXPORT_FAILED)
+            } finally {
+                temp.delete()
+            }
+        }
+    }
+
+    /**
+     * «Exportar copia» al documento [uri] que creó el selector. El documento solo se abre (con «wt») cuando la
+     * copia ya está escrita y comprobada en un temporal: si no vale, el documento no se toca (solo se borra si
+     * está vacío, es decir, si lo acaba de crear el selector). Si falla al copiarla, se borra el documento a medias
+     * (si el usuario eligió sobrescribir una copia anterior, esa se pierde: el proveedor ya la vació al abrirlo).
+     */
+    suspend fun exportToDocument(uri: String): ExportResult = mutex.withLock {
+        withContext(io) {
+            val temp = writeExportTemp()
+            if (temp == null) {
+                deleteDocumentIfEmpty(documents, uri)
+                return@withContext ExportResult.Error(BackupMessages.EXPORT_FAILED)
+            }
+            try {
+                if (copyToDocument(temp, uri)) {
+                    ExportResult.Ok
+                } else {
+                    documents.delete(uri)
+                    ExportResult.Error(BackupMessages.EXPORT_FAILED)
+                }
+            } finally {
+                temp.delete()
             }
         }
     }
@@ -98,7 +156,10 @@ class BackupManager(
     /** Copias del teléfono, las más recientes primero (según su nombre), con sus recetas o dañadas. */
     suspend fun localBackups(): List<LocalBackup> = withContext(io) {
         val names = localBackupsDir.listFiles { f -> f.isFile && f.name.endsWith(".zip") }.orEmpty().map { it.name }
-        sortLocalBackupsNewestFirst(names).map { LocalBackup(it, inspect(File(localBackupsDir, it))) }
+        sortLocalBackupsNewestFirst(names)
+            .map { LocalBackup(it, inspect(File(localBackupsDir, it))) }
+            // Una que la rotación borró mientras se leía no es una copia dañada: ya no está.
+            .filter { File(localBackupsDir, it.fileName).isFile }
     }
 
     suspend fun previewLocal(fileName: String): PreviewResult {
@@ -125,7 +186,12 @@ class BackupManager(
                 } catch (e: IOException) {
                     return@withContext ImportResult.Error(BackupMessages.NOT_A_BACKUP)
                 }
-                input.use { importer.import(it, ImportMode.REPLACE_ALL) }
+                restoring = fileName
+                try {
+                    input.use { importer.import(it, ImportMode.REPLACE_ALL) }
+                } finally {
+                    restoring = null
+                }
             }
         }
     }
@@ -149,36 +215,184 @@ class BackupManager(
         }
     }
 
+    /**
+     * Copia semanal en `filesDir/backups/Recetario-AAAA-MM-DD-HHmm.zip`: se escribe en un temporal (con fsync), se
+     * comprueba que se puede restaurar y solo entonces toma su nombre (nunca pisa otra: añade `-2`, `-3`…). Después
+     * se borran las semanales que sobran (se conservan 4, nunca la recién escrita ni otro tipo de copia) y se anota
+     * `lastLocal`. Null si no se pudo escribir o comprobar.
+     */
+    suspend fun writeLocalBackup(): File? = mutex.withLock { withContext(io) { writeWeeklyLocked() } }
+
+    /**
+     * Copia [local] (una copia del teléfono) en el documento de Drive [uri] con «wt», solo si se puede restaurar.
+     * Si sale bien anota `lastExternal` y `lastDrive` y borra `lastError`; si no, anota `lastError` y la copia del
+     * teléfono se queda como está. No se interrumpe a medias.
+     */
+    suspend fun copyToExternal(local: File, uri: String): Boolean = mutex.withLock { withContext(io) { copyToExternalLocked(local, uri) } }
+
+    /**
+     * La copia automática (la semanal y «Reintentar»): sin recetas no escribe nada; si no, primero la copia del
+     * teléfono, comprobada, y solo entonces, si hay archivo de Drive, la copia allí. Todo de una vez, sin que otra
+     * operación de copias se cuele en medio.
+     */
+    suspend fun backupNow(): AutoBackupResult = mutex.withLock {
+        withContext(io) {
+            val recipes = try {
+                db.backupDao().recipeCount()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "No se pudieron contar las recetas", e)
+                return@withContext AutoBackupResult.LocalFailed
+            }
+            if (recipes == 0) return@withContext AutoBackupResult.NothingToSave
+            val file = writeWeeklyLocked() ?: return@withContext AutoBackupResult.LocalFailed
+            val uri = try {
+                settings.backupStatus.first().driveUri
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "No se pudo leer el archivo de Drive", e)
+                null
+            }
+            AutoBackupResult.Saved(file, drive = uri?.let { copyToExternalLocked(file, it) })
+        }
+    }
+
+    private suspend fun writeWeeklyLocked(): File? {
+        val file = writeLocalCopy(weeklyBackupFileName(LocalDateTime.now(clock))) ?: return null
+        withContext(NonCancellable) {
+            rotate(LocalBackupKind.AUTOMATIC, WEEKLY_BACKUPS_KEPT, file)
+            record { it.copy(lastLocal = clock.instant()) }
+        }
+        return file
+    }
+
+    private suspend fun copyToExternalLocked(local: File, uri: String): Boolean = withContext(NonCancellable) {
+        // Nunca se sube una copia que no se pueda restaurar.
+        val ok = inspect(local) != null && copyToDocument(local, uri)
+        val now = clock.instant()
+        record { status ->
+            when {
+                // Mientras tanto se eligió otro archivo: esta copia no dice nada del nuevo.
+                status.driveUri != uri -> status
+                ok -> status.copy(lastExternal = now, lastDrive = now, lastError = null)
+                else -> status.copy(lastError = BackupMessages.DRIVE_FAILED)
+            }
+        }
+        ok
+    }
+
     /** Solo copias de la carpeta, por su nombre simple (nunca una ruta). */
     private fun localFile(fileName: String): File? =
         if (isSafeBackupFileName(fileName) && fileName.endsWith(".zip")) File(localBackupsDir, fileName).takeIf { it.isFile } else null
 
     /**
-     * Copia de lo actual antes de sustituir nada al importar, en `filesDir/backups/antes-de-importar-<fecha>.zip`
-     * (nunca pisa otra: añade `-2`, `-3`…). Se escribe en un temporal y solo toma su nombre si se puede restaurar
-     * ([inspect]). La Tarea 16 la cambiará por `writeLocalBackup()`.
+     * Copia de lo actual antes de sustituir nada al importar, en `filesDir/backups/antes-de-importar-<fecha>.zip`,
+     * comprobada como la semanal. Después se borran las previas que sobran (se conservan 3; nunca la recién escrita,
+     * la que se está restaurando ni las semanales).
      */
     private suspend fun writeSafetyCopy(): Boolean {
-        var tmp: File? = null
+        val file = writeLocalCopy(safetyCopyFileName(LocalDateTime.now(clock))) ?: return false
+        withContext(NonCancellable) { rotate(LocalBackupKind.BEFORE_IMPORT, SAFETY_COPIES_KEPT, file) }
+        return true
+    }
+
+    /**
+     * Escribe una copia comprobada en la carpeta de copias con el nombre [name] (o `-2`, `-3`… si ya existe): en un
+     * temporal `.tmp` que solo toma su nombre si se puede restaurar. Null si no se pudo.
+     */
+    private suspend fun writeLocalCopy(name: String): File? {
+        var partial: File? = null
         return try {
             val dir = localBackupsDir
-            if (!dir.isDirectory && !dir.mkdirs()) return false
-            // Temporales de una copia previa que Android cortó a medias (nunca son copias terminadas).
-            dir.listFiles { f -> f.name.startsWith(SAFETY_PREFIX) && f.name.endsWith(".zip.tmp") }?.forEach { it.delete() }
-            val target = freeFile(dir, safetyCopyFileName(LocalDateTime.now(clock)))
-            val partial = File(dir, "${target.name}.tmp").also { tmp = it }
-            FileOutputStream(partial).use { out ->
-                exporter.write(out)
-                out.fd.sync()
+            if (!dir.isDirectory && !dir.mkdirs()) {
+                Log.w(TAG, "No se pudo crear la carpeta de copias")
+                return null
             }
-            inspect(partial) != null && partial.renameTo(target)
+            // Restos de una copia que Android cortó a medias (las copias van de una en una: nunca son de otra en curso).
+            dir.listFiles { f -> f.isFile && f.name.endsWith(".zip.tmp") }?.forEach { it.delete() }
+            val target = freeFile(dir, name)
+            val tmp = File(dir, "${target.name}.tmp").also { partial = it }
+            if (!writeChecked(tmp)) return null
+            // Sin REPLACE_EXISTING: si (por lo que sea) ya existe, falla en vez de pisarla.
+            Files.move(tmp.toPath(), target.toPath())
+            target
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "No se pudo hacer la copia previa", e)
-            false
+            Log.w(TAG, "No se pudo guardar la copia en el teléfono", e)
+            null
         } finally {
-            tmp?.takeIf { it.exists() }?.delete()
+            partial?.takeIf { it.exists() }?.delete()
+        }
+    }
+
+    /** Copia comprobada en un temporal de la caché (para exportar); null si no se pudo. Quien la recibe la borra. */
+    private suspend fun writeExportTemp(): File? {
+        return try {
+            // Restos de una exportación que Android cortó a medias (van de una en una).
+            cacheDir.listFiles { f -> f.name.startsWith(EXPORT_PREFIX) }?.forEach { it.delete() }
+            if (!cacheDir.isDirectory && !cacheDir.mkdirs()) return null
+            val temp = File(cacheDir, "$EXPORT_PREFIX${UUID.randomUUID()}.zip")
+            if (writeChecked(temp)) temp else null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo preparar la copia", e)
+            null
+        }
+    }
+
+    /** Escribe la copia de lo actual en [file] (con fsync) y comprueba que se puede restaurar. Si no, la borra. */
+    private suspend fun writeChecked(file: File): Boolean {
+        try {
+            FileOutputStream(file).use { out ->
+                exporter.write(out)
+                out.fd.sync()
+            }
+            if (inspect(file) != null) return true
+            Log.w(TAG, "La copia recién escrita no se puede restaurar")
+        } catch (e: CancellationException) {
+            file.delete()
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo escribir la copia", e)
+        }
+        file.delete()
+        return false
+    }
+
+    /** Copia [file] en el documento [uri] («wt») y lo cierra (cerrar también cuenta: algunos proveedores terminan ahí). */
+    private fun copyToDocument(file: File, uri: String): Boolean = try {
+        documents.openOutput(uri).use { out ->
+            FileInputStream(file).use { it.copyTo(out, BUFFER) }
+            out.flush()
+        }
+        true
+    } catch (e: Exception) {
+        Log.w(TAG, "No se pudo escribir en el documento", e)
+        false
+    }
+
+    /** Borra las copias de [kind] que sobran. Nunca [justWritten] ni la que se está restaurando. */
+    private fun rotate(kind: LocalBackupKind, keep: Int, justWritten: File) {
+        try {
+            val names = localBackupsDir.list()?.toList().orEmpty()
+            for (name in filesToDelete(names, keep, kind, protect = setOfNotNull(justWritten.name, restoring))) {
+                if (!File(localBackupsDir, name).delete()) Log.w(TAG, "No se pudo borrar la copia antigua $name")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudieron borrar las copias antiguas", e)
+        }
+    }
+
+    /** Anota el estado de las copias; si no se puede, solo se registra (la copia ya está hecha o ya falló). */
+    private suspend fun record(transform: (BackupStatus) -> BackupStatus) {
+        try {
+            settings.updateBackupStatus(transform)
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo anotar el estado de las copias", e)
         }
     }
 
@@ -209,6 +423,7 @@ class BackupManager(
 
     private companion object {
         const val TAG = "BackupManager"
-        const val SAFETY_PREFIX = "antes-de-importar-"
+        const val EXPORT_PREFIX = "exportar-"
+        const val BUFFER = 64 * 1024
     }
 }

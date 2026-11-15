@@ -22,12 +22,18 @@ import kotlinx.coroutines.flow.map
 import java.time.Instant
 import java.time.LocalTime
 
-/** Estado de las copias de seguridad (lo escriben las Tareas 15 y 16). Los instantes se guardan en milisegundos. */
+/**
+ * Estado de las copias de seguridad (lo escriben las Tareas 15 y 16). Los instantes se guardan en milisegundos.
+ * [lastLocal]: última copia semanal en el teléfono; [lastExternal]: última copia que salió del teléfono (Drive o
+ * exportación manual; la usa el recordatorio de Inicio); [lastDrive]: última copia en el archivo de Drive
+ * ([driveUri]); [lastError]: por qué falló la última copia en Drive (se muestra en Inicio y en Copias).
+ */
 data class BackupStatus(
     val lastLocal: Instant? = null,
     val lastExternal: Instant? = null,
     val driveUri: String? = null,
     val lastError: String? = null,
+    val lastDrive: Instant? = null,
 )
 
 /** Ajustes de la app en un DataStore de preferencias (archivo `ajustes`). */
@@ -108,6 +114,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
             p.put(LAST_EXTERNAL, next.lastExternal?.toEpochMilli())
             p.put(DRIVE_URI, next.driveUri)
             p.put(LAST_ERROR, next.lastError)
+            p.put(LAST_DRIVE, next.lastDrive?.toEpochMilli())
         }
     }
 
@@ -116,6 +123,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         lastExternal = this[LAST_EXTERNAL]?.let(Instant::ofEpochMilli),
         driveUri = this[DRIVE_URI],
         lastError = this[LAST_ERROR],
+        lastDrive = this[LAST_DRIVE]?.let(Instant::ofEpochMilli),
     )
 
     private fun <T> androidx.datastore.preferences.core.MutablePreferences.put(key: Preferences.Key<T>, value: T?) {
@@ -139,6 +147,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         val LAST_EXTERNAL = longPreferencesKey("backup_last_external")
         val DRIVE_URI = stringPreferencesKey("backup_drive_uri")
         val LAST_ERROR = stringPreferencesKey("backup_last_error")
+        val LAST_DRIVE = longPreferencesKey("backup_last_drive")
         val NOTIFICATIONS_ASKED = booleanPreferencesKey("notifications_permission_asked")
     }
 }
