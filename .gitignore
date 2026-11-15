@@ -13,3 +13,6 @@ local.properties
 *.p12
 *.jks
 *.keystore
+
+# Python (scripts/branding)
+__pycache__/
