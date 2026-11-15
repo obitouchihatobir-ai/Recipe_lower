@@ -8,12 +8,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -60,8 +62,8 @@ import app.recetario.settings.SettingsPage
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 
-/** Tipos que ofrece el selector al importar (algunos proveedores marcan los .zip como binario genérico). */
-private val IMPORT_TYPES = arrayOf("application/zip", "application/octet-stream")
+/** Tipos que ofrece el selector al importar (algunos proveedores marcan los .zip de otra forma o como binario genérico). */
+private val IMPORT_TYPES = arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
 
 /** «Copias de seguridad»: exportar e importar un zip. [documents] null usa los del sistema. */
 @Composable
@@ -88,6 +90,9 @@ fun BackupRoute(container: AppContainer, onBack: () -> Unit, documents: BackupDo
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.onImportFilePicked(uri.toString())
     }
+    val saveOutsideLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) vm.saveOutside(uri.toString())
+    }
     BackupContent(
         state = state,
         zone = container.clock.zone,
@@ -107,6 +112,15 @@ fun BackupRoute(container: AppContainer, onBack: () -> Unit, documents: BackupDo
                 say(BackupMessages.NO_PICKER)
             }
         },
+        onRestoreLocal = vm::restoreLocal,
+        onSaveOutside = { name ->
+            vm.prepareSaveOutside(name)
+            try {
+                saveOutsideLauncher.launch(name)
+            } catch (_: ActivityNotFoundException) {
+                say(BackupMessages.NO_PICKER)
+            }
+        },
         onChooseMerge = vm::chooseMerge,
         onChooseReplace = vm::chooseReplace,
         onConfirmReplace = vm::confirmReplace,
@@ -122,6 +136,8 @@ fun BackupContent(
     onBack: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
+    onRestoreLocal: (fileName: String) -> Unit,
+    onSaveOutside: (fileName: String) -> Unit,
     onChooseMerge: () -> Unit,
     onChooseReplace: () -> Unit,
     onConfirmReplace: () -> Unit,
@@ -137,15 +153,24 @@ fun BackupContent(
         modifier = modifier,
         snackbar = snackbar,
         overlay = {
-            when (state.panel) {
-                is ImportPanel.ChooseMode -> ImportModePanel(onMerge = onChooseMerge, onReplace = onChooseReplace, onDismiss = onDismissPanel)
-                is ImportPanel.ConfirmReplace -> ConfirmReplacePanel(onConfirm = onConfirmReplace, onDismiss = onDismissPanel)
+            when (val panel = state.panel) {
+                is ImportPanel.ChooseMode -> ImportModePanel(
+                    restoring = panel.source is ImportSource.Local,
+                    onMerge = onChooseMerge,
+                    onReplace = onChooseReplace,
+                    onDismiss = onDismissPanel,
+                )
+                is ImportPanel.ConfirmReplace -> ConfirmReplacePanel(
+                    comparison = replaceComparison(panel.preview.backupRecipes, panel.preview.localRecipes),
+                    onConfirm = onConfirmReplace,
+                    onDismiss = onDismissPanel,
+                )
                 null -> Unit
             }
         },
     ) {
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp).testTag("backup-list"),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             BackupCard(
@@ -178,6 +203,46 @@ fun BackupContent(
                 ) { Text("Importar copia", fontSize = 15.sp, fontWeight = FontWeight.W700) }
             }
             if (state.work != null) WorkingRow(state.work)
+            BackupCard(
+                title = "Copias en el teléfono",
+                text = "Se guarda una antes de reemplazar o actualizar recetas al importar. Puedes volver a ella o guardarla fuera.",
+            ) {
+                val local = state.localBackups
+                if (local != null && local.isEmpty()) {
+                    MutedText("Todavía no hay ninguna.", Modifier.testTag("local-backups-empty"))
+                }
+                local?.forEachIndexed { i, backup ->
+                    if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
+                    LocalBackupRow(backup, enabled = !busy, onRestore = onRestoreLocal, onSaveOutside = onSaveOutside)
+                }
+            }
+        }
+    }
+}
+
+/** Una copia del teléfono: cuándo y de qué tipo, cuántas recetas (o «Copia dañada», sin acciones) y qué hacer con ella. */
+@Composable
+private fun LocalBackupRow(backup: LocalBackup, enabled: Boolean, onRestore: (String) -> Unit, onSaveOutside: (String) -> Unit) {
+    val c = LocalRecetarioColors.current
+    val name = backup.fileName
+    Column(Modifier.fillMaxWidth().testTag("local-backup-$name"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(localBackupTitle(name), color = c.ink, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.W600)
+        if (backup.recipes == null) {
+            Text(BackupMessages.DAMAGED, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        } else {
+            MutedText(recipeCountText(backup.recipes), fontSizeSp = 14)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = { onRestore(name) },
+                    enabled = enabled,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("local-restore-$name"),
+                ) { Text("Restaurar", color = if (enabled) c.accent else c.muted, fontWeight = FontWeight.W700) }
+                TextButton(
+                    onClick = { onSaveOutside(name) },
+                    enabled = enabled,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("local-save-$name"),
+                ) { Text("Guardar fuera", color = if (enabled) c.accent else c.muted, fontWeight = FontWeight.W700) }
+            }
         }
     }
 }
@@ -211,26 +276,33 @@ private fun WorkingRow(work: BackupWork) {
     ) {
         if (!LocalReducedMotion.current) CircularProgressIndicator(Modifier.size(22.dp), color = c.accent, strokeWidth = 2.5.dp)
         Text(
-            if (work == BackupWork.EXPORTING) "Guardando la copia…" else "Importando la copia…",
+            when (work) {
+                BackupWork.EXPORTING -> "Guardando la copia…"
+                BackupWork.CHECKING -> "Comprobando la copia…"
+                BackupWork.IMPORTING -> "Importando la copia…"
+            },
             color = c.ink,
             style = MaterialTheme.typography.bodyLarge,
         )
     }
 }
 
+/** Primera confirmación. Al restaurar una copia del teléfono solo se ofrece «Reemplazar todo». */
 @Composable
-private fun BoxScope.ImportModePanel(onMerge: () -> Unit, onReplace: () -> Unit, onDismiss: () -> Unit) {
+private fun BoxScope.ImportModePanel(restoring: Boolean, onMerge: () -> Unit, onReplace: () -> Unit, onDismiss: () -> Unit) {
     val c = LocalRecetarioColors.current
     BottomPanel(onDismiss, "import-mode-panel") {
-        SectionTitle("¿Cómo quieres importarla?")
-        ModeOption(
-            title = "Combinar",
-            explanation = "Añade lo que falte y actualiza lo más reciente. No borra nada.",
-            color = c.ink,
-            border = c.line,
-            tag = "import-merge",
-            onClick = onMerge,
-        )
+        SectionTitle(if (restoring) "¿Restaurar esta copia?" else "¿Cómo quieres importarla?")
+        if (!restoring) {
+            ModeOption(
+                title = "Combinar",
+                explanation = "Añade lo que falte y actualiza lo más reciente. No borra nada.",
+                color = c.ink,
+                border = c.line,
+                tag = "import-merge",
+                onClick = onMerge,
+            )
+        }
         ModeOption(
             title = "Reemplazar todo",
             explanation = "Sustituye todas tus recetas por las de la copia. Antes se guarda una copia de lo actual.",
@@ -267,10 +339,11 @@ private fun ModeOption(title: String, explanation: String, color: Color, border:
 
 /** Segunda confirmación de «Reemplazar todo», en rojo. */
 @Composable
-private fun BoxScope.ConfirmReplacePanel(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun BoxScope.ConfirmReplacePanel(comparison: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val c = LocalRecetarioColors.current
     BottomPanel(onDismiss, "replace-confirm-panel") {
         SectionTitle("¿Reemplazar todo?")
+        Text(comparison, color = c.ink, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.W700)
         Text(
             "Tus recetas, categorías, lista de la compra y ajustes se sustituirán por los de la copia. " +
                 "Antes se guardará en el teléfono una copia de lo que tienes ahora.",

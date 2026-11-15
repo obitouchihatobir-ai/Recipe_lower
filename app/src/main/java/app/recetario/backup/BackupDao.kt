@@ -28,6 +28,9 @@ interface BackupDao {
     @Query("SELECT id FROM shopping_items")
     suspend fun shoppingIds(): List<String>
 
+    @Query("SELECT COUNT(*) FROM recipes")
+    suspend fun recipeCount(): Int
+
     /** `updatedAt` en milisegundos, o null si la receta no existe. */
     @Query("SELECT updatedAt FROM recipes WHERE id = :id")
     suspend fun recipeUpdatedAt(id: String): Long?
