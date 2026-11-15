@@ -32,4 +32,13 @@ class QuantityParserTest {
     }
     @Test fun `denominador cero`() = assertNull(p("1/0"))
     @Test fun `basura al final`() = assertNull(p("1,5 g"))
+    @Test fun `numero tan largo que no cabe en un double`() {
+        // 400 cifras darían Infinity, que luego rompería el formato, el detalle y las copias.
+        val huge = "9".repeat(400)
+        assertNull(p(huge))
+        assertNull(p("$huge,5"))
+        assertNull(p("$huge/1"))
+        assertNull(p("1 $huge/1"))
+        assertNull(p("$huge½"))
+    }
 }

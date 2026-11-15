@@ -10,10 +10,12 @@ private val unicodeForm = Regex("""(\d*)\s*([¼½¾⅓⅔])""")
 
 /**
  * Entiende cantidades escritas a la española: «1,5», «1.5», «1/2», «1 1/2», «½», «1½».
- * Devuelve null si el texto está vacío, es negativo o no se entiende.
+ * Devuelve null si el texto está vacío, es negativo, no se entiende o no cabe en un número (cientos de cifras
+ * darían Infinity, que rompería el formato, el detalle y las copias de seguridad).
  */
-fun parseQuantity(text: String): Double? {
-    val t = text.trim()
+fun parseQuantity(text: String): Double? = parseRaw(text.trim())?.takeIf { it.isFinite() }
+
+private fun parseRaw(t: String): Double? {
     if (t.isEmpty()) return null
     mixedForm.matchEntire(t)?.let { m ->
         val den = m.groupValues[3].toDouble()

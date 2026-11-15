@@ -110,6 +110,15 @@ class TimerManager(private val elapsedRealtime: () -> Long) {
         synchronized(lock) { _timers.value = _timers.value.filterNot { it.id == id } }
     }
 
+    /**
+     * Apaga el aviso de [id] solo si ese temporizador ya terminó. Lo usan el aviso «⏱ ¡Tiempo!» al tocarlo o
+     * descartarlo: como los ids son los de los pasos, un aviso viejo (o reabierto desde Recientes) no debe apagar
+     * el mismo paso que se está cocinando otra vez.
+     */
+    fun dismissFinished(id: String) {
+        synchronized(lock) { _timers.value = _timers.value.filterNot { it.id == id && it.finished } }
+    }
+
     fun remainingMs(id: String, now: Long): Long = _timers.value.firstOrNull { it.id == id }?.remainingMs(now) ?: 0
 
     /** Marca como terminados los que llegaron a cero en [now] y emite cada uno en [finishedEvents]. */
