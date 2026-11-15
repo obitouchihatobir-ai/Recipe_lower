@@ -119,10 +119,11 @@ fun RecipeGridCard(
     val c = LocalRecetarioColors.current
     val interaction = remember { MutableInteractionSource() }
     val scale = pressScale(interaction)
+    // Sin recorte: la tarjeta no tiene fondo ni onda al tocar, y la esquina redondeada se comería la primera letra
+    // de la línea de datos («Postre»). Solo la foto se redondea.
     Column(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(LocalRecetarioShapes.current.radius))
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .padding(bottom = 4.dp),
     ) {
