@@ -110,6 +110,8 @@ class BackupRoundTripTest {
         assertThat(file.appVersion).isEqualTo("0.1.0")
         assertThat(file.createdAt).isEqualTo("2026-11-13T20:40:00Z")
         assertThat(file.categories.map { it.id }).containsExactly(DefaultCategories.FOOD_ID, DefaultCategories.DRINK_ID, DefaultCategories.DESSERT_ID)
+        // Manifiesto: exactamente las fotos que van en el zip.
+        assertThat(file.images).containsExactly("portada.jpg")
     }
 
     @Test
@@ -122,13 +124,39 @@ class BackupRoundTripTest {
 
         val entries = unzip(zip)
         assertThat(entries.keys).containsExactly("backup.json", "images/esta.jpg")
-        // La receta sigue apuntando a la foto que falta (la app muestra un marcador).
+        // La receta sigue apuntando a la foto que falta (la app muestra un marcador), pero no está en el manifiesto.
         assertThat(String(entries.getValue("backup.json"))).contains("falta.jpg")
+        assertThat((decodeBackup(String(entries.getValue("backup.json"))) as BackupDecodeResult.Ok).file.images).containsExactly("esta.jpg")
 
         val b = env()
         assertThat(b.import(zip, ImportMode.REPLACE_ALL)).isEqualTo(ImportResult.Ok(recipes = 1, images = 1))
         assertThat(b.recipe("r1")!!.steps.first().photos).containsExactly("falta.jpg")
         assertThat(b.photoFiles().keys).containsExactly("esta.jpg")
+    }
+
+    @Test
+    fun export_unsafePhotoName_isTreatedAsAMissingPhoto() = runBlocking<Unit> {
+        val a = env()
+        // Un nombre con ruta no puede ser una foto nuestra: no se exporta aunque exista ese archivo.
+        java.io.File(a.filesDir, "fuera.jpg").writeBytes(fakePhoto(4))
+        a.writePhoto("buena.jpg", fakePhoto(5))
+        a.saveAt(fullRecipe("r1", DefaultCategories.FOOD_ID, "../fuera.jpg", listOf("buena.jpg", "../fuera.jpg"), emptyList()), Instant.parse("2026-11-01T10:00:00Z"))
+
+        val zip = a.exportBytes()
+
+        val entries = unzip(zip)
+        assertThat(entries.keys).containsExactly("backup.json", "images/buena.jpg")
+        val json = String(entries.getValue("backup.json"))
+        assertThat(json).contains("../fuera.jpg")
+        assertThat((decodeBackup(json) as BackupDecodeResult.Ok).file.images).containsExactly("buena.jpg")
+        // La copia se puede importar: la referencia peligrosa se trata como una foto que falta.
+        val b = env()
+        assertThat(b.import(zip, ImportMode.REPLACE_ALL)).isEqualTo(ImportResult.Ok(recipes = 1, images = 1))
+        assertThat(b.recipe("r1")!!.coverPhoto).isNull()
+        assertThat(b.recipe("r1")!!.steps.first().photos).containsExactly("buena.jpg")
+        // Y la copia previa de este teléfono (que la contiene) se puede restaurar, así que reemplazar no se bloquea.
+        assertThat(a.import(backupZip(backupOf()), ImportMode.REPLACE_ALL)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0))
+        assertThat(java.io.File(a.filesDir, "fuera.jpg").exists()).isTrue()
     }
 
     @Test

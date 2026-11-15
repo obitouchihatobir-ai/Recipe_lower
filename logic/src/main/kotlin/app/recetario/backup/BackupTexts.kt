@@ -17,11 +17,25 @@ object BackupMessages {
     const val EXPORTED = "Copia guardada."
     const val EXPORT_FAILED = "No se pudo guardar la copia."
     const val NO_PICKER = "No hay ninguna app para elegir el archivo."
+    const val INCOMPLETE = "La copia está incompleta: faltan fotos."
+    const val DAMAGED = "Copia dañada"
 }
 
-/** «Copia importada: 3 recetas, 1 foto.» */
-fun importSummary(recipes: Int, images: Int): String =
-    "Copia importada: ${plural(recipes, "receta", "recetas")}, ${plural(images, "foto", "fotos")}."
+/** «Copia importada: 3 recetas, 1 foto.», y si alguna foto no se pudo copiar, «2 fotos no se pudieron copiar.» */
+fun importSummary(recipes: Int, images: Int, failedImages: Int = 0): String {
+    val base = "Copia importada: ${recipeCountText(recipes)}, ${plural(images, "foto", "fotos")}."
+    return when (failedImages) {
+        0 -> base
+        1 -> "$base 1 foto no se pudo copiar."
+        else -> "$base $failedImages fotos no se pudieron copiar."
+    }
+}
+
+fun recipeCountText(n: Int): String = plural(n, "receta", "recetas")
+
+/** En la confirmación de «Reemplazar todo»: «La copia tiene 12 recetas; ahora tienes 40.» */
+fun replaceComparison(backupRecipes: Int, localRecipes: Int): String =
+    "La copia tiene ${recipeCountText(backupRecipes)}; ahora tienes $localRecipes."
 
 private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
 
@@ -33,6 +47,39 @@ fun safetyCopyFileName(dateTime: LocalDateTime): String = "antes-de-importar-${d
 
 private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm")
 private val LONG_DATE = DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("es-ES"))
+
+/** Copias guardadas en el teléfono (`filesDir/backups/`). La Tarea 16 añade las automáticas. */
+enum class LocalBackupKind(val label: String) { BEFORE_IMPORT("Antes de importar"), AUTOMATIC("Copia automática") }
+
+/** Lo que dice el nombre de una copia del teléfono: de qué tipo es, cuándo se hizo y su número si hubo varias ese minuto. */
+data class LocalBackupName(val kind: LocalBackupKind, val dateTime: LocalDateTime, val sequence: Int)
+
+private val LOCAL_NAME = Regex("""^(antes-de-importar|Recetario)-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(?:-(\d{1,4}))?\.zip$""")
+
+fun parseLocalBackupName(name: String): LocalBackupName? {
+    val m = LOCAL_NAME.matchEntire(name) ?: return null
+    val (prefix, y, mo, d, h, mi) = m.destructured
+    val dateTime = try {
+        LocalDateTime.of(y.toInt(), mo.toInt(), d.toInt(), h.toInt(), mi.toInt())
+    } catch (_: Exception) {
+        return null
+    }
+    val kind = if (prefix == "Recetario") LocalBackupKind.AUTOMATIC else LocalBackupKind.BEFORE_IMPORT
+    return LocalBackupName(kind, dateTime, m.groupValues[7].toIntOrNull() ?: 1)
+}
+
+/** «Antes de importar · 13 de noviembre de 2026, 21:40»; si el nombre no es de los nuestros, el nombre tal cual. */
+fun localBackupTitle(name: String): String =
+    parseLocalBackupName(name)?.let { "${it.kind.label} · ${it.dateTime.format(LONG_DATE)}" } ?: name
+
+/** Las más recientes primero según su nombre; las de nombre desconocido, al final. */
+fun sortLocalBackupsNewestFirst(names: List<String>): List<String> {
+    val (known, unknown) = names.partition { parseLocalBackupName(it) != null }
+    val byDate = compareByDescending<String> { parseLocalBackupName(it)!!.dateTime }
+        .thenByDescending { parseLocalBackupName(it)!!.sequence }
+        .thenByDescending { it }
+    return known.sortedWith(byDate) + unknown.sortedDescending()
+}
 
 fun lastExternalText(lastExternal: Instant?, zone: ZoneId): String =
     if (lastExternal == null) "Todavía no has guardado ninguna copia fuera del teléfono."

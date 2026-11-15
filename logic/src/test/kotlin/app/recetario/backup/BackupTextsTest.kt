@@ -13,6 +13,60 @@ class BackupTextsTest {
         assertThat(importSummary(3, 5)).isEqualTo("Copia importada: 3 recetas, 5 fotos.")
         assertThat(importSummary(1, 1)).isEqualTo("Copia importada: 1 receta, 1 foto.")
         assertThat(importSummary(0, 0)).isEqualTo("Copia importada: 0 recetas, 0 fotos.")
+        assertThat(importSummary(3, 5, failedImages = 0)).isEqualTo("Copia importada: 3 recetas, 5 fotos.")
+        assertThat(importSummary(3, 5, failedImages = 2))
+            .isEqualTo("Copia importada: 3 recetas, 5 fotos. 2 fotos no se pudieron copiar.")
+        assertThat(importSummary(1, 0, failedImages = 1))
+            .isEqualTo("Copia importada: 1 receta, 0 fotos. 1 foto no se pudo copiar.")
+    }
+
+    @Test
+    fun replaceComparison_comparesTheCopyWithWhatYouHave() {
+        assertThat(replaceComparison(backupRecipes = 12, localRecipes = 40)).isEqualTo("La copia tiene 12 recetas; ahora tienes 40.")
+        assertThat(replaceComparison(backupRecipes = 1, localRecipes = 1)).isEqualTo("La copia tiene 1 receta; ahora tienes 1.")
+        assertThat(replaceComparison(backupRecipes = 0, localRecipes = 3)).isEqualTo("La copia tiene 0 recetas; ahora tienes 3.")
+    }
+
+    @Test
+    fun localBackupNames_areParsedFromTheFileName() {
+        assertThat(parseLocalBackupName("antes-de-importar-2026-11-13-2140.zip"))
+            .isEqualTo(LocalBackupName(LocalBackupKind.BEFORE_IMPORT, LocalDateTime.of(2026, 11, 13, 21, 40), 1))
+        assertThat(parseLocalBackupName("antes-de-importar-2026-11-13-2140-3.zip"))
+            .isEqualTo(LocalBackupName(LocalBackupKind.BEFORE_IMPORT, LocalDateTime.of(2026, 11, 13, 21, 40), 3))
+        assertThat(parseLocalBackupName("Recetario-2026-11-09-0305.zip"))
+            .isEqualTo(LocalBackupName(LocalBackupKind.AUTOMATIC, LocalDateTime.of(2026, 11, 9, 3, 5), 1))
+        for (name in listOf("antes-de-importar-2026-13-13-2140.zip", "otra.zip", "antes-de-importar-2026-11-13-2140.zip.tmp", "Recetario-2026-11-13.zip")) {
+            assertThat(parseLocalBackupName(name)).isNull()
+        }
+    }
+
+    @Test
+    fun localBackupTitle_saysWhatAndWhen() {
+        assertThat(localBackupTitle("antes-de-importar-2026-11-13-2140-2.zip")).isEqualTo("Antes de importar · 13 de noviembre de 2026, 21:40")
+        assertThat(localBackupTitle("Recetario-2026-11-09-0305.zip")).isEqualTo("Copia automática · 9 de noviembre de 2026, 03:05")
+        assertThat(localBackupTitle("otra.zip")).isEqualTo("otra.zip")
+        assertThat(recipeCountText(1)).isEqualTo("1 receta")
+        assertThat(recipeCountText(7)).isEqualTo("7 recetas")
+    }
+
+    @Test
+    fun localBackups_newestFirst() {
+        val names = listOf(
+            "antes-de-importar-2026-11-13-2140.zip",
+            "otra.zip",
+            "Recetario-2026-11-14-0300.zip",
+            "antes-de-importar-2026-11-13-2140-2.zip",
+            "antes-de-importar-2026-11-01-0900.zip",
+            "a-mano.zip",
+        )
+        assertThat(sortLocalBackupsNewestFirst(names)).containsExactly(
+            "Recetario-2026-11-14-0300.zip",
+            "antes-de-importar-2026-11-13-2140-2.zip",
+            "antes-de-importar-2026-11-13-2140.zip",
+            "antes-de-importar-2026-11-01-0900.zip",
+            "otra.zip",
+            "a-mano.zip",
+        ).inOrder()
     }
 
     @Test
@@ -38,5 +92,7 @@ class BackupTextsTest {
         assertThat(BackupMessages.SAFETY_COPY_FAILED)
             .isEqualTo("No se pudo hacer una copia de seguridad previa. No se ha cambiado nada.")
         assertThat(BackupMessages.EXPORTED).isEqualTo("Copia guardada.")
+        assertThat(BackupMessages.INCOMPLETE).isEqualTo("La copia está incompleta: faltan fotos.")
+        assertThat(BackupMessages.DAMAGED).isEqualTo("Copia dañada")
     }
 }

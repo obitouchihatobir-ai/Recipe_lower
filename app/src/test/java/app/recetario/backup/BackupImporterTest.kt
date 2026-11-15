@@ -323,6 +323,140 @@ class BackupImporterTest {
     }
 
     @Test
+    fun incompleteZip_truncatedRightAfterAnEntry_isRejected_andDataUnchanged() = runBlocking<Unit> {
+        seedLocal()
+        val backup = backupOf(recipe("copia", "Paella", t2, cover = "a.jpg"), recipe("otra", "Gazpacho", t2, cover = "b.jpg"))
+            .copy(images = listOf("a.jpg", "b.jpg"))
+        val entries = arrayOf(
+            BACKUP_JSON_ENTRY to encodeBackup(backup).toByteArray(),
+            "images/a.jpg" to fakePhoto(1),
+            "images/b.jpg" to fakePhoto(2),
+        )
+        // Cortado tras la primera foto: un lector en flujo no ve ningún error, solo falta b.jpg.
+        assertRejectedWithoutChanges(zipCutAfter(2, *entries), "La copia está incompleta: faltan fotos.")
+        assertThat(local.preview(zipCutAfter(2, *entries))).isEqualTo(PreviewResult.Error("La copia está incompleta: faltan fotos."))
+        // Sin manifiesto (copia sin fotos o anterior a él) no se rechaza por eso.
+        val noManifest = zipOf(BACKUP_JSON_ENTRY to encodeBackup(backup.copy(images = emptyList())).toByteArray(), "images/a.jpg" to fakePhoto(1))
+        assertThat(local.import(noManifest, ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 2, images = 1))
+    }
+
+    @Test
+    fun merge_thatReplacesALocalRecipe_writesASafetyCopyFirst() = runBlocking<Unit> {
+        seedLocal()
+        val before = local.snapshot()
+
+        val result = local.import(backupZip(backupOf(recipe("local", "Tortilla nueva", t3))), ImportMode.MERGE)
+
+        assertThat(result).isEqualTo(ImportResult.Ok(recipes = 1, images = 0))
+        assertThat(local.backups()).containsExactly("antes-de-importar-2026-11-13-2140.zip")
+        val restored = BackupTestEnv(tmp).also { others += it }
+        assertThat(restored.import(local.localFile("antes-de-importar-2026-11-13-2140.zip").readBytes(), ImportMode.REPLACE_ALL))
+            .isEqualTo(ImportResult.Ok(recipes = 1, images = 1))
+        assertThat(restored.snapshot()).isEqualTo(before)
+    }
+
+    @Test
+    fun merge_thatOnlyAdds_writesNoSafetyCopy() = runBlocking<Unit> {
+        seedLocal()
+
+        // La copia trae «local» más antigua (no la sustituye) y una receta nueva.
+        val result = local.import(backupZip(backupOf(recipe("local", "Tortilla vieja", t1), recipe("nueva", "Paella", t2))), ImportMode.MERGE)
+
+        assertThat(result).isEqualTo(ImportResult.Ok(recipes = 1, images = 0))
+        assertThat(local.backups()).isEmpty()
+    }
+
+    @Test
+    fun merge_thatReplaces_safetyCopyFailure_abortsWithoutChanges() = runBlocking<Unit> {
+        seedLocal()
+        local.backupsDir.writeText("no soy una carpeta")
+        val before = local.snapshot()
+
+        val result = local.import(backupZip(backupOf(recipe("local", "Tortilla nueva", t3))), ImportMode.MERGE)
+
+        assertThat(result).isEqualTo(ImportResult.Error("No se pudo hacer una copia de seguridad previa. No se ha cambiado nada."))
+        assertThat(local.snapshot()).isEqualTo(before)
+    }
+
+    @Test
+    fun rollbackInTheMiddleOfTheTransaction_leavesDataPhotosAndSettingsUnchanged() = runBlocking<Unit> {
+        seedLocal()
+        local.saveAt(
+            sampleRecipe("otra", "Otra", ingredients = listOf(ingredient("choque", "Sal", null, MeasureUnit.PINCH))).copy(updatedAt = t1),
+            t1,
+        )
+        val before = local.snapshot()
+        // Una categoría nueva y una receta nueva cuyo ingrediente choca con el id de otro local: falla a mitad.
+        val clash = sampleRecipe("nueva", "Nueva", categoryId = "cat-copia", ingredients = listOf(ingredient("choque", "Pimienta", null, MeasureUnit.PINCH)))
+            .copy(coverPhoto = "nueva.jpg", createdAt = t2, updatedAt = t2)
+        val backup = backupOf(
+            recipe("primera", "Primera", t2, cover = "primera.jpg"),
+            clash,
+            categories = defaultCategories() + Category("cat-copia", "Arroces", "🍚", "#B5733A", BaseType.FOOD, 4, false),
+        ).copy(settings = BackupSettings(BackupThemeSettings(true, ThemeChoice.NOCTURNO, ThemeChoice.CALIDO, "19:00", "08:00"), 240))
+        val zip = backupZip(backup, "primera.jpg" to fakePhoto(6), "nueva.jpg" to fakePhoto(7))
+
+        assertThat(local.import(zip, ImportMode.MERGE)).isEqualTo(ImportResult.Error("No se pudo importar la copia. No se ha cambiado nada."))
+
+        // Ni recetas ni categorías a medias, ni fotos nuevas en la carpeta, ni ajustes cambiados.
+        assertThat(local.snapshot()).isEqualTo(before)
+        assertThat(local.cacheFiles()).isEmpty()
+    }
+
+    @Test
+    fun oversizedEntries_areRejected_andDataUnchanged() = runBlocking<Unit> {
+        seedLocal()
+        val bigImage = ByteArray(25 * 1024 * 1024 + 1)
+        assertRejectedWithoutChanges(
+            backupZip(backupOf(recipe("copia", "Paella", t2, cover = "grande.jpg")), "grande.jpg" to bigImage),
+            "Este archivo no es una copia del Recetario.",
+        )
+        val bigJson = "{\"schemaVersion\":1,\"relleno\":\"" + "x".repeat(16 * 1024 * 1024) + "\"}"
+        assertRejectedWithoutChanges(zipOf(BACKUP_JSON_ENTRY to bigJson.toByteArray()), "Este archivo no es una copia del Recetario.")
+    }
+
+    @Test
+    fun photosThatCannotBeCopied_areCounted() = runBlocking<Unit> {
+        // La carpeta de fotos no se puede crear (hay un archivo con su nombre).
+        local.photos.dir.writeText("no soy una carpeta")
+
+        val result = local.import(validZip, ImportMode.REPLACE_ALL)
+
+        assertThat(result).isEqualTo(ImportResult.Ok(recipes = 1, images = 0, failedImages = 1))
+        assertThat(local.recipe("copia")!!.coverPhoto).isEqualTo("copia.jpg")
+        assertThat(local.cacheFiles()).isEmpty()
+    }
+
+    @Test
+    fun preview_countsRecipes_andChangesNothing() = runBlocking<Unit> {
+        seedLocal()
+        val before = local.snapshot()
+        val zip = backupZip(backupOf(recipe("a", "A", t2), recipe("b", "B", t2), recipe("c", "C", t2, cover = "c.jpg")), "c.jpg" to fakePhoto(3))
+
+        assertThat(local.preview(zip)).isEqualTo(PreviewResult.Ok(backupRecipes = 3, localRecipes = 1))
+        assertThat(local.preview("no es un zip".toByteArray())).isEqualTo(PreviewResult.Error("Este archivo no es una copia del Recetario."))
+        assertThat(local.preview(zipOf(BACKUP_JSON_ENTRY to """{"schemaVersion":2}""".toByteArray())))
+            .isEqualTo(PreviewResult.Error("Esta copia es de una versión más nueva de la app. Actualiza la app e inténtalo de nuevo."))
+
+        assertThat(local.snapshot()).isEqualTo(before)
+        assertThat(local.backups()).isEmpty()
+        assertThat(local.cacheFiles()).isEmpty()
+    }
+
+    @Test
+    fun import_doesNotCloseTheCallersStream() = runBlocking<Unit> {
+        var closed = false
+        val input = object : java.io.ByteArrayInputStream(validZip) {
+            override fun close() {
+                closed = true
+            }
+        }
+
+        assertThat(local.manager.import(input, ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 1, images = 1))
+        assertThat(closed).isFalse()
+    }
+
+    @Test
     fun importingTwice_isStable() = runBlocking<Unit> {
         seedLocal()
         val zip = local.exportBytes()

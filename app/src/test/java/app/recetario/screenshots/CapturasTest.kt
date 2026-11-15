@@ -1,5 +1,6 @@
 package app.recetario.screenshots
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.LocalActivityResultRegistryOwner
@@ -22,6 +23,11 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.navigation.NavHostController
+import androidx.test.core.app.ApplicationProvider
+import app.recetario.backup.backupOf
+import app.recetario.backup.backupZip
+import org.robolectric.Shadows.shadowOf
+import java.io.ByteArrayInputStream
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
@@ -142,12 +148,30 @@ class CapturasTest {
         captureCooking(c, nav, name)
     }
 
-    /** Copias de seguridad, el panel de «Importar copia» y la confirmación roja de «Reemplazar todo». */
+    /**
+     * Copias de seguridad (arriba y la lista «Copias en el teléfono», con una buena y una dañada), el panel de
+     * «Importar copia» y la confirmación roja de «Reemplazar todo».
+     */
     private fun captureBackup(c: AppContainer, nav: NavHostController, name: String) {
-        runBlocking { c.settingsRepository.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-10T18:05:00Z")) } }
+        runBlocking {
+            c.settingsRepository.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-10T18:05:00Z")) }
+            val dir = c.backupManager.localBackupsDir.apply { mkdirs() }
+            File(dir, "antes-de-importar-2026-11-12-1830.zip").outputStream().use { c.backupManager.export(it) }
+            File(dir, "antes-de-importar-2026-11-01-0900.zip").writeText("roto")
+        }
+        // El zip que «elige» el selector falso: se comprueba entero antes de ofrecer nada.
+        val chosen = backupZip(
+            backupOf(sampleRecipe("p1", "Paella"), sampleRecipe("p2", "Gazpacho"), sampleRecipe("p3", "Flan")),
+        )
+        shadowOf(ApplicationProvider.getApplicationContext<Context>().contentResolver)
+            .registerInputStreamSupplier(Uri.parse(PICKED_URI)) { ByteArrayInputStream(chosen) }
         rule.runOnIdle { nav.navigate(Backup) }
         rule.waitFor(hasTestTag("backup-last-external"))
         save("copias-$name")
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("local-backup-antes-de-importar-2026-11-01-0900.zip"))
+        rule.waitFor(hasText("Copia dañada"))
+        save("copias-telefono-$name")
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("backup-import"))
         rule.onNodeWithTag("backup-import").performClick()
         rule.waitFor(hasTestTag("import-mode-panel"))
         save("copias-importar-$name")
@@ -161,11 +185,15 @@ class CapturasTest {
      * Selector de archivos del sistema falso: «elige» un zip al momento (no se llega a abrir). Lo demás (el permiso
      * de notificaciones del modo cocina) se queda sin respuesta, como con el registro real en Robolectric.
      */
+    private companion object {
+        const val PICKED_URI = "content://capturas/Recetario-2026-11-13.zip"
+    }
+
     private class FilePicker : ActivityResultRegistryOwner {
         override val activityResultRegistry = object : ActivityResultRegistry() {
             override fun <I, O> onLaunch(requestCode: Int, contract: ActivityResultContract<I, O>, input: I, options: ActivityOptionsCompat?) {
                 if (contract is ActivityResultContracts.OpenDocument || contract is ActivityResultContracts.CreateDocument) {
-                    dispatchResult(requestCode, Uri.parse("content://capturas/Recetario-2026-11-13.zip"))
+                    dispatchResult(requestCode, Uri.parse(PICKED_URI))
                 }
             }
         }

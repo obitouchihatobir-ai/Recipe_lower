@@ -36,9 +36,15 @@ const val BACKUP_SCHEMA_VERSION = 1
 const val BACKUP_JSON_ENTRY = "backup.json"
 const val BACKUP_IMAGES_PREFIX = "images/"
 
+/** Límites al leer una copia: un `backup.json` o una foto mayores no son nuestros (500 recetas ocupan pocos MB). */
+const val BACKUP_MAX_JSON_BYTES = 16 * 1024 * 1024
+const val BACKUP_MAX_IMAGE_BYTES = 25 * 1024 * 1024
+
 /**
  * Contenido de `backup.json`. Las fechas van en ISO-8601 (`Instant` en UTC; las horas, `HH:mm`).
  * No incluye el estado de las copias, el permiso de notificaciones, los borradores ni la clave de la IA.
+ * [images] es el manifiesto: las fotos que de verdad van en `images/`. Si falta alguna, la copia está
+ * incompleta (por ejemplo, un zip cortado). Vacío en las copias sin fotos.
  */
 @Serializable
 data class BackupFile(
@@ -49,6 +55,7 @@ data class BackupFile(
     val recipes: List<BackupRecipe>,
     val shoppingItems: List<BackupShoppingItem>,
     val settings: BackupSettings,
+    val images: List<String> = emptyList(),
 )
 
 @Serializable
@@ -168,23 +175,31 @@ sealed interface BackupDecodeResult {
     data object Invalid : BackupDecodeResult
 }
 
-/** Lee primero solo `schemaVersion`, para avisar de una copia más nueva aunque su formato haya cambiado. */
+/**
+ * Lee el JSON una sola vez; mira primero `schemaVersion`, para avisar de una copia más nueva aunque su formato
+ * haya cambiado, y después convierte el árbol ya leído.
+ */
 fun decodeBackup(text: String): BackupDecodeResult {
+    val element = try {
+        backupJson.parseToJsonElement(text)
+    } catch (_: Exception) {
+        return BackupDecodeResult.Invalid
+    }
     val version = try {
-        backupJson.parseToJsonElement(text).jsonObject["schemaVersion"]?.jsonPrimitive?.int
+        element.jsonObject["schemaVersion"]?.jsonPrimitive?.int
     } catch (_: Exception) {
         null
     } ?: return BackupDecodeResult.Invalid
     if (version < 1) return BackupDecodeResult.Invalid
     if (version > BACKUP_SCHEMA_VERSION) return BackupDecodeResult.NewerSchema
     return try {
-        BackupDecodeResult.Ok(backupJson.decodeFromString(BackupFile.serializer(), text))
+        BackupDecodeResult.Ok(backupJson.decodeFromJsonElement(BackupFile.serializer(), element))
     } catch (_: Exception) {
         BackupDecodeResult.Invalid
     }
 }
 
-/** Arma la copia a partir de los datos de la app. */
+/** Arma la copia a partir de los datos de la app; [images] son las fotos que irán en el zip. */
 fun backupFileOf(
     appVersion: String,
     createdAt: Instant,
@@ -193,6 +208,7 @@ fun backupFileOf(
     shoppingItems: List<ShoppingItem>,
     themeSettings: ThemeSettings,
     cupMl: Int,
+    images: List<String> = emptyList(),
 ): BackupFile {
     val baseTypes = categories.associate { it.id to it.baseType }
     return BackupFile(
@@ -202,6 +218,7 @@ fun backupFileOf(
         recipes = recipes.map { it.toBackup(baseTypes[it.categoryId]) },
         shoppingItems = shoppingItems.map { it.toBackup() },
         settings = BackupSettings(themeSettings.toBackup(), cupMl),
+        images = images,
     )
 }
 
@@ -226,10 +243,13 @@ data class ImportData(
 /**
  * Comprueba toda la copia y la convierte; lanza [InvalidBackupException] si algo no vale. Se llama antes de
  * tocar la base de datos. Los identificadores no pueden estar vacíos ni repetirse (en ingredientes y pasos,
- * en toda la copia); los nombres de foto deben ser nombres simples de archivo. Porciones y sabores fuera de
- * rango se ajustan a lo que la app sabe mostrar.
+ * en toda la copia) y el manifiesto de fotos solo admite nombres simples de archivo. Una receta que apunta a
+ * una foto con un nombre que no es simple se trata como si la foto faltara: se importa sin ella (ese nombre
+ * nunca es una foto nuestra y, guardado, podría hacer borrar otro archivo). Porciones y sabores fuera de rango
+ * se ajustan a lo que la app sabe mostrar.
  */
 fun BackupFile.toImportData(): ImportData {
+    if (images.any { !isSafeBackupFileName(it) }) throw InvalidBackupException("Nombre de foto no permitido en el manifiesto")
     requireUniqueIds("categoría", categories.map { it.id })
     requireUniqueIds("receta", recipes.map { it.id })
     requireUniqueIds("ingrediente", recipes.flatMap { r -> r.ingredients.map { it.id } })
@@ -261,8 +281,6 @@ private fun time(text: String): LocalTime = try {
     throw InvalidBackupException("Hora ilegible: «$text»", e)
 }
 
-private fun photo(name: String): String =
-    if (isSafeBackupFileName(name)) name else throw InvalidBackupException("Nombre de foto no permitido: «$name»")
 
 private fun Category.toBackup() = BackupCategory(id, name, emoji, colorHex, baseType, sortOrder, isDefault)
 
@@ -280,7 +298,7 @@ private fun Recipe.toBackup(categoryBaseType: BaseType?) = BackupRecipe(
 )
 
 private fun BackupRecipe.toRecipe() = Recipe(
-    id = id, title = title, categoryId = categoryId, coverPhoto = coverPhoto?.let(::photo), description = description,
+    id = id, title = title, categoryId = categoryId, coverPhoto = coverPhoto?.takeIf(::isSafeBackupFileName), description = description,
     totalMinutes = totalMinutes, servings = servings.coerceAtLeast(1), difficulty = difficulty,
     flavor = FlavorProfile(
         sweet = flavor.sweet.coerceIn(0, 3), salty = flavor.salty.coerceIn(0, 3), sour = flavor.sour.coerceIn(0, 3),
@@ -289,7 +307,7 @@ private fun BackupRecipe.toRecipe() = Recipe(
     ),
     serveTemp = serveTemp, moments = moments.toSet(), alcoholic = alcoholic, course = course,
     ingredients = ingredients.map { Ingredient(it.id, it.section, it.name, it.quantity, it.unit, it.customUnit, it.note) },
-    steps = steps.map { Step(it.id, it.text, it.photos.map(::photo), it.timerSeconds, it.ingredientIds.toSet()) },
+    steps = steps.map { Step(it.id, it.text, it.photos.filter(::isSafeBackupFileName), it.timerSeconds, it.ingredientIds.toSet()) },
     tags = tags, notes = notes, favorite = favorite, sourceUrl = sourceUrl, aiGenerated = aiGenerated,
     createdAt = instant(createdAt), updatedAt = instant(updatedAt),
 )

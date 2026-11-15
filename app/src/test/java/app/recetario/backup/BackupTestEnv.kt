@@ -69,6 +69,10 @@ class BackupTestEnv(private val tmp: TemporaryFolder, val clock: Clock = backupC
 
     suspend fun import(zip: ByteArray, mode: ImportMode): ImportResult = manager.import(ByteArrayInputStream(zip), mode)
 
+    suspend fun preview(zip: ByteArray): PreviewResult = manager.preview(ByteArrayInputStream(zip))
+
+    fun localFile(name: String) = File(backupsDir, name)
+
     suspend fun recipeIds(): List<String> = recipes.observeSummaries().first().map { it.id }.sorted()
 
     suspend fun recipe(id: String): Recipe? = recipes.observeRecipe(id).first()
@@ -116,6 +120,25 @@ fun zipOf(vararg entries: Pair<String, ByteArray>): ByteArray {
     return out.toByteArray()
 }
 
+/**
+ * Un zip cortado justo después de sus primeras [keep] entradas (sin las demás ni el directorio central): quien lo
+ * lee en flujo lo ve completo, solo el manifiesto de fotos delata lo que falta.
+ */
+fun zipCutAfter(keep: Int, vararg entries: Pair<String, ByteArray>): ByteArray {
+    val out = ByteArrayOutputStream()
+    var cut = 0
+    ZipOutputStream(out).use { zip ->
+        entries.forEachIndexed { i, (name, bytes) ->
+            zip.putNextEntry(ZipEntry(name))
+            zip.write(bytes)
+            zip.closeEntry()
+            zip.flush()
+            if (i == keep - 1) cut = out.size()
+        }
+    }
+    return out.toByteArray().copyOf(cut)
+}
+
 /** Entradas de un zip: nombre → contenido. */
 fun unzip(bytes: ByteArray): Map<String, ByteArray> {
     val result = LinkedHashMap<String, ByteArray>()
@@ -128,8 +151,11 @@ fun unzip(bytes: ByteArray): Map<String, ByteArray> {
     return result
 }
 
-fun backupZip(file: BackupFile, vararg images: Pair<String, ByteArray>): ByteArray =
-    zipOf(BACKUP_JSON_ENTRY to encodeBackup(file).toByteArray(), *images.map { (n, b) -> "images/$n" to b }.toTypedArray())
+/** Zip de [file] con [images]; si el manifiesto de [file] está vacío, se rellena con esas fotos (como el exportador). */
+fun backupZip(file: BackupFile, vararg images: Pair<String, ByteArray>): ByteArray {
+    val withManifest = if (file.images.isEmpty()) file.copy(images = images.map { it.first }) else file
+    return zipOf(BACKUP_JSON_ENTRY to encodeBackup(withManifest).toByteArray(), *images.map { (n, b) -> "images/$n" to b }.toTypedArray())
+}
 
 /** Una copia con las categorías de serie, sin compra y con los ajustes de serie. */
 fun backupOf(vararg recipes: Recipe, categories: List<Category> = defaultCategories()): BackupFile = backupFileOf(

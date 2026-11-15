@@ -14,6 +14,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.core.app.ActivityOptionsCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -122,7 +123,8 @@ class BackupScreenTest {
 
         rule.onNodeWithTag("backup-import").performClick()
         rule.waitFor(hasTestTag("import-mode-panel"))
-        assertThat((picker.inputs.single() as Array<*>).toList()).containsExactly("application/zip", "application/octet-stream").inOrder()
+        assertThat((picker.inputs.single() as Array<*>).toList())
+            .containsExactly("application/zip", "application/x-zip-compressed", "application/octet-stream").inOrder()
         rule.onNodeWithText("Añade lo que falte y actualiza lo más reciente. No borra nada.").assertExists()
         rule.onNodeWithText("Sustituye todas tus recetas por las de la copia. Antes se guarda una copia de lo actual.").assertExists()
 
@@ -130,14 +132,16 @@ class BackupScreenTest {
         rule.onNodeWithTag("import-replace").performClick()
         rule.waitFor(hasTestTag("replace-confirm-panel"))
         rule.onNodeWithTag("import-mode-panel").assertDoesNotExist()
-        assertThat(documents.opened).isEmpty()
+        rule.onNodeWithText("La copia tiene 1 receta; ahora tienes 1.", substring = true).assertExists()
+        // Solo se ha leído para comprobarla: nada ha cambiado.
+        assertThat(documents.opened).containsExactly(pickedUri.toString())
         assertThat(recipeIds()).containsExactly("local")
 
         // Cancelar en la segunda: sigue sin cambiar nada.
         rule.onNodeWithTag("replace-cancel").performClick()
         rule.waitForGone(hasTestTag("replace-confirm-panel"))
         rule.waitForIdle()
-        assertThat(documents.opened).isEmpty()
+        assertThat(documents.opened).hasSize(1)
         assertThat(recipeIds()).containsExactly("local")
 
         // Ahora sí: las dos confirmaciones.
@@ -148,7 +152,6 @@ class BackupScreenTest {
         rule.onNodeWithTag("replace-confirm").performClick()
 
         rule.waitFor(hasText("Copia importada: 1 receta, 0 fotos."))
-        assertThat(documents.opened).containsExactly(pickedUri.toString())
         assertThat(recipeIds()).containsExactly("copia")
     }
 
@@ -166,14 +169,74 @@ class BackupScreenTest {
     }
 
     @Test
-    fun importError_showsTheReason() {
+    fun importError_isShownRightAfterChoosingTheFile() {
         launch(FakeDocuments("no es un zip".toByteArray()))
 
         rule.onNodeWithTag("backup-import").performClick()
-        rule.waitFor(hasTestTag("import-merge"))
-        rule.onNodeWithTag("import-merge").performClick()
 
         rule.waitFor(hasText("Este archivo no es una copia del Recetario."))
+        rule.onNodeWithTag("import-mode-panel").assertDoesNotExist()
+    }
+
+    /** Deja en el teléfono la copia previa de «Tortilla local» y en la app solo la paella de la copia. */
+    private fun importOverLocalRecipe(): String {
+        runBlocking {
+            container.recipeRepository.save(sampleRecipe("local", "Tortilla local"))
+            val result = container.backupManager.import(ByteArrayInputStream(backupWithPaella()), ImportMode.REPLACE_ALL)
+            assertThat(result).isEqualTo(ImportResult.Ok(recipes = 1, images = 0))
+        }
+        return "antes-de-importar-2026-11-13-2140.zip"
+    }
+
+    @Test
+    fun localCopies_restoreAsksTwice_andBringsBackThePreviousData() {
+        val name = importOverLocalRecipe()
+        launch(FakeDocuments())
+        rule.waitFor(hasText("Antes de importar · 13 de noviembre de 2026, 21:40"))
+        rule.onNodeWithText("1 receta").assertExists()
+
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("local-restore-$name"))
+        rule.onNodeWithTag("local-restore-$name").performClick()
+        rule.waitFor(hasTestTag("import-mode-panel"))
+        // Restaurar es siempre «Reemplazar todo»: no se ofrece combinar.
+        rule.onNodeWithTag("import-merge").assertDoesNotExist()
+        rule.onNodeWithTag("import-replace").performClick()
+        rule.waitFor(hasTestTag("replace-confirm-panel"))
+        rule.onNodeWithText("La copia tiene 1 receta; ahora tienes 1.", substring = true).assertExists()
+        assertThat(recipeIds()).containsExactly("copia")
+        rule.onNodeWithTag("replace-confirm").performClick()
+
+        rule.waitFor(hasText("Copia importada: 1 receta, 0 fotos."))
+        assertThat(recipeIds()).containsExactly("local")
+        // La nueva copia previa (con la paella) aparece en la lista.
+        rule.waitFor(hasTestTag("local-backup-antes-de-importar-2026-11-13-2140-2.zip"))
+    }
+
+    @Test
+    fun localCopies_saveOutside_copiesTheFileExactly() {
+        val name = importOverLocalRecipe()
+        val documents = FakeDocuments()
+        val picker = launch(documents)
+        rule.waitFor(hasTestTag("local-save-$name"))
+
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("local-save-$name"))
+        rule.onNodeWithTag("local-save-$name").performClick()
+
+        rule.waitFor(hasText("Copia guardada."))
+        assertThat(picker.inputs.single()).isEqualTo(name)
+        val file = java.io.File(container.backupManager.localBackupsDir, name)
+        assertThat(documents.written.toByteArray().toList()).isEqualTo(file.readBytes().toList())
+    }
+
+    @Test
+    fun localCopies_damagedOnes_haveNoActions() {
+        val dir = container.backupManager.localBackupsDir.apply { mkdirs() }
+        java.io.File(dir, "antes-de-importar-2026-11-01-0900.zip").writeText("roto")
+        launch(FakeDocuments())
+
+        rule.waitFor(hasText("Copia dañada"))
+        rule.onNodeWithTag("local-restore-antes-de-importar-2026-11-01-0900.zip").assertDoesNotExist()
+        rule.onNodeWithTag("local-save-antes-de-importar-2026-11-01-0900.zip").assertDoesNotExist()
     }
 
     @Test

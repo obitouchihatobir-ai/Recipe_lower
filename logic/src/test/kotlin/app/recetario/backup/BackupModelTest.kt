@@ -138,15 +138,43 @@ class BackupModelTest {
     }
 
     @Test
-    fun toImportData_rejectsUnsafePhotoNames() {
+    fun toImportData_dropsUnsafePhotoReferences_likeAMissingPhoto() {
+        // Nunca pueden ser fotos nuestras y, guardadas tal cual, podrían borrar otro archivo de la app.
         for (name in listOf("../recetario.db", "fotos/a.jpg", "a\\b.jpg", "..", "", "/a.jpg")) {
-            val cover = backup().let { it.copy(recipes = it.recipes.map { r -> r.copy(coverPhoto = name) }) }
-            assertThrows(InvalidBackupException::class.java) { cover.toImportData() }
-            val step = backup().let { b ->
-                b.copy(recipes = b.recipes.map { r -> r.copy(steps = r.steps.map { s -> s.copy(photos = listOf(name)) }) })
+            val b = backup().let { f ->
+                f.copy(recipes = f.recipes.map { r -> r.copy(coverPhoto = name, steps = r.steps.map { s -> s.copy(photos = listOf(name, "buena.jpg")) }) })
             }
-            assertThrows(InvalidBackupException::class.java) { step.toImportData() }
+            val recipes = b.toImportData().recipes.map { it.recipe }
+            assertThat(recipes.map { it.coverPhoto }).containsExactly(null, null)
+            assertThat(recipes.first().steps.map { it.photos }).containsExactly(listOf("buena.jpg"), listOf("buena.jpg"))
         }
+    }
+
+    @Test
+    fun imagesManifest_roundTrips_andIsEmptyInOlderCopies() {
+        val withImages = backupFileOf(
+            appVersion = "0.1.0", createdAt = created, categories = categories, recipes = listOf(recipe),
+            shoppingItems = emptyList(), themeSettings = theme, cupMl = 240, images = listOf("portada.jpg", "paso-1a.jpg"),
+        )
+        assertThat(withImages.images).containsExactly("portada.jpg", "paso-1a.jpg").inOrder()
+        assertThat(decodeBackup(encodeBackup(withImages))).isEqualTo(BackupDecodeResult.Ok(withImages))
+        assertThat(backup().images).isEmpty()
+        val older = encodeBackup(backup()).replace(",\"images\":[]", "")
+        assertThat(older).doesNotContain("\"images\"")
+        assertThat((decodeBackup(older) as BackupDecodeResult.Ok).file.images).isEmpty()
+    }
+
+    @Test
+    fun toImportData_rejectsUnsafeNamesInTheImagesManifest() {
+        for (name in listOf("../recetario.db", "a/b.jpg", "")) {
+            assertThrows(InvalidBackupException::class.java) { backup().copy(images = listOf(name)).toImportData() }
+        }
+    }
+
+    @Test
+    fun limits() {
+        assertThat(BACKUP_MAX_JSON_BYTES).isEqualTo(16 * 1024 * 1024)
+        assertThat(BACKUP_MAX_IMAGE_BYTES).isEqualTo(25 * 1024 * 1024)
     }
 
     @Test
