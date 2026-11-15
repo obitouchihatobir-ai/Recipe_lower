@@ -65,7 +65,7 @@ sealed interface AutoBackupResult {
 
 /**
  * Copias de seguridad: exportar e importar un zip, las copias del teléfono (`filesDir/backups/`: las semanales
- * `Recetario-…zip` y las previas a importar `antes-de-importar-…zip`) y la copia en Drive. Todo el trabajo va en
+ * `Sazon-…zip` y las previas a importar `antes-de-importar-…zip`) y la copia en Drive. Todo el trabajo va en
  * [io] y de una en una: una exportación nunca lee a medias una importación y una rotación nunca borra la copia que
  * se está restaurando. Una copia solo se da por buena (y solo sale del teléfono) si se puede restaurar ([inspect]).
  * Nunca lanza excepciones salvo la cancelación.
@@ -92,7 +92,7 @@ class BackupManager(
     /** Copia del teléfono que se está restaurando (la rotación no la borra). Solo se usa con [mutex]. */
     private var restoring: String? = null
 
-    /** Nombre que se propone al exportar: `Recetario-AAAA-MM-DD.zip`. */
+    /** Nombre que se propone al exportar: `Sazon-AAAA-MM-DD.zip`. */
     fun suggestedExportName(): String = exportFileName(LocalDate.now(clock))
 
     /**
@@ -223,7 +223,7 @@ class BackupManager(
     }
 
     /**
-     * Copia semanal en `filesDir/backups/Recetario-AAAA-MM-DD-HHmm.zip`: se escribe en un temporal (con fsync), se
+     * Copia semanal en `filesDir/backups/Sazon-AAAA-MM-DD-HHmm.zip`: se escribe en un temporal (con fsync), se
      * comprueba que se puede restaurar y solo entonces toma su nombre (nunca pisa otra: añade `-2`, `-3`…). Después
      * se borran las semanales que sobran (la más reciente de cada una de las 4 últimas semanas; nunca la recién
      * escrita, una «del futuro» ni otro tipo de copia) y se anota `lastLocal`. Null si no se pudo escribir o

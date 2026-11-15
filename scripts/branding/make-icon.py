@@ -17,11 +17,14 @@ Cómo sale cada capa del original (1254×1254: un cuadrado redondeado sobre esqu
     lleva el degradado que se ajusta a sus píxeles. Las esquinas negras nunca se usan.
   - Primer plano: campana, bandeja y vapores recortados del original con bordes suaves (el alfa de cada borde se
     calcula frente al fondo que lo rodea; la sombra de la bandeja no se lleva). Su recuadro va al centro del lienzo y
-    se escala para que ningún punto quede a más de 30 dp del centro; después se comprueba a cada densidad que todo
-    queda dentro de 32 dp (zona segura: círculo de 66 dp) y, si no, el script falla.
+    se escala para que ningún punto quede a más de 31,3 dp del centro (el tamaño del motivo en el original); después
+    se comprueba a cada densidad que todo queda dentro de 32 dp (zona segura: círculo de 66 dp) y, si no, el script
+    falla. Se generan y comprueban todas las densidades antes de escribir ninguna: un fallo no deja un juego mezclado.
   - Monocromo: la misma silueta en blanco sobre transparente (iconos temáticos de Android 13+).
 
-El resultado es reproducible: no hay nada aleatorio y siempre se parte del mismo original.
+El resultado es reproducible: no hay nada aleatorio y siempre se parte del mismo original. Los recursos del
+repositorio se generaron con Python 3.13, Pillow 12.3.0 y numpy 2.5.3 (otras versiones pueden cambiar algún byte
+de los PNG por el redondeo de los filtros, no el dibujo).
 """
 
 import argparse
@@ -39,7 +42,7 @@ CANVAS_DP = 108.0  # lienzo del icono adaptativo
 VIEWPORT_DP = 72.0  # lo que se ve tras la máscara del lanzador
 SAFE_RADIUS_DP = 33.0  # zona segura: círculo de 66 dp
 MAX_RADIUS_DP = 32.0  # margen: nada del primer plano más allá de este radio
-FG_RADIUS_DP = 30.0  # radio del dibujo del primer plano (antes de suavizar los bordes a cada densidad)
+FG_RADIUS_DP = 31.3  # radio del dibujo del primer plano (antes de suavizar los bordes a cada densidad)
 DENSITIES = {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}
 
 ADAPTIVE_XML = """<?xml version="1.0" encoding="utf-8"?>
@@ -364,23 +367,28 @@ def main():
     orig = Original(ORIGINAL)
     fg = orig.foreground()
     place = placement(orig, fg)
-    largest = {}
+    # Primero se generan y comprueban todas las densidades; solo si todas valen se escribe alguna.
+    layers = {}
     for density, size in DENSITIES.items():
-        folder = RES / f"mipmap-{density}"
-        folder.mkdir(parents=True, exist_ok=True)
         background = render_background(orig, size)
         foreground = render_foreground(fg, orig, size, place)
         mono = monochrome(foreground)
         radius = max_radius_dp(foreground)
         if radius > MAX_RADIUS_DP:
-            sys.exit(f"{density}: el primer plano llega a {radius:.2f} dp del centro (máximo {MAX_RADIUS_DP} dp).")
+            sys.exit(f"{density}: el primer plano llega a {radius:.2f} dp del centro (máximo {MAX_RADIUS_DP} dp). No se ha escrito nada.")
         if np.asarray(background).mean(axis=2).min() < 150:
-            sys.exit(f"{density}: el fondo tiene píxeles oscuros: ¿se han colado las esquinas negras?")
+            sys.exit(f"{density}: el fondo tiene píxeles oscuros: ¿se han colado las esquinas negras? No se ha escrito nada.")
+        layers[density] = (background, foreground, mono, radius)
+
+    for density, (background, foreground, mono, radius) in layers.items():
+        folder = RES / f"mipmap-{density}"
+        folder.mkdir(parents=True, exist_ok=True)
         background.save(folder / "ic_launcher_background.png", optimize=True)
         foreground.save(folder / "ic_launcher_foreground.png", optimize=True)
         mono.save(folder / "ic_launcher_monochrome.png", optimize=True)
-        print(f"mipmap-{density}: {size} px, primer plano hasta {radius:.2f} dp del centro")
-        largest = {"background": background, "foreground": foreground, "mono": mono}
+        print(f"mipmap-{density}: {DENSITIES[density]} px, primer plano hasta {radius:.2f} dp del centro")
+    background, foreground, mono, _ = layers[max(DENSITIES, key=DENSITIES.get)]
+    largest = {"background": background, "foreground": foreground, "mono": mono}
 
     anydpi = RES / "mipmap-anydpi"
     anydpi.mkdir(parents=True, exist_ok=True)

@@ -216,6 +216,7 @@ Base de datos local (Room/SQLite) más archivos de imagen en el almacenamiento i
 
 ### 8.5 Copias de seguridad (etapa 1)
 - **Exportar:** un único `.zip` (por ejemplo `Recetario-2026-11-13.zip`) con un JSON de todos los datos, con versión de esquema, y la carpeta de imágenes. El usuario elige dónde guardarlo (Google Drive, Descargas…).
+  - Nota: desde la Enmienda 2 del plan de la etapa 1 la app se llama «Sazón» y el archivo es `Sazon-AAAA-MM-DD.zip` (sin tilde); las copias semanales del teléfono, `Sazon-AAAA-MM-DD-HHmm.zip`.
 - **Importar:** «Reemplazar todo» (con confirmación, y después de una copia automática de lo actual) o «Combinar» (sin duplicar; identificadores estables, UUID). Al combinar, si hay conflicto gana la edición más reciente y nunca se borra nada (decisión de Claude).
 - **Copia automática semanal (opción B, elegida por el usuario):**
   - **En el teléfono:** cada semana se guarda un `.zip` en el almacenamiento interno de la app y se conservan las **4 últimas**.
