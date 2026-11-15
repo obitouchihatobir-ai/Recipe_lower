@@ -10,20 +10,20 @@ class BackupRotationTest {
 
     /** Domingos: cada uno en su semana ISO (de la 41 a la 46). */
     private val weekly = listOf(
-        "Recetario-2026-10-11-0300.zip",
-        "Recetario-2026-10-18-0300.zip",
-        "Recetario-2026-10-25-0300.zip",
-        "Recetario-2026-11-01-0300.zip",
-        "Recetario-2026-11-08-0300.zip",
-        "Recetario-2026-11-13-0300.zip",
+        "Sazon-2026-10-11-0300.zip",
+        "Sazon-2026-10-18-0300.zip",
+        "Sazon-2026-10-25-0300.zip",
+        "Sazon-2026-11-01-0300.zip",
+        "Sazon-2026-11-08-0300.zip",
+        "Sazon-2026-11-13-0300.zip",
     )
 
     @Test
     fun rotation_keepsNewest4Weeks() {
         assertThat(filesToDelete(weekly.shuffled(), now, keep = 4))
-            .containsExactly("Recetario-2026-10-11-0300.zip", "Recetario-2026-10-18-0300.zip")
+            .containsExactly("Sazon-2026-10-11-0300.zip", "Sazon-2026-10-18-0300.zip")
         // 4 es lo de serie para las copias semanales.
-        assertThat(filesToDelete(weekly, now)).containsExactly("Recetario-2026-10-11-0300.zip", "Recetario-2026-10-18-0300.zip")
+        assertThat(filesToDelete(weekly, now)).containsExactly("Sazon-2026-10-11-0300.zip", "Sazon-2026-10-18-0300.zip")
     }
 
     @Test
@@ -35,62 +35,62 @@ class BackupRotationTest {
     @Test
     fun rotation_sameWeek_keepsOnlyTheNewestOfThatWeek() {
         val names = listOf(
-            "Recetario-2026-10-25-0300.zip",
-            "Recetario-2026-11-09-0300.zip",
-            "Recetario-2026-11-13-2140.zip",
-            "Recetario-2026-11-13-2140-2.zip",
+            "Sazon-2026-10-25-0300.zip",
+            "Sazon-2026-11-09-0300.zip",
+            "Sazon-2026-11-13-2140.zip",
+            "Sazon-2026-11-13-2140-2.zip",
         )
         assertThat(filesToDelete(names, now))
-            .containsExactly("Recetario-2026-11-09-0300.zip", "Recetario-2026-11-13-2140.zip")
+            .containsExactly("Sazon-2026-11-09-0300.zip", "Sazon-2026-11-13-2140.zip")
     }
 
     @Test
     fun rotation_tappingRetryFourTimesInAWeek_keepsTheHistoryOfThePreviousWeeks() {
-        val history = listOf("Recetario-2026-10-25-0300.zip", "Recetario-2026-11-01-0300.zip", "Recetario-2026-11-08-0300.zip")
-        var files = history + "Recetario-2026-11-10-0300.zip"
+        val history = listOf("Sazon-2026-10-25-0300.zip", "Sazon-2026-11-01-0300.zip", "Sazon-2026-11-08-0300.zip")
+        var files = history + "Sazon-2026-11-10-0300.zip"
         for (minute in listOf("2140", "2141", "2142", "2143")) {
-            val written = "Recetario-2026-11-13-$minute.zip"
+            val written = "Sazon-2026-11-13-$minute.zip"
             files = files + written
             files = files - filesToDelete(files, now.withMinute(minute.takeLast(2).toInt()), protect = setOf(written)).toSet()
         }
-        assertThat(files).containsExactlyElementsIn(history + "Recetario-2026-11-13-2143.zip")
+        assertThat(files).containsExactlyElementsIn(history + "Sazon-2026-11-13-2143.zip")
     }
 
     @Test
     fun rotation_weeksAreIsoWeeks_startingOnMonday() {
         val names = listOf(
-            "Recetario-2026-10-25-0300.zip",
-            "Recetario-2026-11-01-0300.zip",
+            "Sazon-2026-10-25-0300.zip",
+            "Sazon-2026-11-01-0300.zip",
             // Domingo 8 (semana 45) y lunes 9 (semana 46): semanas distintas.
-            "Recetario-2026-11-08-2359.zip",
-            "Recetario-2026-11-09-0001.zip",
+            "Sazon-2026-11-08-2359.zip",
+            "Sazon-2026-11-09-0001.zip",
         )
         assertThat(filesToDelete(names, now)).isEmpty()
         // A caballo entre dos años: el 31 de diciembre de 2026 (jueves) es de la semana 53 de 2026, y el
         // 3 de enero de 2027 (domingo) también; el 4 de enero, de la 1 de 2027.
-        val newYear = listOf("Recetario-2026-12-31-1000.zip", "Recetario-2027-01-03-1000.zip", "Recetario-2027-01-04-1000.zip")
-        assertThat(filesToDelete(newYear, LocalDateTime.of(2027, 1, 4, 12, 0))).containsExactly("Recetario-2026-12-31-1000.zip")
+        val newYear = listOf("Sazon-2026-12-31-1000.zip", "Sazon-2027-01-03-1000.zip", "Sazon-2027-01-04-1000.zip")
+        assertThat(filesToDelete(newYear, LocalDateTime.of(2027, 1, 4, 12, 0))).containsExactly("Sazon-2026-12-31-1000.zip")
     }
 
     @Test
     fun rotation_futureNames_areIgnoredAndNeverDeleted() {
-        val future = "Recetario-2027-01-03-0300.zip"
+        val future = "Sazon-2027-01-03-0300.zip"
         // Dentro de un día no es «futuro»: cuenta y es la más reciente de su semana.
-        val tomorrow = "Recetario-2026-11-14-2000.zip"
+        val tomorrow = "Sazon-2026-11-14-2000.zip"
         val names = listOf(
-            "Recetario-2026-10-18-0300.zip",
-            "Recetario-2026-10-25-0300.zip",
-            "Recetario-2026-11-01-0300.zip",
-            "Recetario-2026-11-08-0300.zip",
-            "Recetario-2026-11-13-2140.zip",
+            "Sazon-2026-10-18-0300.zip",
+            "Sazon-2026-10-25-0300.zip",
+            "Sazon-2026-11-01-0300.zip",
+            "Sazon-2026-11-08-0300.zip",
+            "Sazon-2026-11-13-2140.zip",
             tomorrow,
             future,
         )
         val deleted = filesToDelete(names, now)
-        assertThat(deleted).containsExactly("Recetario-2026-10-18-0300.zip", "Recetario-2026-11-13-2140.zip")
+        assertThat(deleted).containsExactly("Sazon-2026-10-18-0300.zip", "Sazon-2026-11-13-2140.zip")
         assertThat(deleted).doesNotContain(future)
         // Aunque todas fueran «del futuro», no se borra ninguna.
-        assertThat(filesToDelete(listOf(future, "Recetario-2027-02-07-0300.zip", "Recetario-2027-03-07-0300.zip"), now, keep = 1)).isEmpty()
+        assertThat(filesToDelete(listOf(future, "Sazon-2027-02-07-0300.zip", "Sazon-2027-03-07-0300.zip"), now, keep = 1)).isEmpty()
     }
 
     @Test
@@ -101,12 +101,12 @@ class BackupRotationTest {
             "antes-de-importar-2026-09-03-1000.zip",
             "antes-de-importar-2026-09-04-1000.zip",
         )
-        val others = listOf("otra.zip", "Recetario-2026-11-13.zip", "Recetario-2026-11-15-0300.zip.tmp", "a-mano.zip")
+        val others = listOf("otra.zip", "Sazon-2026-11-13.zip", "Sazon-2026-11-15-0300.zip.tmp", "a-mano.zip", "Recetario-2026-10-04-0300.zip")
         val all = weekly + safety + others
 
         // Las semanales: 4 semanas, aunque haya copias previas más antiguas.
         assertThat(filesToDelete(all, now, keep = 4, kind = LocalBackupKind.AUTOMATIC))
-            .containsExactly("Recetario-2026-10-11-0300.zip", "Recetario-2026-10-18-0300.zip")
+            .containsExactly("Sazon-2026-10-11-0300.zip", "Sazon-2026-10-18-0300.zip")
         // Las previas a importar: los 3 archivos más recientes (aunque sean de la misma semana).
         assertThat(filesToDelete(all, now, keep = SAFETY_COPIES_KEPT, kind = LocalBackupKind.BEFORE_IMPORT))
             .containsExactly("antes-de-importar-2026-09-01-1000.zip")
@@ -129,8 +129,8 @@ class BackupRotationTest {
     @Test
     fun rotation_neverDeletesAProtectedFile() {
         // La que se acaba de escribir en una semana en la que ya había una más reciente (el reloj retrocedió unas horas).
-        val justWritten = "Recetario-2026-11-13-0900.zip"
-        val names = listOf("Recetario-2026-11-01-0300.zip", "Recetario-2026-11-08-0300.zip", "Recetario-2026-11-13-2100.zip", justWritten)
+        val justWritten = "Sazon-2026-11-13-0900.zip"
+        val names = listOf("Sazon-2026-11-01-0300.zip", "Sazon-2026-11-08-0300.zip", "Sazon-2026-11-13-2100.zip", justWritten)
         assertThat(filesToDelete(names, now, protect = setOf(justWritten))).isEmpty()
 
         // La copia que se está restaurando tampoco se borra.
@@ -147,7 +147,7 @@ class BackupRotationTest {
     @Test
     fun weeklyFileName_isTheAutomaticKind() {
         val name = weeklyBackupFileName(LocalDateTime.of(2026, 11, 15, 3, 5, 59))
-        assertThat(name).isEqualTo("Recetario-2026-11-15-0305.zip")
+        assertThat(name).isEqualTo("Sazon-2026-11-15-0305.zip")
         assertThat(parseLocalBackupName(name)?.kind).isEqualTo(LocalBackupKind.AUTOMATIC)
     }
 }

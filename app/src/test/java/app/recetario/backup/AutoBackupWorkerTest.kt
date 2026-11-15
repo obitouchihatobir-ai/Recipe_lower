@@ -91,7 +91,7 @@ class AutoBackupWorkerTest {
     private lateinit var container: AppContainer
     private lateinit var drive: FakeDriveProvider
     private val context = ApplicationProvider.getApplicationContext<Context>()
-    private val driveUri = "content://$AUTHORITY/Recetario-copia-automatica.zip"
+    private val driveUri = "content://$AUTHORITY/Sazon-copia-automatica.zip"
     private val t0 = Instant.parse("2026-10-01T08:00:00Z")
 
     @Before
@@ -118,7 +118,7 @@ class AutoBackupWorkerTest {
 
     private fun localCopies() = container.backupManager.localBackupsDir.list()?.sorted().orEmpty()
 
-    private fun driveFile() = File(drive.dir, "Recetario-copia-automatica.zip")
+    private fun driveFile() = File(drive.dir, "Sazon-copia-automatica.zip")
 
     @Test
     fun worker_writesVerifiedLocal_andCopiesToDrive() {
@@ -129,8 +129,8 @@ class AutoBackupWorkerTest {
 
         assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
 
-        assertThat(localCopies()).containsExactly("Recetario-2026-11-13-2140.zip")
-        val local = File(container.backupManager.localBackupsDir, "Recetario-2026-11-13-2140.zip")
+        assertThat(localCopies()).containsExactly("Sazon-2026-11-13-2140.zip")
+        val local = File(container.backupManager.localBackupsDir, "Sazon-2026-11-13-2140.zip")
         assertThat(runBlocking { container.backupManager.localBackups() })
             .containsExactly(LocalBackup(local.name, recipes = 2))
         assertThat(drive.modes).containsExactly("wt")
@@ -150,7 +150,7 @@ class AutoBackupWorkerTest {
         // Drive no se reintenta en segundo plano: el error se muestra en Inicio y en Copias de seguridad.
         assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
 
-        assertThat(localCopies()).containsExactly("Recetario-2026-11-13-2140.zip")
+        assertThat(localCopies()).containsExactly("Sazon-2026-11-13-2140.zip")
         assertThat(status()).isEqualTo(
             BackupStatus(
                 lastLocal = testClock.instant(), lastExternal = t0, lastDrive = t0, driveUri = driveUri,
@@ -165,7 +165,7 @@ class AutoBackupWorkerTest {
 
         assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
 
-        assertThat(localCopies()).containsExactly("Recetario-2026-11-13-2140.zip")
+        assertThat(localCopies()).containsExactly("Sazon-2026-11-13-2140.zip")
         assertThat(drive.modes).isEmpty()
         assertThat(status()).isEqualTo(BackupStatus(lastLocal = testClock.instant()))
     }
@@ -228,7 +228,7 @@ class AutoBackupWorkerTest {
         assertThat(drive.modes).containsExactly("wt", "w").inOrder()
         assertThat(status().lastError).isEqualTo(BackupMessages.DRIVE_FAILED)
         assertThat(status().lastExternal).isEqualTo(t0)
-        assertThat(localCopies()).containsExactly("Recetario-2026-11-13-2140.zip")
+        assertThat(localCopies()).containsExactly("Sazon-2026-11-13-2140.zip")
     }
 
     @Test
@@ -241,7 +241,7 @@ class AutoBackupWorkerTest {
         assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
 
         assertThat(drive.modes).containsExactly("wt", "w").inOrder()
-        val local = File(container.backupManager.localBackupsDir, "Recetario-2026-11-13-2140.zip")
+        val local = File(container.backupManager.localBackupsDir, "Sazon-2026-11-13-2140.zip")
         assertThat(driveFile().readBytes().toList()).isEqualTo(local.readBytes().toList())
         assertThat(status().lastError).isNull()
         assertThat(status().lastExternal).isEqualTo(testClock.instant())

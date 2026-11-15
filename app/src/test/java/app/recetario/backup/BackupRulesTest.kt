@@ -64,7 +64,7 @@ class BackupRulesTest {
         )
         for ((domain, path) in listOf(
             "file" to "photos/0b9c-portada.jpg",
-            "file" to "backups/Recetario-2026-11-15-0300.zip",
+            "file" to "backups/Sazon-2026-11-15-0300.zip",
             "file" to "backups/antes-de-importar-2026-11-13-2140.zip",
             "file" to "drafts/new.json",
             // El estado del teléfono (archivo de Drive, fechas de las copias, avisos…) no viaja a otro teléfono.

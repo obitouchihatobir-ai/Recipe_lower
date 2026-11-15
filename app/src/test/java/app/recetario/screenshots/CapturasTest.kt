@@ -36,6 +36,7 @@ import app.recetario.AppContainer
 import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
+import app.recetario.navigation.About
 import app.recetario.navigation.AppNavHost
 import app.recetario.navigation.Appearance
 import app.recetario.navigation.Backup
@@ -68,7 +69,7 @@ import java.io.File
 import java.time.Instant
 
 /**
- * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle, Ajustes, Apariencia, Categorías, Copias de seguridad (también con Google Drive) y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
+ * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle, Ajustes, Acerca de, Apariencia, Categorías, Copias de seguridad (también con Google Drive) y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -140,6 +141,11 @@ class CapturasTest {
         rule.waitFor(hasTestTag("settings-screen"))
         save("ajustes-$name")
 
+        rule.runOnIdle { nav.navigate(About) }
+        rule.waitFor(hasTestTag("about-screen"))
+        rule.waitFor(hasText("Sazón"))
+        save("acerca-de-$name")
+
         rule.runOnIdle { nav.navigate(Appearance) }
         rule.waitFor(hasTestTag("appearance-screen"))
         rule.waitFor(hasTestTag("auto-note"))
@@ -182,7 +188,7 @@ class CapturasTest {
             c.settingsRepository.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-10T18:05:00Z")) }
             val dir = c.backupManager.localBackupsDir.apply { mkdirs() }
             File(dir, "antes-de-importar-2026-11-12-1830.zip").outputStream().use { c.backupManager.export(it) }
-            File(dir, "Recetario-2026-11-08-0300.zip").outputStream().use { c.backupManager.export(it) }
+            File(dir, "Sazon-2026-11-08-0300.zip").outputStream().use { c.backupManager.export(it) }
             File(dir, "antes-de-importar-2026-11-01-0900.zip").writeText("roto")
         }
         // El zip que «elige» el selector falso: se comprueba entero antes de ofrecer nada.
@@ -246,8 +252,8 @@ class CapturasTest {
      * de notificaciones del modo cocina) se queda sin respuesta, como con el registro real en Robolectric.
      */
     private companion object {
-        const val PICKED_URI = "content://capturas/Recetario-2026-11-13.zip"
-        const val DRIVE_URI = "content://capturas/Recetario-copia-automatica.zip"
+        const val PICKED_URI = "content://capturas/Sazon-2026-11-13.zip"
+        const val DRIVE_URI = "content://capturas/Sazon-copia-automatica.zip"
     }
 
     private class FilePicker : ActivityResultRegistryOwner {

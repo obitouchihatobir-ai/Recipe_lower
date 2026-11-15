@@ -74,7 +74,7 @@ class BackupScreenTest {
         }
     }
 
-    private val pickedUri = Uri.parse("content://prueba/Recetario-2026-11-13.zip")
+    private val pickedUri = Uri.parse("content://prueba/Sazon-2026-11-13.zip")
 
     private fun launch(picker: FakePicker = FakePicker(pickedUri)): FakePicker {
         rule.setContent {
@@ -151,7 +151,7 @@ class BackupScreenTest {
 
         rule.onNodeWithTag("backup-import").performClick()
 
-        rule.waitFor(hasText("Este archivo no es una copia del Recetario."))
+        rule.waitFor(hasText("Este archivo no es una copia de Sazón."))
         rule.onNodeWithTag("import-mode-panel").assertDoesNotExist()
     }
 
@@ -223,7 +223,7 @@ class BackupScreenTest {
         rule.onNodeWithTag("backup-export").performClick()
 
         rule.waitFor(hasText("Copia guardada."))
-        assertThat(picker.inputs.single()).isEqualTo("Recetario-2026-11-13.zip")
+        assertThat(picker.inputs.single()).isEqualTo("Sazon-2026-11-13.zip")
         val entries = unzip(documents.written)
         assertThat(decodeBackup(String(entries.getValue("backup.json")))).isInstanceOf(BackupDecodeResult.Ok::class.java)
         rule.waitUntil(5_000) { runBlocking { container.settingsRepository.backupStatus.first().lastExternal } != null }
@@ -244,7 +244,7 @@ class BackupScreenTest {
         assertThat(runBlocking { container.settingsRepository.backupStatus.first().lastExternal }).isNull()
     }
 
-    private val driveUri = "content://drive/Recetario-copia-automatica.zip"
+    private val driveUri = "content://drive/Sazon-copia-automatica.zip"
 
     private fun status() = runBlocking { container.settingsRepository.backupStatus.first() }
 
@@ -267,9 +267,9 @@ class BackupScreenTest {
         tap("drive-setup")
 
         rule.waitFor(hasText("Copia guardada en Google Drive."))
-        assertThat(picker.inputs.single()).isEqualTo("Recetario-copia-automatica.zip")
+        assertThat(picker.inputs.single()).isEqualTo("Sazon-copia-automatica.zip")
         assertThat(documents.persisted).containsExactly(driveUri)
-        val local = java.io.File(container.backupManager.localBackupsDir, "Recetario-2026-11-13-2140.zip")
+        val local = java.io.File(container.backupManager.localBackupsDir, "Sazon-2026-11-13-2140.zip")
         assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(local.readBytes().toList())
         val now = testClock.instant()
         assertThat(status()).isEqualTo(BackupStatus(lastLocal = now, lastExternal = now, lastDrive = now, driveUri = driveUri))
@@ -277,7 +277,7 @@ class BackupScreenTest {
         rule.onNodeWithText("Última copia en el teléfono: 13 de noviembre de 2026, 21:40").assertExists()
         rule.onNodeWithTag("drive-error").assertDoesNotExist()
         // La copia nueva también está en «Copias en el teléfono».
-        rule.waitFor(hasTestTag("local-backup-Recetario-2026-11-13-2140.zip"))
+        rule.waitFor(hasTestTag("local-backup-Sazon-2026-11-13-2140.zip"))
     }
 
     @Test
@@ -295,7 +295,7 @@ class BackupScreenTest {
         assertThat(status().lastError).isEqualTo("No se pudo guardar en Google Drive. Vuelve a elegir el archivo.")
         assertThat(status().lastLocal).isEqualTo(testClock.instant())
         assertThat(status().lastExternal).isNull()
-        assertThat(container.backupManager.localBackupsDir.list()?.toList()).containsExactly("Recetario-2026-11-13-2140.zip")
+        assertThat(container.backupManager.localBackupsDir.list()?.toList()).containsExactly("Sazon-2026-11-13-2140.zip")
 
         documents.failOutput = false
         tap("drive-retry")
@@ -311,7 +311,7 @@ class BackupScreenTest {
         saveRecipe()
         // El archivo de Drive se eligió, pero el permiso ya no está (se borró Drive, se revocó…).
         setStatus { it.copy(driveUri = driveUri) }
-        val newUri = "content://drive/Recetario-copia-automatica (1).zip"
+        val newUri = "content://drive/Sazon-copia-automatica (1).zip"
         val picker = launch(FakePicker(Uri.parse(newUri)))
 
         rule.waitFor(hasTestTag("drive-error"))
@@ -322,7 +322,7 @@ class BackupScreenTest {
         tap("drive-choose")
 
         rule.waitFor(hasText("Copia guardada en Google Drive."))
-        assertThat(picker.inputs.single()).isEqualTo("Recetario-copia-automatica.zip")
+        assertThat(picker.inputs.single()).isEqualTo("Sazon-copia-automatica.zip")
         assertThat(documents.persisted).containsExactly(newUri)
         assertThat(documents.released).containsExactly(driveUri)
         assertThat(status().driveUri).isEqualTo(newUri)
@@ -344,7 +344,7 @@ class BackupScreenTest {
         rule.waitFor(hasText("Copia guardada."))
         rule.waitForGone(hasTestTag("local-error"))
         assertThat(status().localError).isNull()
-        assertThat(container.backupManager.localBackupsDir.list()?.toList()).containsExactly("Recetario-2026-11-13-2140.zip")
+        assertThat(container.backupManager.localBackupsDir.list()?.toList()).containsExactly("Sazon-2026-11-13-2140.zip")
     }
 
     @Test
@@ -368,10 +368,10 @@ class BackupScreenTest {
         rule.onNodeWithTag("drive-replace").performClick()
 
         rule.waitFor(hasText("Copia guardada en Google Drive."))
-        assertThat(picker.inputs.single()).isEqualTo("Recetario-copia-automatica.zip")
+        assertThat(picker.inputs.single()).isEqualTo("Sazon-copia-automatica.zip")
         assertThat(documents.persisted).containsExactly(driveUri)
         assertThat(status().driveUri).isEqualTo(driveUri)
-        val local = java.io.File(container.backupManager.localBackupsDir, "Recetario-2026-11-13-2140.zip")
+        val local = java.io.File(container.backupManager.localBackupsDir, "Sazon-2026-11-13-2140.zip")
         assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(local.readBytes().toList())
     }
 
@@ -407,7 +407,7 @@ class BackupScreenTest {
 
         tap("drive-setup")
 
-        rule.waitFor(hasText("Ese archivo no es una copia de la app. ¿Reemplazarlo?"))
+        rule.waitFor(hasText("Ese archivo no es una copia de Sazón. ¿Reemplazarlo?"))
         rule.onNodeWithTag("drive-import-first").assertDoesNotExist()
         rule.onNodeWithTag("drive-cancel").performClick()
         rule.waitForGone(hasTestTag("drive-replace-panel"))

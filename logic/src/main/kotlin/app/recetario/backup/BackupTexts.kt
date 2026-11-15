@@ -9,8 +9,8 @@ import java.util.Locale
 
 /** Textos de la pantalla «Copias de seguridad». */
 object BackupMessages {
-    const val NOT_A_BACKUP = "Este archivo no es una copia del Recetario."
-    const val NEWER_BACKUP = "Esta copia es de una versión más nueva de la app. Actualiza la app e inténtalo de nuevo."
+    const val NOT_A_BACKUP = "Este archivo no es una copia de Sazón."
+    const val NEWER_BACKUP = "Esta copia es de una versión más nueva de Sazón. Actualiza la app e inténtalo de nuevo."
     const val SAFETY_COPY_FAILED = "No se pudo hacer una copia de seguridad previa. No se ha cambiado nada."
     const val IMPORT_FAILED = "No se pudo importar la copia. No se ha cambiado nada."
     const val OPEN_FAILED = "No se pudo abrir el archivo. No se ha cambiado nada."
@@ -36,15 +36,18 @@ object BackupMessages {
     const val LOCAL_FAILED = "No se pudo hacer la copia semanal en el teléfono."
 
     /** El archivo elegido para Drive ya tenía algo que no es una copia. */
-    const val DRIVE_NOT_A_COPY = "Ese archivo no es una copia de la app. ¿Reemplazarlo?"
+    const val DRIVE_NOT_A_COPY = "Ese archivo no es una copia de Sazón. ¿Reemplazarlo?"
 }
 
 /** El archivo elegido para Drive ya tiene una copia: «Ese archivo ya tiene una copia con 12 recetas; ahora tienes 40.» */
 fun driveExistingCopyText(backupRecipes: Int, localRecipes: Int): String =
     "Ese archivo ya tiene una copia con ${recipeCountText(backupRecipes)}; ahora tienes $localRecipes."
 
+/** Nombre de la app en los nombres de archivo (copias y exportación): sin tilde, para que ningún proveedor ni sistema lo estropee. */
+const val FILE_PREFIX = "Sazon"
+
 /** Nombre que se propone al elegir el archivo de Google Drive de la copia automática. */
-const val DRIVE_DOCUMENT_NAME = "Recetario-copia-automatica.zip"
+const val DRIVE_DOCUMENT_NAME = "$FILE_PREFIX-copia-automatica.zip"
 
 /** «Copia importada: 3 recetas, 1 foto.», y si alguna foto no se pudo copiar, «2 fotos no se pudieron copiar.» */
 fun importSummary(recipes: Int, images: Int, failedImages: Int = 0): String {
@@ -64,14 +67,14 @@ fun replaceComparison(backupRecipes: Int, localRecipes: Int): String =
 
 private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
 
-/** Nombre que se propone al exportar: `Recetario-2026-11-13.zip`. */
-fun exportFileName(date: LocalDate): String = "Recetario-$date.zip"
+/** Nombre que se propone al exportar: `Sazon-2026-11-13.zip`. */
+fun exportFileName(date: LocalDate): String = "$FILE_PREFIX-$date.zip"
 
 /** Copia automática que se guarda antes de «Reemplazar todo»: `antes-de-importar-2026-11-13-2140.zip`. */
 fun safetyCopyFileName(dateTime: LocalDateTime): String = "antes-de-importar-${dateTime.format(STAMP)}.zip"
 
-/** Copia automática semanal del teléfono: `Recetario-2026-11-15-0300.zip`. */
-fun weeklyBackupFileName(dateTime: LocalDateTime): String = "Recetario-${dateTime.format(STAMP)}.zip"
+/** Copia automática semanal del teléfono: `Sazon-2026-11-15-0300.zip`. */
+fun weeklyBackupFileName(dateTime: LocalDateTime): String = "$FILE_PREFIX-${dateTime.format(STAMP)}.zip"
 
 private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm")
 private val LONG_DATE = DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("es-ES"))
@@ -82,7 +85,7 @@ enum class LocalBackupKind(val label: String) { BEFORE_IMPORT("Antes de importar
 /** Lo que dice el nombre de una copia del teléfono: de qué tipo es, cuándo se hizo y su número si hubo varias ese minuto. */
 data class LocalBackupName(val kind: LocalBackupKind, val dateTime: LocalDateTime, val sequence: Int)
 
-private val LOCAL_NAME = Regex("""^(antes-de-importar|Recetario)-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(?:-(\d{1,4}))?\.zip$""")
+private val LOCAL_NAME = Regex("""^(antes-de-importar|$FILE_PREFIX)-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(?:-(\d{1,4}))?\.zip$""")
 
 fun parseLocalBackupName(name: String): LocalBackupName? {
     val m = LOCAL_NAME.matchEntire(name) ?: return null
@@ -92,7 +95,7 @@ fun parseLocalBackupName(name: String): LocalBackupName? {
     } catch (_: Exception) {
         return null
     }
-    val kind = if (prefix == "Recetario") LocalBackupKind.AUTOMATIC else LocalBackupKind.BEFORE_IMPORT
+    val kind = if (prefix == FILE_PREFIX) LocalBackupKind.AUTOMATIC else LocalBackupKind.BEFORE_IMPORT
     return LocalBackupName(kind, dateTime, m.groupValues[7].toIntOrNull() ?: 1)
 }
 

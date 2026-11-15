@@ -44,7 +44,7 @@ class RecipeTextFormatterTest {
             1. Pela la calabaza.
             2. Cuécela 20 minutos.
 
-            Compartido desde mi Recetario
+            Compartido desde Sazón
             """.trimIndent(),
         )
     }

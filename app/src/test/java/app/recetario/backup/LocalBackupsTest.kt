@@ -91,8 +91,8 @@ class LocalBackupsTest {
         File(env.filesDir, "fuera.zip").writeBytes(paella)
 
         for (name in listOf("../fuera.zip", "no-existe.zip", "")) {
-            assertThat(env.manager.restoreLocal(name)).isEqualTo(ImportResult.Error("Este archivo no es una copia del Recetario."))
-            assertThat(env.manager.previewLocal(name)).isEqualTo(PreviewResult.Error("Este archivo no es una copia del Recetario."))
+            assertThat(env.manager.restoreLocal(name)).isEqualTo(ImportResult.Error("Este archivo no es una copia de Sazón."))
+            assertThat(env.manager.previewLocal(name)).isEqualTo(PreviewResult.Error("Este archivo no es una copia de Sazón."))
         }
         assertThat(env.snapshot()).isEqualTo(before)
     }

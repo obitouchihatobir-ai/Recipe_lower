@@ -25,7 +25,7 @@ class WeeklyBackupTest {
     val tmp = TemporaryFolder()
 
     private lateinit var env: BackupTestEnv
-    private val drive = "content://drive/Recetario-copia-automatica.zip"
+    private val drive = "content://drive/Sazon-copia-automatica.zip"
     private val t0 = Instant.parse("2026-10-01T08:00:00Z")
 
     @Before
@@ -56,9 +56,9 @@ class WeeklyBackupTest {
 
         val file = env.manager.writeLocalBackup()
 
-        assertThat(file?.name).isEqualTo("Recetario-2026-11-13-2140.zip")
-        assertThat(env.backups()).containsExactly("Recetario-2026-11-13-2140.zip")
-        assertThat(env.manager.localBackups()).containsExactly(LocalBackup("Recetario-2026-11-13-2140.zip", recipes = 2))
+        assertThat(file?.name).isEqualTo("Sazon-2026-11-13-2140.zip")
+        assertThat(env.backups()).containsExactly("Sazon-2026-11-13-2140.zip")
+        assertThat(env.manager.localBackups()).containsExactly(LocalBackup("Sazon-2026-11-13-2140.zip", recipes = 2))
         val entries = unzip(file!!.readBytes())
         assertThat(entries.keys).containsExactly("backup.json", "images/tortilla.jpg")
         assertThat(status().lastLocal).isEqualTo(env.clock.instant())
@@ -71,37 +71,37 @@ class WeeklyBackupTest {
     fun writeLocalBackup_twiceInTheSameMinute_neverOverwrites_andKeepsOnlyTheNewestOfTheWeek() = runBlocking<Unit> {
         seed()
         val first = env.manager.writeLocalBackup()!!
-        assertThat(first.name).isEqualTo("Recetario-2026-11-13-2140.zip")
+        assertThat(first.name).isEqualTo("Sazon-2026-11-13-2140.zip")
 
         val second = env.manager.writeLocalBackup()
 
         // Nunca pisa la anterior (otro nombre); después, la de esta semana sustituye a la anterior de la semana.
-        assertThat(second?.name).isEqualTo("Recetario-2026-11-13-2140-2.zip")
-        assertThat(env.backups()).containsExactly("Recetario-2026-11-13-2140-2.zip")
-        assertThat(env.manager.localBackups()).containsExactly(LocalBackup("Recetario-2026-11-13-2140-2.zip", recipes = 2))
+        assertThat(second?.name).isEqualTo("Sazon-2026-11-13-2140-2.zip")
+        assertThat(env.backups()).containsExactly("Sazon-2026-11-13-2140-2.zip")
+        assertThat(env.manager.localBackups()).containsExactly(LocalBackup("Sazon-2026-11-13-2140-2.zip", recipes = 2))
     }
 
     @Test
     fun retryingManyTimesInAWeek_keepsTheCopiesOfThePreviousWeeks() = runBlocking<Unit> {
         seed()
-        val history = listOf("Recetario-2026-10-25-0300.zip", "Recetario-2026-11-01-0300.zip", "Recetario-2026-11-08-0300.zip")
+        val history = listOf("Sazon-2026-10-25-0300.zip", "Sazon-2026-11-01-0300.zip", "Sazon-2026-11-08-0300.zip")
         history.forEach { validCopy(it) }
-        validCopy("Recetario-2026-11-10-0300.zip")
+        validCopy("Sazon-2026-11-10-0300.zip")
 
         repeat(4) { assertThat(env.manager.backupNow()).isInstanceOf(AutoBackupResult.Saved::class.java) }
 
-        assertThat(env.backups()).containsExactlyElementsIn(history + "Recetario-2026-11-13-2140-4.zip")
+        assertThat(env.backups()).containsExactlyElementsIn(history + "Sazon-2026-11-13-2140-4.zip")
     }
 
     @Test
     fun writeLocalBackup_keepsTheNewest4Weekly_andNeverTouchesOtherCopies() = runBlocking<Unit> {
         seed()
         val olderWeekly = listOf(
-            "Recetario-2026-10-11-0300.zip",
-            "Recetario-2026-10-18-0300.zip",
-            "Recetario-2026-10-25-0300.zip",
-            "Recetario-2026-11-01-0300.zip",
-            "Recetario-2026-11-08-0300.zip",
+            "Sazon-2026-10-11-0300.zip",
+            "Sazon-2026-10-18-0300.zip",
+            "Sazon-2026-10-25-0300.zip",
+            "Sazon-2026-11-01-0300.zip",
+            "Sazon-2026-11-08-0300.zip",
         )
         val safety = listOf(
             "antes-de-importar-2026-09-01-1000.zip",
@@ -112,16 +112,16 @@ class WeeklyBackupTest {
         (olderWeekly + safety).forEach { validCopy(it) }
         File(env.backupsDir, "otra.zip").writeText("ajena")
         // Resto de una copia que Android cortó a medias: nunca es una copia terminada.
-        File(env.backupsDir, "Recetario-2026-11-12-0300.zip.tmp").writeText("a medias")
+        File(env.backupsDir, "Sazon-2026-11-12-0300.zip.tmp").writeText("a medias")
 
         val file = env.manager.writeLocalBackup()
 
-        assertThat(file?.name).isEqualTo("Recetario-2026-11-13-2140.zip")
+        assertThat(file?.name).isEqualTo("Sazon-2026-11-13-2140.zip")
         assertThat(env.backups()).containsExactly(
-            "Recetario-2026-10-25-0300.zip",
-            "Recetario-2026-11-01-0300.zip",
-            "Recetario-2026-11-08-0300.zip",
-            "Recetario-2026-11-13-2140.zip",
+            "Sazon-2026-10-25-0300.zip",
+            "Sazon-2026-11-01-0300.zip",
+            "Sazon-2026-11-08-0300.zip",
+            "Sazon-2026-11-13-2140.zip",
             *safety.toTypedArray(),
             "otra.zip",
         )
@@ -131,23 +131,23 @@ class WeeklyBackupTest {
     fun writeLocalBackup_neverDeletesTheCopyItJustWrote_evenIfTheClockWentBack() = runBlocking<Unit> {
         seed()
         val future = listOf(
-            "Recetario-2027-01-03-0300.zip",
-            "Recetario-2027-01-10-0300.zip",
-            "Recetario-2027-01-17-0300.zip",
-            "Recetario-2027-01-24-0300.zip",
+            "Sazon-2027-01-03-0300.zip",
+            "Sazon-2027-01-10-0300.zip",
+            "Sazon-2027-01-17-0300.zip",
+            "Sazon-2027-01-24-0300.zip",
         )
         future.forEach { validCopy(it) }
 
         val file = env.manager.writeLocalBackup()
 
         assertThat(file?.exists()).isTrue()
-        assertThat(env.backups()).containsExactlyElementsIn(future + "Recetario-2026-11-13-2140.zip")
+        assertThat(env.backups()).containsExactlyElementsIn(future + "Sazon-2026-11-13-2140.zip")
     }
 
     @Test
     fun localBackup_isNeverCopiedIfVerificationFails() = runBlocking<Unit> {
         seed()
-        validCopy("Recetario-2026-11-08-0300.zip")
+        validCopy("Sazon-2026-11-08-0300.zip")
         env.settings.updateBackupStatus { it.copy(driveUri = drive, lastExternal = t0) }
         // Una receta sin identificador se exporta, pero la copia no pasaría las comprobaciones de la importación.
         env.saveAt(sampleRecipe(" ", "Sin identificador"), t0)
@@ -157,7 +157,7 @@ class WeeklyBackupTest {
 
         assertThat(result).isEqualTo(AutoBackupResult.LocalFailed)
         // Nada nuevo en el teléfono (ni el temporal), la copia anterior intacta y Drive sin tocar.
-        assertThat(env.backups()).containsExactly("Recetario-2026-11-08-0300.zip")
+        assertThat(env.backups()).containsExactly("Sazon-2026-11-08-0300.zip")
         assertThat(env.documents.openedForWriting).isEmpty()
         assertThat(status()).isEqualTo(
             app.recetario.settings.BackupStatus(lastExternal = t0, driveUri = drive, localError = "No se pudo hacer la copia semanal en el teléfono."),
@@ -271,7 +271,7 @@ class WeeklyBackupTest {
     fun copyToExternal_neverUploadsACopyThatCannotBeRestored() = runBlocking<Unit> {
         seed()
         env.settings.updateBackupStatus { it.copy(driveUri = drive) }
-        val broken = File(env.backupsDir.apply { mkdirs() }, "Recetario-2026-11-13-2140.zip").apply { writeText("roto") }
+        val broken = File(env.backupsDir.apply { mkdirs() }, "Sazon-2026-11-13-2140.zip").apply { writeText("roto") }
 
         assertThat(env.manager.copyToExternal(broken, drive)).isFalse()
 
@@ -290,7 +290,7 @@ class WeeklyBackupTest {
         assertThat(result).isInstanceOf(AutoBackupResult.Saved::class.java)
         result as AutoBackupResult.Saved
         assertThat(result.drive).isTrue()
-        assertThat(result.file.name).isEqualTo("Recetario-2026-11-13-2140.zip")
+        assertThat(result.file.name).isEqualTo("Sazon-2026-11-13-2140.zip")
         assertThat(env.documents.files.getValue(drive).toList()).isEqualTo(result.file.readBytes().toList())
         assertThat(status().lastExternal).isEqualTo(env.clock.instant())
     }
@@ -302,7 +302,7 @@ class WeeklyBackupTest {
         val result = env.manager.backupNow() as AutoBackupResult.Saved
 
         assertThat(result.drive).isNull()
-        assertThat(env.backups()).containsExactly("Recetario-2026-11-13-2140.zip")
+        assertThat(env.backups()).containsExactly("Sazon-2026-11-13-2140.zip")
         assertThat(status().lastExternal).isNull()
     }
 
@@ -320,27 +320,27 @@ class WeeklyBackupTest {
     @Test
     fun safetyCopies_keepTheNewest3_neverTheWeeklyOnes_andNeverTheOneBeingRestored() = runBlocking<Unit> {
         seed()
-        validCopy("Recetario-2026-01-04-0300.zip")
+        validCopy("Sazon-2026-01-04-0300.zip")
         val paella = backupZip(backupOf(sampleRecipe("copia", "Paella", updatedAt = 900)))
         repeat(3) { assertThat(env.import(paella, ImportMode.REPLACE_ALL)).isInstanceOf(ImportResult.Ok::class.java) }
         val oldest = "antes-de-importar-2026-11-13-2140.zip"
         assertThat(env.backups()).containsExactly(
             oldest, "antes-de-importar-2026-11-13-2140-2.zip", "antes-de-importar-2026-11-13-2140-3.zip",
-            "Recetario-2026-01-04-0300.zip",
+            "Sazon-2026-01-04-0300.zip",
         )
 
         // Al restaurar la más antigua se guarda otra previa: la que se restaura no se borra aunque sobre.
         assertThat(env.manager.restoreLocal(oldest)).isEqualTo(ImportResult.Ok(recipes = 2, images = 1))
         assertThat(env.backups()).containsExactly(
             oldest, "antes-de-importar-2026-11-13-2140-2.zip", "antes-de-importar-2026-11-13-2140-3.zip",
-            "antes-de-importar-2026-11-13-2140-4.zip", "Recetario-2026-01-04-0300.zip",
+            "antes-de-importar-2026-11-13-2140-4.zip", "Sazon-2026-01-04-0300.zip",
         )
 
         // La siguiente importación ya rota: quedan las 3 más recientes y la semanal.
         assertThat(env.import(paella, ImportMode.REPLACE_ALL)).isInstanceOf(ImportResult.Ok::class.java)
         assertThat(env.backups()).containsExactly(
             "antes-de-importar-2026-11-13-2140-3.zip", "antes-de-importar-2026-11-13-2140-4.zip",
-            "antes-de-importar-2026-11-13-2140-5.zip", "Recetario-2026-01-04-0300.zip",
+            "antes-de-importar-2026-11-13-2140-5.zip", "Sazon-2026-01-04-0300.zip",
         )
     }
 
@@ -364,7 +364,7 @@ class WeeklyBackupTest {
     @Test
     fun exportToDocument_neverOpensTheDocumentIfTheCopyIsBroken_andDeletesItOnlyIfEmpty() = runBlocking<Unit> {
         seed()
-        val doc = "content://descargas/Recetario-2026-11-13.zip"
+        val doc = "content://descargas/Sazon-2026-11-13.zip"
         assertThat(env.manager.exportToDocument(doc)).isEqualTo(ExportResult.Ok)
         assertThat(unzip(env.documents.files.getValue(doc)).keys).contains("backup.json")
 
@@ -378,7 +378,7 @@ class WeeklyBackupTest {
         assertThat(env.documents.deleted).isEmpty()
 
         // Un documento nuevo (vacío) que no llega a escribirse se borra.
-        val fresh = "content://descargas/Recetario-2026-11-13 (1).zip"
+        val fresh = "content://descargas/Sazon-2026-11-13 (1).zip"
         assertThat(env.manager.exportToDocument(fresh)).isEqualTo(ExportResult.Error("No se pudo guardar la copia."))
         assertThat(env.documents.deleted).containsExactly(fresh)
     }
@@ -386,7 +386,7 @@ class WeeklyBackupTest {
     @Test
     fun exportToDocument_ifItCannotBeOpened_neverDeletesAnExistingFile() = runBlocking<Unit> {
         seed()
-        val existing = "content://descargas/Recetario-2026-11-01.zip"
+        val existing = "content://descargas/Sazon-2026-11-01.zip"
         env.documents.files[existing] = "copia anterior".toByteArray()
         env.documents.failOpenOutput = true
 
@@ -395,7 +395,7 @@ class WeeklyBackupTest {
         assertThat(env.documents.deleted).isEmpty()
         assertThat(String(env.documents.files.getValue(existing))).isEqualTo("copia anterior")
         // Uno nuevo (vacío) que no se pudo abrir sí se borra.
-        val fresh = "content://descargas/Recetario-2026-11-13.zip"
+        val fresh = "content://descargas/Sazon-2026-11-13.zip"
         assertThat(env.manager.exportToDocument(fresh)).isEqualTo(ExportResult.Error("No se pudo guardar la copia."))
         assertThat(env.documents.deleted).containsExactly(fresh)
         assertThat(env.cacheFiles()).isEmpty()
@@ -404,7 +404,7 @@ class WeeklyBackupTest {
     @Test
     fun exportToDocument_copyFailure_deletesThePartialDocument() = runBlocking<Unit> {
         seed()
-        val doc = "content://descargas/Recetario-2026-11-13.zip"
+        val doc = "content://descargas/Sazon-2026-11-13.zip"
         env.documents.failOutput = true
 
         assertThat(env.manager.exportToDocument(doc)).isEqualTo(ExportResult.Error("No se pudo guardar la copia."))

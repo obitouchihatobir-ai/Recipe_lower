@@ -216,7 +216,7 @@ class BackupImporterTest {
             backupZip(badDate),
             valid.copyOf(valid.size / 2),
         )) {
-            assertRejectedWithoutChanges(zip, "Este archivo no es una copia del Recetario.")
+            assertRejectedWithoutChanges(zip, "Este archivo no es una copia de Sazón.")
         }
     }
 
@@ -226,7 +226,7 @@ class BackupImporterTest {
         val newer = """{"schemaVersion":2,"appVersion":"9.0.0","recetas":[{"id":"x"}]}"""
         assertRejectedWithoutChanges(
             zipOf("backup.json" to newer.toByteArray(), "images/copia.jpg" to fakePhoto(5), "videos/a.mp4" to fakePhoto(6)),
-            "Esta copia es de una versión más nueva de la app. Actualiza la app e inténtalo de nuevo.",
+            "Esta copia es de una versión más nueva de Sazón. Actualiza la app e inténtalo de nuevo.",
         )
     }
 
@@ -235,8 +235,8 @@ class BackupImporterTest {
         seedLocal()
         val json = "backup.json" to encodeBackup(backupOf(recipe("copia", "Paella", t2))).toByteArray()
         for (evil in listOf("../evil.jpg", "/evil.jpg", "images/../../evil.jpg", "images/../evil.jpg", "images/sub/evil.jpg", "images\\evil.jpg", "fotos/evil.jpg")) {
-            assertRejectedWithoutChanges(zipOf(json, evil to fakePhoto(8)), "Este archivo no es una copia del Recetario.")
-            assertRejectedWithoutChanges(zipOf(evil to fakePhoto(8), json), "Este archivo no es una copia del Recetario.")
+            assertRejectedWithoutChanges(zipOf(json, evil to fakePhoto(8)), "Este archivo no es una copia de Sazón.")
+            assertRejectedWithoutChanges(zipOf(evil to fakePhoto(8), json), "Este archivo no es una copia de Sazón.")
         }
         assertThat(tmp.root.walkTopDown().filter { it.name == "evil.jpg" }.toList()).isEmpty()
     }
@@ -409,10 +409,10 @@ class BackupImporterTest {
         val bigImage = ByteArray(25 * 1024 * 1024 + 1)
         assertRejectedWithoutChanges(
             backupZip(backupOf(recipe("copia", "Paella", t2, cover = "grande.jpg")), "grande.jpg" to bigImage),
-            "Este archivo no es una copia del Recetario.",
+            "Este archivo no es una copia de Sazón.",
         )
         val bigJson = "{\"schemaVersion\":1,\"relleno\":\"" + "x".repeat(16 * 1024 * 1024) + "\"}"
-        assertRejectedWithoutChanges(zipOf(BACKUP_JSON_ENTRY to bigJson.toByteArray()), "Este archivo no es una copia del Recetario.")
+        assertRejectedWithoutChanges(zipOf(BACKUP_JSON_ENTRY to bigJson.toByteArray()), "Este archivo no es una copia de Sazón.")
     }
 
     @Test
@@ -434,9 +434,9 @@ class BackupImporterTest {
         val zip = backupZip(backupOf(recipe("a", "A", t2), recipe("b", "B", t2), recipe("c", "C", t2, cover = "c.jpg")), "c.jpg" to fakePhoto(3))
 
         assertThat(local.preview(zip)).isEqualTo(PreviewResult.Ok(backupRecipes = 3, localRecipes = 1))
-        assertThat(local.preview("no es un zip".toByteArray())).isEqualTo(PreviewResult.Error("Este archivo no es una copia del Recetario."))
+        assertThat(local.preview("no es un zip".toByteArray())).isEqualTo(PreviewResult.Error("Este archivo no es una copia de Sazón."))
         assertThat(local.preview(zipOf(BACKUP_JSON_ENTRY to """{"schemaVersion":2}""".toByteArray())))
-            .isEqualTo(PreviewResult.Error("Esta copia es de una versión más nueva de la app. Actualiza la app e inténtalo de nuevo."))
+            .isEqualTo(PreviewResult.Error("Esta copia es de una versión más nueva de Sazón. Actualiza la app e inténtalo de nuevo."))
 
         assertThat(local.snapshot()).isEqualTo(before)
         assertThat(local.backups()).isEmpty()

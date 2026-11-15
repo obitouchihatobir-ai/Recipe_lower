@@ -87,7 +87,7 @@ class BackupViewModelTest {
     @Test
     fun driveFile_whenItCannotBeSaved_releasesThePermission_andDeletesTheEmptyDocument() {
         val vm = viewModel(SavedStateHandle())
-        val newDrive = "content://drive/Recetario-copia-automatica.zip"
+        val newDrive = "content://drive/Sazon-copia-automatica.zip"
         env.localState.failWrites = true
 
         vm.onDriveDocumentCreated(newDrive)
@@ -108,7 +108,7 @@ class BackupViewModelTest {
         env.documents.inputGates[importing] = gate
         vm.onImportFilePicked(importing)
 
-        val newDrive = "content://drive/Recetario-copia-automatica.zip"
+        val newDrive = "content://drive/Sazon-copia-automatica.zip"
         vm.onDriveDocumentCreated(newDrive)
 
         eventually("borrar el documento vacío") { newDrive in env.documents.deleted }

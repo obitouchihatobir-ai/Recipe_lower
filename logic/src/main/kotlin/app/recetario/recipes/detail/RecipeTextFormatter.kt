@@ -24,6 +24,6 @@ fun formatRecipeAsText(recipe: Recipe, servings: Int, categoryEmoji: String): St
         }
         append("\nPasos\n")
         recipe.steps.forEachIndexed { n, s -> append(n + 1).append(". ").append(s.text).append('\n') }
-        append("\nCompartido desde mi Recetario")
+        append("\nCompartido desde Sazón")
     }
 }
