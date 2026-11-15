@@ -459,11 +459,18 @@ class BackupManager(
         }
     }
 
+    /**
+     * Nombre libre para [name] en [dir]: el mismo si no hay ninguna de ese minuto; si las hay, el número siguiente
+     * al mayor (`-2`, `-3`…), nunca uno que la rotación dejó libre. Así la más nueva siempre ordena como la más
+     * reciente (si no, la rotación podría quedarse con una más antigua del mismo minuto).
+     */
     private fun freeFile(dir: File, name: String): File {
-        val first = File(dir, name)
-        if (!first.exists()) return first
         val stem = name.removeSuffix(".zip")
-        return generateSequence(2) { it + 1 }.map { File(dir, "$stem-$it.zip") }.first { !it.exists() }
+        val sameMinute = Regex("^${Regex.escape(stem)}(?:-(\\d{1,4}))?\\.zip$")
+        val highest = dir.list().orEmpty().maxOfOrNull { other ->
+            sameMinute.matchEntire(other)?.let { it.groupValues[1].toIntOrNull() ?: 1 } ?: 0
+        } ?: 0
+        return if (highest == 0) File(dir, name) else File(dir, "$stem-${highest + 1}.zip")
     }
 
     /**
