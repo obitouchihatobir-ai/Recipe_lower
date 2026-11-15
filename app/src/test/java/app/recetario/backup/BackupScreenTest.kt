@@ -332,6 +332,22 @@ class BackupScreenTest {
     }
 
     @Test
+    fun localError_isShown_andRetryWritesTheCopy() {
+        saveRecipe()
+        setStatus { it.copy(localError = BackupMessages.LOCAL_FAILED) }
+        launch()
+
+        rule.waitFor(hasTestTag("local-error"))
+        rule.onNodeWithText("No se pudo hacer la copia semanal en el teléfono.").assertExists()
+        tap("local-retry")
+
+        rule.waitFor(hasText("Copia guardada."))
+        rule.waitForGone(hasTestTag("local-error"))
+        assertThat(status().localError).isNull()
+        assertThat(container.backupManager.localBackupsDir.list()?.toList()).containsExactly("Recetario-2026-11-13-2140.zip")
+    }
+
+    @Test
     fun drive_existingCopy_asksBeforeReplacing_andReplaces() {
         saveRecipe()
         val existing = backupWithPaella()

@@ -13,8 +13,11 @@ import java.io.OutputStream
 interface BackupDocuments {
     fun openInput(uri: String): InputStream
 
-    /** Abre con «wt»: si el documento ya tenía algo, se vacía antes de escribir. */
-    fun openOutput(uri: String): OutputStream
+    /**
+     * Abre para escribir. Con «wt» (lo normal) el documento se vacía antes; algunos proveedores no admiten «wt» y
+     * solo «w», que en algunos no vacía el archivo (por eso, tras escribir en Drive se comprueba el tamaño).
+     */
+    fun openOutput(uri: String, mode: String = "wt"): OutputStream
 
     /** Borra un documento que se quedó a medio escribir, si el proveedor lo permite. No falla nunca. */
     fun delete(uri: String)
@@ -33,9 +36,8 @@ class ContentResolverDocuments(private val resolver: ContentResolver) : BackupDo
     override fun openInput(uri: String): InputStream =
         resolver.openInputStream(Uri.parse(uri)) ?: throw FileNotFoundException(uri)
 
-    // «wt»: si el proveedor reutiliza el archivo, se vacía antes de escribir.
-    override fun openOutput(uri: String): OutputStream =
-        resolver.openOutputStream(Uri.parse(uri), "wt") ?: throw FileNotFoundException(uri)
+    override fun openOutput(uri: String, mode: String): OutputStream =
+        resolver.openOutputStream(Uri.parse(uri), mode) ?: throw FileNotFoundException(uri)
 
     override fun delete(uri: String) {
         try {

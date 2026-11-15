@@ -56,3 +56,7 @@ Cuando termines, puedes volver a desactivar el permiso del punto 2. Solo lo nece
    - no pierdas la frase del paso 1;
    - no borres el archivo `signing/release.p12.enc` del repositorio.
 4. Si un día Android dice que la app no se ha instalado porque «entra en conflicto con un paquete existente», no desinstales nada todavía. Antes, haz una copia de seguridad desde la app.
+
+## 6. Espacio que ocupan las copias
+
+La app guarda copias de seguridad dentro del propio teléfono: una por semana (las de las 4 últimas semanas) y otra antes de cada importación que reemplaza datos (las 3 últimas). Cada copia lleva tus recetas **con sus fotos**, así que con muchas fotos pueden ocupar bastante. Las antiguas se borran solas: normalmente no tienes que hacer nada para liberar espacio. Puedes verlas en **Ajustes › Copias de seguridad › Copias en el teléfono**.

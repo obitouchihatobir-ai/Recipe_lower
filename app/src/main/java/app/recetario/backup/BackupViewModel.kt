@@ -51,6 +51,17 @@ sealed interface ImportPanel {
     data class ConfirmReplace(override val source: ImportSource, override val preview: PreviewResult.Ok) : ImportPanel
 }
 
+/**
+ * El archivo elegido para Drive ya tiene algo: antes de sobrescribirlo se pregunta. [ExistingCopy] es una copia que
+ * se puede importar (con sus recetas y las de ahora); [NotACopy], cualquier otra cosa.
+ */
+sealed interface DrivePanel {
+    val uri: String
+
+    data class ExistingCopy(override val uri: String, val backupRecipes: Int, val localRecipes: Int) : DrivePanel
+    data class NotACopy(override val uri: String) : DrivePanel
+}
+
 /** Trabajo en curso; [DRIVE] es la copia automática («Reintentar» o recién elegido el archivo de Drive). */
 enum class BackupWork { EXPORTING, CHECKING, IMPORTING, DRIVE }
 
@@ -71,6 +82,10 @@ data class BackupUiState(
     val driveError: String? = null,
     /** Se perdió el permiso del archivo de Drive: solo se puede elegir otro. */
     val driveAccessLost: Boolean = false,
+    /** El archivo elegido para Drive ya tiene algo: se pregunta antes de sobrescribirlo. */
+    val drivePanel: DrivePanel? = null,
+    /** Por qué falló la última copia semanal en el teléfono, o null. */
+    val localError: String? = null,
 )
 
 class BackupViewModel(
@@ -84,6 +99,7 @@ class BackupViewModel(
     private val work = MutableStateFlow<BackupWork?>(null)
     private val panel = MutableStateFlow<ImportPanel?>(null)
     private val local = MutableStateFlow<List<LocalBackup>?>(null)
+    private val drivePanel = MutableStateFlow<DrivePanel?>(null)
     private val _messages = Channel<String>(Channel.BUFFERED)
 
     /**
@@ -107,7 +123,7 @@ class BackupViewModel(
         .onEach { c -> if (c.accessLost && c.status.lastError == null) recordLostAccess(c.status.driveUri!!) }
         .flowOn(io)
 
-    val state: StateFlow<BackupUiState> = combine(checkedStatus, work, panel, local) { check, w, p, l ->
+    val state: StateFlow<BackupUiState> = combine(checkedStatus, work, panel, local, drivePanel) { check, w, p, l, dp ->
         val status = check.status
         BackupUiState(
             statusLoaded = true,
@@ -120,6 +136,8 @@ class BackupViewModel(
             lastDrive = status.lastDrive,
             driveError = status.lastError ?: BackupMessages.DRIVE_FAILED.takeIf { check.accessLost },
             driveAccessLost = check.accessLost,
+            drivePanel = dp,
+            localError = status.localError,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupUiState())
 
@@ -210,12 +228,73 @@ class BackupViewModel(
     }
 
     /**
-     * «Guardar también en Google Drive» o «Elegir otro archivo»: el selector creó [uri]. Se guarda su permiso para
-     * siempre (si el proveedor no lo da, se borra el documento vacío y se dice), se suelta el del archivo anterior y
-     * se hace ya una copia, así se ve que funciona.
+     * «Guardar también en Google Drive» o «Elegir otro archivo»: el selector devolvió [uri]. Si está vacío (lo acaba de
+     * crear), se usa ya ([setUpDrive]). Si tiene algo (el usuario eligió un archivo que ya existía), antes de
+     * sobrescribirlo se pregunta: si es una copia, con sus recetas y la opción de importarla primero. Si hay otra
+     * operación en curso, no se usa y, si está vacío, se borra.
      */
     fun onDriveDocumentCreated(uri: String) {
-        if (work.value != null) return
+        if (work.value != null) {
+            viewModelScope.launch { withContext(NonCancellable + io) { deleteDocumentIfEmpty(documents, uri) } }
+            return
+        }
+        work.value = BackupWork.CHECKING
+        viewModelScope.launch {
+            val existing = withContext(NonCancellable + io) { inspectDriveDocument(uri) }
+            work.value = null
+            if (existing == null) setUpDrive(uri) else drivePanel.value = existing
+        }
+    }
+
+    /** Null si el documento está vacío; si no, qué tiene (una copia que se puede importar u otra cosa). */
+    private suspend fun inspectDriveDocument(uri: String): DrivePanel? {
+        val empty = try {
+            documents.openInput(uri).use { it.read() == -1 }
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo leer el archivo de Drive", e)
+            false
+        }
+        if (empty) return null
+        val preview = try {
+            documents.openInput(uri).use { manager.preview(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo comprobar el archivo de Drive", e)
+            PreviewResult.Error(BackupMessages.OPEN_FAILED)
+        }
+        return when (preview) {
+            is PreviewResult.Ok -> DrivePanel.ExistingCopy(uri, preview.backupRecipes, preview.localRecipes)
+            is PreviewResult.Error -> DrivePanel.NotACopy(uri)
+        }
+    }
+
+    /** «Reemplazar»: el archivo que ya tenía algo se usa para la copia automática (y se sobrescribe ya). */
+    fun confirmDriveReplace() {
+        val p = drivePanel.value ?: return
+        drivePanel.value = null
+        setUpDrive(p.uri)
+    }
+
+    /** «Importar primero»: la importación de siempre con ese archivo; el archivo de Drive no se guarda todavía. */
+    fun importDriveFileFirst() {
+        val p = drivePanel.value as? DrivePanel.ExistingCopy ?: return
+        drivePanel.value = null
+        onImportFilePicked(p.uri)
+    }
+
+    /** «Cancelar»: el archivo se queda como estaba y no se usa. */
+    fun dismissDrivePanel() {
+        drivePanel.value = null
+    }
+
+    /**
+     * Usa [uri] para la copia automática: guarda su permiso para siempre (si el proveedor no lo da, se borra el
+     * documento si está vacío y se dice), suelta el del archivo anterior y hace ya una copia, así se ve que funciona.
+     */
+    private fun setUpDrive(uri: String) {
+        if (work.value != null) {
+            viewModelScope.launch { withContext(NonCancellable + io) { deleteDocumentIfEmpty(documents, uri) } }
+            return
+        }
         work.value = BackupWork.DRIVE
         viewModelScope.launch {
             val message = withContext(NonCancellable) {
@@ -230,7 +309,10 @@ class BackupViewModel(
                     before
                 } catch (e: Exception) {
                     Log.w(TAG, "No se pudo guardar el archivo de Drive", e)
-                    withContext(io) { documents.releasePersistableAccess(uri) }
+                    withContext(io) {
+                        documents.releasePersistableAccess(uri)
+                        deleteDocumentIfEmpty(documents, uri)
+                    }
                     return@withContext BackupMessages.EXPORT_FAILED
                 }
                 if (previous != null && previous != uri) withContext(io) { documents.releasePersistableAccess(previous) }

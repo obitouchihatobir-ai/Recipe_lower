@@ -18,13 +18,17 @@ const val WEEKLY_BACKUP_WORK = "copia-semanal"
 /**
  * Copia semanal (§8.5): primero la copia del teléfono, comprobada; después, si hay archivo de Drive, la copia allí
  * ([BackupManager.backupNow]). Sin recetas no escribe nada y termina bien. Solo se reintenta (con espera creciente)
- * si falla la copia del teléfono; un fallo de Drive queda anotado en `lastError` y se muestra en Inicio y en Copias.
+ * si falla la copia del teléfono, y como mucho 3 veces: después espera a la semana siguiente. Los fallos quedan
+ * anotados (`localError`, `lastError`) y se muestran en Inicio y en Copias.
  */
 class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val manager = (applicationContext as RecetarioApp).container.backupManager
         return when (val result = manager.backupNow()) {
-            AutoBackupResult.LocalFailed -> {
+            AutoBackupResult.LocalFailed -> if (runAttemptCount >= MAX_RETRIES) {
+                Log.w(TAG, "La copia semanal en el teléfono sigue fallando; se intentará la semana que viene")
+                Result.success()
+            } else {
                 Log.w(TAG, "No se pudo hacer la copia semanal en el teléfono; se reintentará")
                 Result.retry()
             }
@@ -37,6 +41,9 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     private companion object {
         const val TAG = "AutoBackupWorker"
+
+        /** Con `runAttemptCount` (0 la primera vez) de 3 o más ya no se reintenta. */
+        const val MAX_RETRIES = 3
     }
 }
 

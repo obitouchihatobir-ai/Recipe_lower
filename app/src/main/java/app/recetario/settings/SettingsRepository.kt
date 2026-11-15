@@ -15,6 +15,10 @@ import androidx.datastore.preferences.core.emptyPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -25,8 +29,10 @@ import java.time.LocalTime
 /**
  * Estado de las copias de seguridad (lo escriben las Tareas 15 y 16). Los instantes se guardan en milisegundos.
  * [lastLocal]: última copia semanal en el teléfono; [lastExternal]: última copia que salió del teléfono (Drive o
- * exportación manual; la usa el recordatorio de Inicio); [lastDrive]: última copia en el archivo de Drive
- * ([driveUri]); [lastError]: por qué falló la última copia en Drive (se muestra en Inicio y en Copias).
+ * exportación manual; la usa el recordatorio de Inicio); [driveUri]: archivo de Drive de la copia automática;
+ * [lastError]: por qué falló la última copia en Drive; [lastDrive]: última copia en ese archivo; [localError]: por
+ * qué falló la última copia semanal en el teléfono; [noticeDismissed]: aviso de Inicio que se ocultó (día y tipo).
+ * Todo es del teléfono («estado-local») salvo [lastExternal], que va con los ajustes.
  */
 data class BackupStatus(
     val lastLocal: Instant? = null,
@@ -34,14 +40,24 @@ data class BackupStatus(
     val driveUri: String? = null,
     val lastError: String? = null,
     val lastDrive: Instant? = null,
+    val localError: String? = null,
+    val noticeDismissed: String? = null,
 )
 
-/** Ajustes de la app en un DataStore de preferencias (archivo `ajustes`). */
-class SettingsRepository(private val dataStore: DataStore<Preferences>) {
+/**
+ * Ajustes de la app en un DataStore de preferencias (archivo `ajustes`, que viaja con la copia de Android) y el
+ * estado de este teléfono en otro (`estado-local`, que no viaja: el archivo de Drive y su permiso, las fechas y
+ * errores de las copias, el aviso oculto de Inicio y si ya se pidió el permiso de notificaciones).
+ */
+class SettingsRepository(private val dataStore: DataStore<Preferences>, private val localState: DataStore<Preferences>) {
     private val defaults = ThemeSettings()
 
     /** Un archivo ilegible se lee como vacío (ajustes de serie) en vez de tumbar la app. */
     private val data: Flow<Preferences> = dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+    private val local: Flow<Preferences> = localState.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+
+    /** El estado de las copias está en dos archivos: sus cambios van de uno en uno. */
+    private val statusLock = Mutex()
 
     val themeSettings: Flow<ThemeSettings> = data.map { p ->
         ThemeSettings(
@@ -99,31 +115,43 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     /** Si ya se pidió el permiso de notificaciones (se pide una sola vez, al iniciar el primer temporizador). */
     val notificationPermissionAsked: Flow<Boolean> =
-        data.map { it[NOTIFICATIONS_ASKED] ?: false }.distinctUntilChanged()
+        local.map { it[NOTIFICATIONS_ASKED] ?: false }.distinctUntilChanged()
 
     suspend fun setNotificationPermissionAsked() {
-        dataStore.edit { it[NOTIFICATIONS_ASKED] = true }
+        localState.edit { it[NOTIFICATIONS_ASKED] = true }
     }
 
-    val backupStatus: Flow<BackupStatus> = data.map { it.toBackupStatus() }.distinctUntilChanged()
+    val backupStatus: Flow<BackupStatus> =
+        combine(data.map { it[LAST_EXTERNAL] }, local) { external, p -> p.toBackupStatus(external?.let(Instant::ofEpochMilli)) }
+            .distinctUntilChanged()
 
+    /** Cambia el estado de las copias: lo del teléfono en `estado-local` y la última copia de fuera en `ajustes`. */
     suspend fun updateBackupStatus(transform: (BackupStatus) -> BackupStatus) {
-        dataStore.edit { p ->
-            val next = transform(p.toBackupStatus())
-            p.put(LAST_LOCAL, next.lastLocal?.toEpochMilli())
-            p.put(LAST_EXTERNAL, next.lastExternal?.toEpochMilli())
-            p.put(DRIVE_URI, next.driveUri)
-            p.put(LAST_ERROR, next.lastError)
-            p.put(LAST_DRIVE, next.lastDrive?.toEpochMilli())
+        statusLock.withLock {
+            val external = data.first()[LAST_EXTERNAL]?.let(Instant::ofEpochMilli)
+            var next: BackupStatus? = null
+            localState.edit { p ->
+                val n = transform(p.toBackupStatus(external)).also { next = it }
+                p.put(LAST_LOCAL, n.lastLocal?.toEpochMilli())
+                p.put(DRIVE_URI, n.driveUri)
+                p.put(LAST_ERROR, n.lastError)
+                p.put(LAST_DRIVE, n.lastDrive?.toEpochMilli())
+                p.put(LOCAL_ERROR, n.localError)
+                p.put(NOTICE_DISMISSED, n.noticeDismissed)
+            }
+            val lastExternal = next?.lastExternal
+            if (lastExternal != external) dataStore.edit { it.put(LAST_EXTERNAL, lastExternal?.toEpochMilli()) }
         }
     }
 
-    private fun Preferences.toBackupStatus() = BackupStatus(
+    private fun Preferences.toBackupStatus(lastExternal: Instant?) = BackupStatus(
         lastLocal = this[LAST_LOCAL]?.let(Instant::ofEpochMilli),
-        lastExternal = this[LAST_EXTERNAL]?.let(Instant::ofEpochMilli),
+        lastExternal = lastExternal,
         driveUri = this[DRIVE_URI],
         lastError = this[LAST_ERROR],
         lastDrive = this[LAST_DRIVE]?.let(Instant::ofEpochMilli),
+        localError = this[LOCAL_ERROR],
+        noticeDismissed = this[NOTICE_DISMISSED],
     )
 
     private fun <T> androidx.datastore.preferences.core.MutablePreferences.put(key: Preferences.Key<T>, value: T?) {
@@ -148,11 +176,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         val DRIVE_URI = stringPreferencesKey("backup_drive_uri")
         val LAST_ERROR = stringPreferencesKey("backup_last_error")
         val LAST_DRIVE = longPreferencesKey("backup_last_drive")
+        val LOCAL_ERROR = stringPreferencesKey("backup_local_error")
+        val NOTICE_DISMISSED = stringPreferencesKey("backup_notice_dismissed")
         val NOTIFICATIONS_ASKED = booleanPreferencesKey("notifications_permission_asked")
     }
 }
 
-/** DataStore de los ajustes; si el archivo está corrupto se sustituye por uno vacío. */
+/** DataStore de los ajustes (o del estado del teléfono); si el archivo está corrupto se sustituye por uno vacío. */
 fun createSettingsDataStore(scope: CoroutineScope, produceFile: () -> File): DataStore<Preferences> =
     PreferenceDataStoreFactory.create(
         corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },

@@ -53,6 +53,8 @@ class AppContainer(
     val clock: Clock = Clock.systemDefaultZone(),
     val database: AppDatabase = AppDatabase.create(context),
     settingsDataStore: DataStore<Preferences> = createSettingsDataStore(context),
+    /** Estado de este teléfono (`estado-local`): no va en la copia de Android. */
+    localStateDataStore: DataStore<Preferences> = createLocalStateDataStore(context),
     /** Reloj de los temporizadores: monótono y sigue contando con la pantalla apagada. */
     elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     /** Documentos de fuera (Drive, Descargas…) de las copias; las pruebas pasan uno falso. */
@@ -62,7 +64,7 @@ class AppContainer(
     val draftsDir = File(context.filesDir, "drafts")
     val recipeRepository: RecipeRepository = RoomRecipeRepository(database, photoStore, clock)
 
-    val settingsRepository = SettingsRepository(settingsDataStore)
+    val settingsRepository = SettingsRepository(settingsDataStore, localStateDataStore)
 
     /** El tamaño de la taza sale de los ajustes. */
     val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, settingsRepository.cupMl)
@@ -96,8 +98,14 @@ class AppContainer(
 private fun appVersionName(context: Context): String =
     runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
 
-/** DataStore de los ajustes: archivo `ajustes` en `filesDir/datastore/`. */
+/** DataStore de los ajustes: archivo `ajustes` en `filesDir/datastore/` (va en la copia de Android). */
 private fun createSettingsDataStore(context: Context): DataStore<Preferences> = createSettingsDataStore(
     scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     produceFile = { context.preferencesDataStoreFile("ajustes") },
+)
+
+/** DataStore del estado del teléfono: archivo `estado-local` en `filesDir/datastore/` (no va en la copia de Android). */
+private fun createLocalStateDataStore(context: Context): DataStore<Preferences> = createSettingsDataStore(
+    scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    produceFile = { context.preferencesDataStoreFile("estado-local") },
 )

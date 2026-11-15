@@ -33,9 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -75,10 +72,10 @@ fun HomeRoute(
     onBackup: () -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel(
-        factory = HomeViewModel.factory(container.recipeRepository, container.settingsRepository.backupStatus, container.clock),
+        factory = HomeViewModel.factory(container.recipeRepository, container.settingsRepository, container.clock),
     )
     val state by vm.state.collectAsStateWithLifecycle()
-    HomeContent(state, container.photoStore, onCategory, onRecipe, onAdd, onSettings, onAppearance, onBackup)
+    HomeContent(state, container.photoStore, onCategory, onRecipe, onAdd, onSettings, onAppearance, onBackup, vm::dismissBackupNotice)
 }
 
 /** Inicio de la etapa 1: saludo, chips de categorías, recientes y favoritas (§6.3). */
@@ -92,13 +89,12 @@ fun HomeContent(
     onSettings: () -> Unit = {},
     onAppearance: () -> Unit = {},
     onBackup: () -> Unit = {},
+    onDismissNotice: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val c = LocalRecetarioColors.current
     val tracker = rememberEntranceTracker()
-    // Día en que se ocultó la tarjeta de las copias: vuelve a salir al día siguiente.
-    var noticeDismissedOn by rememberSaveable { mutableStateOf<String?>(null) }
-    val notice = state.backupNotice?.takeIf { state.loaded && noticeDismissedOn != state.today?.toString() }
+    val notice = state.backupNotice?.takeIf { state.loaded }
     Box(modifier.fillMaxSize().background(c.bg)) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -112,7 +108,7 @@ fun HomeContent(
             }
             if (notice != null) {
                 fullWidth("backup-notice") {
-                    BackupNoticeCard(notice, onBackup, onDismiss = { noticeDismissedOn = state.today?.toString() })
+                    BackupNoticeCard(notice, onBackup, onDismiss = onDismissNotice)
                 }
             }
             when {
@@ -203,8 +199,9 @@ private fun Header(greeting: String, onSettings: () -> Unit, onAppearance: () ->
 }
 
 /**
- * Tarjeta de las copias: el error de la copia automática en Drive («Abrir copias») o el recordatorio de los 30 días
- * («Hacer copia»). Ambos botones llevan a Copias de seguridad; la ✕ la oculta hasta mañana.
+ * Tarjeta de las copias: los errores de la copia automática, en el teléfono y en Drive («Abrir copias»), o el
+ * recordatorio de los 30 días («Hacer copia»). Ambos botones llevan a Copias de seguridad; la ✕ oculta ese aviso
+ * hasta mañana (se guarda en el estado del teléfono).
  */
 @Composable
 private fun BackupNoticeCard(notice: BackupNotice, onBackup: () -> Unit, onDismiss: () -> Unit) {
@@ -222,16 +219,20 @@ private fun BackupNoticeCard(notice: BackupNotice, onBackup: () -> Unit, onDismi
             .testTag("home-backup-card"),
         verticalAlignment = Alignment.Top,
     ) {
-        Column(Modifier.weight(1f).padding(top = 8.dp)) {
-            Text(
-                when (notice) {
-                    is BackupNotice.Error -> notice.messages.joinToString("\n")
-                    BackupNotice.Reminder -> BackupMessages.REMINDER
-                },
-                color = if (isError) MaterialTheme.colorScheme.error else c.ink,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.W600,
-            )
+        Column(Modifier.weight(1f).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Si fallaron las dos copias, las dos: primero la del teléfono.
+            val messages = when (notice) {
+                is BackupNotice.Error -> notice.messages
+                BackupNotice.Reminder -> listOf(BackupMessages.REMINDER)
+            }
+            for (message in messages) {
+                Text(
+                    message,
+                    color = if (isError) MaterialTheme.colorScheme.error else c.ink,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.W600,
+                )
+            }
             TextButton(
                 onClick = onBackup,
                 modifier = Modifier.heightIn(min = 48.dp).offset(x = (-12).dp).testTag("home-backup-action"),

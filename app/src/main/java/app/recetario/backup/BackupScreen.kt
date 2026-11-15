@@ -136,6 +136,9 @@ fun BackupRoute(container: AppContainer, onBack: () -> Unit) {
             }
         },
         onRetryDrive = vm::retryDrive,
+        onConfirmDriveReplace = vm::confirmDriveReplace,
+        onImportDriveFileFirst = vm::importDriveFileFirst,
+        onDismissDrivePanel = vm::dismissDrivePanel,
     )
 }
 
@@ -155,6 +158,9 @@ fun BackupContent(
     onDismissPanel: () -> Unit,
     onChooseDriveFile: () -> Unit = {},
     onRetryDrive: () -> Unit = {},
+    onConfirmDriveReplace: () -> Unit = {},
+    onImportDriveFileFirst: () -> Unit = {},
+    onDismissDrivePanel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val c = LocalRecetarioColors.current
@@ -166,7 +172,10 @@ fun BackupContent(
         modifier = modifier,
         snackbar = snackbar,
         overlay = {
-            when (val panel = state.panel) {
+            state.drivePanel?.let { drive ->
+                DriveReplacePanel(drive, onReplace = onConfirmDriveReplace, onImportFirst = onImportDriveFileFirst, onDismiss = onDismissDrivePanel)
+            }
+            if (state.drivePanel == null) when (val panel = state.panel) {
                 is ImportPanel.ChooseMode -> ImportModePanel(
                     restoring = panel.source is ImportSource.Local,
                     onMerge = onChooseMerge,
@@ -251,7 +260,15 @@ private fun AutomaticBackupCard(state: BackupUiState, zone: ZoneId, busy: Boolea
     ) {
         if (state.statusLoaded) {
             MutedText(lastLocalText(state.lastLocal, zone), Modifier.testTag("backup-last-local"))
+            state.localError?.let { ErrorText(it, "local-error") }
             if (state.driveUri == null) {
+                if (state.localError != null) {
+                    TextButton(
+                        onClick = onRetryDrive,
+                        enabled = !busy,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("local-retry"),
+                    ) { Text("Reintentar", color = if (busy) c.muted else c.accent, fontWeight = FontWeight.W700) }
+                }
                 OutlinedButton(
                     onClick = onChooseDriveFile,
                     enabled = !busy,
@@ -262,15 +279,7 @@ private fun AutomaticBackupCard(state: BackupUiState, zone: ZoneId, busy: Boolea
                 ) { Text("Guardar también en Google Drive", fontSize = 15.sp, fontWeight = FontWeight.W700) }
             } else {
                 MutedText(lastDriveText(state.lastDrive, zone), Modifier.testTag("backup-last-drive"))
-                state.driveError?.let { error ->
-                    Text(
-                        error,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.W600,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("drive-error"),
-                    )
-                }
+                state.driveError?.let { ErrorText(it, "drive-error") }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (!state.driveAccessLost) {
                         TextButton(
@@ -289,6 +298,18 @@ private fun AutomaticBackupCard(state: BackupUiState, zone: ZoneId, busy: Boolea
         }
         if (state.work == BackupWork.DRIVE) WorkingRow(BackupWork.DRIVE)
     }
+}
+
+/** Un error de la copia automática, en rojo y anunciado por el lector de pantalla. */
+@Composable
+private fun ErrorText(text: String, tag: String) {
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.W600,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(tag),
+    )
 }
 
 /** Una copia del teléfono: cuándo y de qué tipo, cuántas recetas (o «Copia dañada», sin acciones) y qué hacer con ella. */
@@ -356,6 +377,68 @@ private fun WorkingRow(work: BackupWork) {
             color = c.ink,
             style = MaterialTheme.typography.bodyLarge,
         )
+    }
+}
+
+/**
+ * El archivo elegido para Drive ya tiene algo. Si es una copia: cuántas recetas tiene frente a las de ahora, con
+ * «Importar primero»; si no, se pregunta si se reemplaza. «Reemplazar» va en rojo: sobrescribe el archivo.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BoxScope.DriveReplacePanel(panel: DrivePanel, onReplace: () -> Unit, onImportFirst: () -> Unit, onDismiss: () -> Unit) {
+    val c = LocalRecetarioColors.current
+    BottomPanel(onDismiss, "drive-replace-panel") {
+        SectionTitle("Copia automática en Google Drive")
+        when (panel) {
+            is DrivePanel.ExistingCopy -> {
+                Text(
+                    driveExistingCopyText(panel.backupRecipes, panel.localRecipes),
+                    color = c.ink,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.W700,
+                )
+                Text(
+                    "Si lo reemplazas, cada semana se guardará ahí una copia de lo que tienes ahora. " +
+                        "Si quieres conservar lo que trae, impórtalo primero.",
+                    color = c.ink,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            is DrivePanel.NotACopy -> Text(
+                BackupMessages.DRIVE_NOT_A_COPY,
+                color = c.ink,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.W700,
+            )
+        }
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp).testTag("drive-cancel")) {
+                Text("Cancelar", color = c.muted)
+            }
+            if (panel is DrivePanel.ExistingCopy) {
+                OutlinedButton(
+                    onClick = onImportFirst,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("drive-import-first"),
+                    shape = CircleShape,
+                    border = BorderStroke(1.5.dp, c.accent),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = c.accent),
+                ) { Text("Importar primero", fontWeight = FontWeight.W700) }
+            }
+            Button(
+                onClick = onReplace,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("drive-replace"),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) { Text("Reemplazar", fontWeight = FontWeight.W700) }
+        }
     }
 }
 

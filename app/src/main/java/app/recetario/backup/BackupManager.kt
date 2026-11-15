@@ -119,9 +119,10 @@ class BackupManager(
 
     /**
      * «Exportar copia» al documento [uri] que creó el selector. El documento solo se abre (con «wt») cuando la
-     * copia ya está escrita y comprobada en un temporal: si no vale, el documento no se toca (solo se borra si
-     * está vacío, es decir, si lo acaba de crear el selector). Si falla al copiarla, se borra el documento a medias
-     * (si el usuario eligió sobrescribir una copia anterior, esa se pierde: el proveedor ya la vació al abrirlo).
+     * copia ya está escrita y comprobada en un temporal: si no vale o no se puede abrir, el documento no se toca
+     * (solo se borra si está vacío, es decir, si lo acaba de crear el selector). Si falla después de abrirlo, se
+     * borra el documento a medias (si el usuario eligió sobrescribir una copia anterior, esa se pierde: el
+     * proveedor ya la vació al abrirlo).
      */
     suspend fun exportToDocument(uri: String): ExportResult = mutex.withLock {
         withContext(io) {
@@ -131,11 +132,17 @@ class BackupManager(
                 return@withContext ExportResult.Error(BackupMessages.EXPORT_FAILED)
             }
             try {
-                if (copyToDocument(temp, uri)) {
-                    ExportResult.Ok
-                } else {
-                    documents.delete(uri)
-                    ExportResult.Error(BackupMessages.EXPORT_FAILED)
+                when (copyToDocument(temp, uri, "wt")) {
+                    CopyResult.OK -> ExportResult.Ok
+                    // No se llegó a abrir: no se ha tocado, así que solo se borra si está vacío (lo creó el selector).
+                    CopyResult.OPEN_FAILED -> {
+                        deleteDocumentIfEmpty(documents, uri)
+                        ExportResult.Error(BackupMessages.EXPORT_FAILED)
+                    }
+                    CopyResult.WRITE_FAILED -> {
+                        documents.delete(uri)
+                        ExportResult.Error(BackupMessages.EXPORT_FAILED)
+                    }
                 }
             } finally {
                 temp.delete()
@@ -218,15 +225,17 @@ class BackupManager(
     /**
      * Copia semanal en `filesDir/backups/Recetario-AAAA-MM-DD-HHmm.zip`: se escribe en un temporal (con fsync), se
      * comprueba que se puede restaurar y solo entonces toma su nombre (nunca pisa otra: añade `-2`, `-3`…). Después
-     * se borran las semanales que sobran (se conservan 4, nunca la recién escrita ni otro tipo de copia) y se anota
-     * `lastLocal`. Null si no se pudo escribir o comprobar.
+     * se borran las semanales que sobran (la más reciente de cada una de las 4 últimas semanas; nunca la recién
+     * escrita, una «del futuro» ni otro tipo de copia) y se anota `lastLocal`. Null si no se pudo escribir o
+     * comprobar (y queda anotado `localError`).
      */
     suspend fun writeLocalBackup(): File? = mutex.withLock { withContext(io) { writeWeeklyLocked() } }
 
     /**
-     * Copia [local] (una copia del teléfono) en el documento de Drive [uri] con «wt», solo si se puede restaurar.
-     * Si sale bien anota `lastExternal` y `lastDrive` y borra `lastError`; si no, anota `lastError` y la copia del
-     * teléfono se queda como está. No se interrumpe a medias.
+     * Copia [local] (una copia del teléfono) en el documento de Drive [uri] con «wt» (o «w» si el proveedor no
+     * admite «wt»), solo si se puede restaurar, y comprueba el tamaño de lo escrito. Si sale bien anota
+     * `lastExternal` y `lastDrive` y borra `lastError`; si no, anota `lastError` y la copia del teléfono se queda
+     * como está. No se interrumpe a medias.
      */
     suspend fun copyToExternal(local: File, uri: String): Boolean = mutex.withLock { withContext(io) { copyToExternalLocked(local, uri) } }
 
@@ -243,6 +252,7 @@ class BackupManager(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "No se pudieron contar las recetas", e)
+                withContext(NonCancellable) { record { it.copy(localError = BackupMessages.LOCAL_FAILED) } }
                 return@withContext AutoBackupResult.LocalFailed
             }
             if (recipes == 0) return@withContext AutoBackupResult.NothingToSave
@@ -259,18 +269,23 @@ class BackupManager(
         }
     }
 
+    /** La copia semanal: si falla queda anotado `localError` (Inicio y Copias lo muestran); si sale bien, se borra. */
     private suspend fun writeWeeklyLocked(): File? {
-        val file = writeLocalCopy(weeklyBackupFileName(LocalDateTime.now(clock))) ?: return null
+        val file = writeLocalCopy(weeklyBackupFileName(LocalDateTime.now(clock)))
         withContext(NonCancellable) {
-            rotate(LocalBackupKind.AUTOMATIC, WEEKLY_BACKUPS_KEPT, file)
-            record { it.copy(lastLocal = clock.instant()) }
+            if (file == null) {
+                record { it.copy(localError = BackupMessages.LOCAL_FAILED) }
+            } else {
+                rotate(LocalBackupKind.AUTOMATIC, WEEKLY_BACKUPS_KEPT, file)
+                record { it.copy(lastLocal = clock.instant(), localError = null) }
+            }
         }
         return file
     }
 
     private suspend fun copyToExternalLocked(local: File, uri: String): Boolean = withContext(NonCancellable) {
         // Nunca se sube una copia que no se pueda restaurar.
-        val ok = inspect(local) != null && copyToDocument(local, uri)
+        val ok = inspect(local) != null && copyToDrive(local, uri)
         val now = clock.instant()
         record { status ->
             when {
@@ -363,16 +378,63 @@ class BackupManager(
         return false
     }
 
-    /** Copia [file] en el documento [uri] («wt») y lo cierra (cerrar también cuenta: algunos proveedores terminan ahí). */
-    private fun copyToDocument(file: File, uri: String): Boolean = try {
-        documents.openOutput(uri).use { out ->
-            FileInputStream(file).use { it.copyTo(out, BUFFER) }
-            out.flush()
+    private enum class CopyResult { OK, OPEN_FAILED, WRITE_FAILED }
+
+    /**
+     * Copia [file] en el documento [uri] abierto con [mode] y lo cierra (cerrar también cuenta: algunos proveedores
+     * terminan ahí). Distingue si ni siquiera se pudo abrir (el documento no se ha tocado) de si falló después.
+     */
+    private fun copyToDocument(file: File, uri: String, mode: String): CopyResult {
+        val out = try {
+            documents.openOutput(uri, mode)
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo abrir el documento con «$mode»", e)
+            return CopyResult.OPEN_FAILED
         }
-        true
+        return try {
+            out.use {
+                FileInputStream(file).use { input -> input.copyTo(out, BUFFER) }
+                out.flush()
+            }
+            CopyResult.OK
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo escribir en el documento", e)
+            CopyResult.WRITE_FAILED
+        }
+    }
+
+    /**
+     * Copia [local] en el documento de Drive: con «wt» y, si el proveedor no lo admite, una vez más con «w». Después
+     * lee el documento y comprueba que mide lo mismo que la copia (con «w» algunos proveedores dejan al final bytes
+     * de la copia anterior).
+     */
+    private fun copyToDrive(local: File, uri: String): Boolean {
+        var result = copyToDocument(local, uri, "wt")
+        if (result == CopyResult.OPEN_FAILED) result = copyToDocument(local, uri, "w")
+        if (result != CopyResult.OK) return false
+        val length = documentLength(uri)
+        if (length != local.length()) {
+            Log.w(TAG, "La copia en Drive mide $length bytes y debería medir ${local.length()}")
+            return false
+        }
+        return true
+    }
+
+    /** Bytes del documento leyéndolo entero, o null si no se puede leer. */
+    private fun documentLength(uri: String): Long? = try {
+        documents.openInput(uri).use { input ->
+            val buffer = ByteArray(BUFFER)
+            var total = 0L
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                total += n
+            }
+            total
+        }
     } catch (e: Exception) {
-        Log.w(TAG, "No se pudo escribir en el documento", e)
-        false
+        Log.w(TAG, "No se pudo leer la copia en Drive", e)
+        null
     }
 
     /** Borra las copias de [kind] que sobran. Nunca [justWritten] ni la que se está restaurando. */

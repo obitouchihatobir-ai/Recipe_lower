@@ -7,11 +7,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.recetario.backup.BackupNotice
 import app.recetario.backup.backupNoticeFor
+import app.recetario.backup.noticeDismissalKey
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.list.RecipeCardData
 import app.recetario.recipes.list.toCardData
 import app.recetario.recipes.model.Category
 import app.recetario.settings.BackupStatus
+import app.recetario.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -37,7 +40,10 @@ data class HomeState(
     val categories: List<Category> = emptyList(),
     val recent: List<RecipeCardData> = emptyList(),
     val favorites: List<RecipeCardData> = emptyList(),
-    /** Tarjeta sobre las copias: el error de la copia automática o el recordatorio de los 30 días. */
+    /**
+     * Tarjeta sobre las copias: los errores de la copia automática o el recordatorio de los 30 días; null si no hay
+     * o si hoy se ocultó ese mismo aviso.
+     */
     val backupNotice: BackupNotice? = null,
     /** Hoy, según el reloj (la tarjeta de las copias se puede ocultar hasta mañana). */
     val today: LocalDate? = null,
@@ -54,7 +60,7 @@ fun minuteTicks(clock: Clock): Flow<Unit> = flow {
 /**
  * [ticks] hace que el saludo y la tarjeta de las copias se recalculen (cada minuto, así el saludo cambia a las
  * 12:00 y a las 20:00 y el recordatorio aparece al pasar los 30 días); los datos se combinan en [dispatcher],
- * fuera del hilo principal.
+ * fuera del hilo principal. [dismissNotice] guarda (en el estado del teléfono) qué aviso se ocultó y qué día.
  */
 class HomeViewModel(
     repo: RecipeRepository,
@@ -62,6 +68,7 @@ class HomeViewModel(
     private val clock: Clock,
     ticks: Flow<Unit> = minuteTicks(clock),
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val dismissNotice: suspend (key: String) -> Unit,
 ) : ViewModel() {
     private val now: Flow<Instant> = ticks.onStart { emit(Unit) }.map { clock.instant() }
 
@@ -71,6 +78,8 @@ class HomeViewModel(
         ) { summaries, categories, at, status, firstRecipeAt ->
             val byId = categories.associateBy { it.id }
             val local = at.atZone(clock.zone)
+            val today = local.toLocalDate()
+            val notice = backupNoticeFor(at, status.localError, status.lastError, status.lastExternal, firstRecipeAt)
             HomeState(
                 greeting = greetingFor(local.toLocalTime()),
                 loaded = true,
@@ -78,8 +87,8 @@ class HomeViewModel(
                 categories = categories,
                 recent = recentRecipes(summaries).map { it.toCardData(byId) },
                 favorites = favoriteRecipes(summaries).map { it.toCardData(byId) },
-                backupNotice = backupNoticeFor(at, null, status.lastError, status.lastExternal, firstRecipeAt),
-                today = local.toLocalDate(),
+                backupNotice = notice?.takeIf { noticeDismissalKey(today, it) != status.noticeDismissed },
+                today = today,
             )
         }.flowOn(dispatcher)
             .stateIn(
@@ -88,9 +97,25 @@ class HomeViewModel(
                 HomeState(greeting = greetingFor(LocalTime.now(clock)), today = LocalDate.now(clock)),
             )
 
+    /** La ✕ de la tarjeta: ese aviso no vuelve a salir hoy (otro aviso, u otro día, sí). */
+    fun dismissBackupNotice() {
+        val current = state.value
+        val notice = current.backupNotice ?: return
+        val today = current.today ?: return
+        viewModelScope.launch {
+            // Si no se puede guardar, la tarjeta sigue ahí: no es grave.
+            runCatching { dismissNotice(noticeDismissalKey(today, notice)) }
+        }
+    }
+
     companion object {
-        fun factory(repo: RecipeRepository, backupStatus: Flow<BackupStatus>, clock: Clock): ViewModelProvider.Factory = viewModelFactory {
-            initializer { HomeViewModel(repo, backupStatus, clock) }
+        fun factory(repo: RecipeRepository, settings: SettingsRepository, clock: Clock): ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                HomeViewModel(
+                    repo, settings.backupStatus, clock,
+                    dismissNotice = { key -> settings.updateBackupStatus { it.copy(noticeDismissed = key) } },
+                )
+            }
         }
     }
 }
