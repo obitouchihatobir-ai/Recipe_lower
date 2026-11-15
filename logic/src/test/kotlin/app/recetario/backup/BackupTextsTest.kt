@@ -85,6 +85,23 @@ class BackupTextsTest {
     }
 
     @Test
+    fun lastLocalAndDrive_inLocalTime() {
+        val madrid = ZoneId.of("Europe/Madrid")
+        val at = Instant.parse("2026-11-13T20:40:00Z")
+        assertThat(lastLocalText(at, madrid)).isEqualTo("Última copia en el teléfono: 13 de noviembre de 2026, 21:40")
+        assertThat(lastLocalText(null, madrid)).isEqualTo("Última copia en el teléfono: todavía ninguna")
+        assertThat(lastDriveText(at, madrid)).isEqualTo("Última copia en Drive: 13 de noviembre de 2026, 21:40")
+        assertThat(lastDriveText(null, madrid)).isEqualTo("Última copia en Drive: todavía ninguna")
+    }
+
+    @Test
+    fun driveTexts_areTheAgreedOnes() {
+        assertThat(BackupMessages.DRIVE_FAILED).isEqualTo("No se pudo guardar en Google Drive. Vuelve a elegir el archivo.")
+        assertThat(BackupMessages.SAVE_OUTSIDE_LOST).isEqualTo("No se pudo guardar la copia. Inténtalo de nuevo.")
+        assertThat(DRIVE_DOCUMENT_NAME).isEqualTo("Recetario-copia-automatica.zip")
+    }
+
+    @Test
     fun messages_areTheAgreedOnes() {
         assertThat(BackupMessages.NOT_A_BACKUP).isEqualTo("Este archivo no es una copia del Recetario.")
         assertThat(BackupMessages.NEWER_BACKUP)

@@ -26,6 +26,7 @@ import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.core.ui.theme.contrastRatio
 import app.recetario.navigation.AppNavHost
 import app.recetario.navigation.Settings
+import app.recetario.settings.BackupStatus
 import app.recetario.testing.installTestContainer
 import app.recetario.testing.sampleRecipe
 import app.recetario.testing.testClock
@@ -42,10 +43,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
 
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
@@ -55,38 +52,16 @@ class BackupScreenTest {
 
     private lateinit var container: AppContainer
 
+    /** Los documentos de fuera que ven la pantalla y las copias (el archivo elegido al importar, lo exportado…). */
+    private val documents = FakeDocuments()
+
     @Before
     fun setUp() {
-        container = installTestContainer()
+        container = installTestContainer(documents = documents)
     }
 
     @After
     fun tearDown() = container.database.close()
-
-    /** Documentos de prueba: [input] es el archivo elegido al importar; lo exportado queda en [written]. */
-    private class FakeDocuments(var input: ByteArray = ByteArray(0), val failOutput: Boolean = false) : BackupDocuments {
-        val written = ByteArrayOutputStream()
-        val opened = mutableListOf<String>()
-        val deleted = mutableListOf<String>()
-
-        override fun openInput(uri: String): InputStream {
-            opened += uri
-            return ByteArrayInputStream(input)
-        }
-
-        override fun openOutput(uri: String): OutputStream {
-            if (failOutput) {
-                return object : OutputStream() {
-                    override fun write(b: Int) = throw IOException("disco lleno")
-                }
-            }
-            return written
-        }
-
-        override fun delete(uri: String) {
-            deleted += uri
-        }
-    }
 
     /** Selector de archivos del sistema falso: responde al momento con [uri] y anota lo que se le pidió. */
     private class FakePicker(private val uri: Uri) : ActivityResultRegistryOwner {
@@ -101,10 +76,10 @@ class BackupScreenTest {
 
     private val pickedUri = Uri.parse("content://prueba/Recetario-2026-11-13.zip")
 
-    private fun launch(documents: FakeDocuments, picker: FakePicker = FakePicker(pickedUri)): FakePicker {
+    private fun launch(picker: FakePicker = FakePicker(pickedUri)): FakePicker {
         rule.setContent {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides picker) {
-                RecetarioTheme(ThemeChoice.CALIDO) { BackupRoute(container, onBack = {}, documents = documents) }
+                RecetarioTheme(ThemeChoice.CALIDO) { BackupRoute(container, onBack = {}) }
             }
         }
         rule.waitFor(hasTestTag("backup-screen"))
@@ -118,8 +93,8 @@ class BackupScreenTest {
     @Test
     fun replaceAll_needsASecondConfirmation() {
         runBlocking { container.recipeRepository.save(sampleRecipe("local", "Tortilla local")) }
-        val documents = FakeDocuments(backupWithPaella())
-        val picker = launch(documents)
+        documents.input = backupWithPaella()
+        val picker = launch()
 
         rule.onNodeWithTag("backup-import").performClick()
         rule.waitFor(hasTestTag("import-mode-panel"))
@@ -158,7 +133,8 @@ class BackupScreenTest {
     @Test
     fun merge_importsAfterOneChoice() {
         runBlocking { container.recipeRepository.save(sampleRecipe("local", "Tortilla local")) }
-        launch(FakeDocuments(backupWithPaella()))
+        documents.input = backupWithPaella()
+        launch()
 
         rule.onNodeWithTag("backup-import").performClick()
         rule.waitFor(hasTestTag("import-merge"))
@@ -170,7 +146,8 @@ class BackupScreenTest {
 
     @Test
     fun importError_isShownRightAfterChoosingTheFile() {
-        launch(FakeDocuments("no es un zip".toByteArray()))
+        documents.input = "no es un zip".toByteArray()
+        launch()
 
         rule.onNodeWithTag("backup-import").performClick()
 
@@ -191,7 +168,7 @@ class BackupScreenTest {
     @Test
     fun localCopies_restoreAsksTwice_andBringsBackThePreviousData() {
         val name = importOverLocalRecipe()
-        launch(FakeDocuments())
+        launch()
         rule.waitFor(hasText("Antes de importar · 13 de noviembre de 2026, 21:40"))
         rule.onNodeWithText("1 receta").assertExists()
 
@@ -215,8 +192,7 @@ class BackupScreenTest {
     @Test
     fun localCopies_saveOutside_copiesTheFileExactly() {
         val name = importOverLocalRecipe()
-        val documents = FakeDocuments()
-        val picker = launch(documents)
+        val picker = launch()
         rule.waitFor(hasTestTag("local-save-$name"))
 
         rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("local-save-$name"))
@@ -225,14 +201,14 @@ class BackupScreenTest {
         rule.waitFor(hasText("Copia guardada."))
         assertThat(picker.inputs.single()).isEqualTo(name)
         val file = java.io.File(container.backupManager.localBackupsDir, name)
-        assertThat(documents.written.toByteArray().toList()).isEqualTo(file.readBytes().toList())
+        assertThat(documents.written.toList()).isEqualTo(file.readBytes().toList())
     }
 
     @Test
     fun localCopies_damagedOnes_haveNoActions() {
         val dir = container.backupManager.localBackupsDir.apply { mkdirs() }
         java.io.File(dir, "antes-de-importar-2026-11-01-0900.zip").writeText("roto")
-        launch(FakeDocuments())
+        launch()
 
         rule.waitFor(hasText("Copia dañada"))
         rule.onNodeWithTag("local-restore-antes-de-importar-2026-11-01-0900.zip").assertDoesNotExist()
@@ -241,15 +217,14 @@ class BackupScreenTest {
 
     @Test
     fun export_savesTheZip_andRecordsLastExternal() {
-        val documents = FakeDocuments()
-        val picker = launch(documents)
+        val picker = launch()
         rule.waitFor(hasText("Todavía no has guardado ninguna copia fuera del teléfono."))
 
         rule.onNodeWithTag("backup-export").performClick()
 
         rule.waitFor(hasText("Copia guardada."))
         assertThat(picker.inputs.single()).isEqualTo("Recetario-2026-11-13.zip")
-        val entries = unzip(documents.written.toByteArray())
+        val entries = unzip(documents.written)
         assertThat(decodeBackup(String(entries.getValue("backup.json")))).isInstanceOf(BackupDecodeResult.Ok::class.java)
         rule.waitUntil(5_000) { runBlocking { container.settingsRepository.backupStatus.first().lastExternal } != null }
         assertThat(runBlocking { container.settingsRepository.backupStatus.first().lastExternal }).isEqualTo(testClock.instant())
@@ -259,14 +234,115 @@ class BackupScreenTest {
 
     @Test
     fun export_failure_saysSo_deletesThePartialFile_andDoesNotRecordIt() {
-        val documents = FakeDocuments(failOutput = true)
-        launch(documents)
+        documents.failOutput = true
+        launch()
 
         rule.onNodeWithTag("backup-export").performClick()
 
         rule.waitFor(hasText("No se pudo guardar la copia."))
         assertThat(documents.deleted).containsExactly(pickedUri.toString())
         assertThat(runBlocking { container.settingsRepository.backupStatus.first().lastExternal }).isNull()
+    }
+
+    private val driveUri = "content://drive/Recetario-copia-automatica.zip"
+
+    private fun status() = runBlocking { container.settingsRepository.backupStatus.first() }
+
+    private fun setStatus(transform: (BackupStatus) -> BackupStatus) = runBlocking { container.settingsRepository.updateBackupStatus(transform) }
+
+    private fun saveRecipe() = runBlocking { container.recipeRepository.save(sampleRecipe("local", "Tortilla local")) }
+
+    private fun tap(tag: String) {
+        rule.waitFor(hasTestTag(tag))
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag(tag))
+        rule.onNodeWithTag(tag).performClick()
+    }
+
+    @Test
+    fun drive_setup_keepsThePermission_andSavesACopyRightAway() {
+        saveRecipe()
+        val picker = launch(FakePicker(Uri.parse(driveUri)))
+        rule.waitFor(hasText("Última copia en el teléfono: todavía ninguna"))
+
+        tap("drive-setup")
+
+        rule.waitFor(hasText("Copia guardada en Google Drive."))
+        assertThat(picker.inputs.single()).isEqualTo("Recetario-copia-automatica.zip")
+        assertThat(documents.persisted).containsExactly(driveUri)
+        val local = java.io.File(container.backupManager.localBackupsDir, "Recetario-2026-11-13-2140.zip")
+        assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(local.readBytes().toList())
+        val now = testClock.instant()
+        assertThat(status()).isEqualTo(BackupStatus(lastLocal = now, lastExternal = now, lastDrive = now, driveUri = driveUri))
+        rule.waitFor(hasText("Última copia en Drive: 13 de noviembre de 2026, 21:40"))
+        rule.onNodeWithText("Última copia en el teléfono: 13 de noviembre de 2026, 21:40").assertExists()
+        rule.onNodeWithTag("drive-error").assertDoesNotExist()
+        // La copia nueva también está en «Copias en el teléfono».
+        rule.waitFor(hasTestTag("local-backup-Recetario-2026-11-13-2140.zip"))
+    }
+
+    @Test
+    fun drive_failure_isShown_keepsTheLocalCopy_andRetryFixesIt() {
+        saveRecipe()
+        documents.persisted += driveUri
+        setStatus { it.copy(driveUri = driveUri) }
+        documents.failOutput = true
+        launch()
+
+        tap("drive-retry")
+
+        rule.waitFor(hasTestTag("drive-error"))
+        rule.waitUntil(5_000) { status().lastError != null }
+        assertThat(status().lastError).isEqualTo("No se pudo guardar en Google Drive. Vuelve a elegir el archivo.")
+        assertThat(status().lastLocal).isEqualTo(testClock.instant())
+        assertThat(status().lastExternal).isNull()
+        assertThat(container.backupManager.localBackupsDir.list()?.toList()).containsExactly("Recetario-2026-11-13-2140.zip")
+
+        documents.failOutput = false
+        tap("drive-retry")
+
+        rule.waitFor(hasText("Copia guardada en Google Drive."))
+        rule.waitForGone(hasTestTag("drive-error"))
+        assertThat(status().lastError).isNull()
+        assertThat(status().lastExternal).isEqualTo(testClock.instant())
+    }
+
+    @Test
+    fun drive_lostPermission_showsTheError_andOnlyOffersChoosingAnotherFile() {
+        saveRecipe()
+        // El archivo de Drive se eligió, pero el permiso ya no está (se borró Drive, se revocó…).
+        setStatus { it.copy(driveUri = driveUri) }
+        val newUri = "content://drive/Recetario-copia-automatica (1).zip"
+        val picker = launch(FakePicker(Uri.parse(newUri)))
+
+        rule.waitFor(hasTestTag("drive-error"))
+        rule.onNodeWithTag("drive-retry").assertDoesNotExist()
+        // También lo verá en Inicio.
+        rule.waitUntil(5_000) { status().lastError == BackupMessages.DRIVE_FAILED }
+
+        tap("drive-choose")
+
+        rule.waitFor(hasText("Copia guardada en Google Drive."))
+        assertThat(picker.inputs.single()).isEqualTo("Recetario-copia-automatica.zip")
+        assertThat(documents.persisted).containsExactly(newUri)
+        assertThat(documents.released).containsExactly(driveUri)
+        assertThat(status().driveUri).isEqualTo(newUri)
+        assertThat(status().lastError).isNull()
+        rule.waitForGone(hasTestTag("drive-error"))
+        rule.waitFor(hasTestTag("drive-retry"))
+    }
+
+    @Test
+    fun drive_fileWithoutPersistentPermission_isDeleted_andNothingIsSaved() {
+        saveRecipe()
+        documents.grantPersistable = false
+        launch(FakePicker(Uri.parse(driveUri)))
+
+        tap("drive-setup")
+
+        rule.waitFor(hasText("No se puede usar ese archivo para las copias automáticas. Elige otro."))
+        assertThat(documents.deleted).containsExactly(driveUri)
+        assertThat(documents.openedForWriting).isEmpty()
+        assertThat(status().driveUri).isNull()
     }
 
     @Test

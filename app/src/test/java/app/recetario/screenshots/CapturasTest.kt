@@ -1,6 +1,7 @@
 package app.recetario.screenshots
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.activity.compose.LocalActivityResultRegistryOwner
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.navigation.NavHostController
 import androidx.test.core.app.ApplicationProvider
+import app.recetario.backup.BackupMessages
 import app.recetario.backup.backupOf
 import app.recetario.backup.backupZip
 import org.robolectric.Shadows.shadowOf
@@ -39,6 +41,7 @@ import app.recetario.navigation.Appearance
 import app.recetario.navigation.Backup
 import app.recetario.navigation.Categories
 import app.recetario.navigation.Converter
+import app.recetario.navigation.Home
 import app.recetario.navigation.Cooking
 import app.recetario.navigation.Settings
 import app.recetario.navigation.RecipeDetail
@@ -52,6 +55,8 @@ import app.recetario.testing.ingredient
 import app.recetario.testing.installTestContainer
 import app.recetario.testing.sampleRecipe
 import app.recetario.testing.waitFor
+import app.recetario.testing.waitForGone
+import app.recetario.settings.BackupStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -63,7 +68,7 @@ import java.io.File
 import java.time.Instant
 
 /**
- * Capturas de Inicio, Recetas, el editor, el detalle, Ajustes, Apariencia, Categorías, Copias de seguridad y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
+ * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle, Ajustes, Apariencia, Categorías, Copias de seguridad (también con Google Drive) y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -91,7 +96,11 @@ class CapturasTest {
 
     private fun captureAll(theme: ThemeChoice) {
         val c = installTestContainer().also { container = it }
-        runBlocking { sampleRecipes().forEach { c.recipeRepository.save(it) } }
+        runBlocking {
+            sampleRecipes().forEach { c.recipeRepository.save(it) }
+            // Una copia reciente fuera del teléfono: Inicio sin tarjeta de aviso (la tarjeta va en captureHomeNotice).
+            c.settingsRepository.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-10T18:05:00Z")) }
+        }
         lateinit var nav: NavHostController
         val picker = FilePicker()
         rule.setContent {
@@ -146,6 +155,19 @@ class CapturasTest {
         captureConverter(nav, name)
         captureBackup(c, nav, name)
         captureCooking(c, nav, name)
+        captureHomeNotice(c, nav, name)
+    }
+
+    /** Inicio con el recordatorio de los 30 días y con el error de la copia automática en Drive. */
+    private fun captureHomeNotice(c: AppContainer, nav: NavHostController, name: String) {
+        runBlocking { c.settingsRepository.updateBackupStatus { BackupStatus() } }
+        rule.runOnIdle { nav.popBackStack(Home, inclusive = false) }
+        rule.waitFor(hasTestTag("home-backup-card"))
+        rule.waitFor(hasText("Hace más de 30 días que no guardas una copia fuera del teléfono."))
+        save("inicio-aviso-$name")
+        runBlocking { c.settingsRepository.updateBackupStatus { it.copy(lastError = BackupMessages.DRIVE_FAILED) } }
+        rule.waitFor(hasText(BackupMessages.DRIVE_FAILED))
+        save("inicio-error-$name")
     }
 
     /**
@@ -157,6 +179,7 @@ class CapturasTest {
             c.settingsRepository.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-10T18:05:00Z")) }
             val dir = c.backupManager.localBackupsDir.apply { mkdirs() }
             File(dir, "antes-de-importar-2026-11-12-1830.zip").outputStream().use { c.backupManager.export(it) }
+            File(dir, "Recetario-2026-11-08-0300.zip").outputStream().use { c.backupManager.export(it) }
             File(dir, "antes-de-importar-2026-11-01-0900.zip").writeText("roto")
         }
         // El zip que «elige» el selector falso: se comprueba entero antes de ofrecer nada.
@@ -167,7 +190,33 @@ class CapturasTest {
             .registerInputStreamSupplier(Uri.parse(PICKED_URI)) { ByteArrayInputStream(chosen) }
         rule.runOnIdle { nav.navigate(Backup) }
         rule.waitFor(hasTestTag("backup-last-external"))
+        rule.waitFor(hasTestTag("drive-setup"))
         save("copias-$name")
+
+        // Copia automática con Google Drive ya elegido (y su permiso), y después con el error de Drive.
+        val resolver = ApplicationProvider.getApplicationContext<Context>().contentResolver
+        resolver.takePersistableUriPermission(
+            Uri.parse(DRIVE_URI),
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+        )
+        runBlocking {
+            c.settingsRepository.updateBackupStatus {
+                it.copy(
+                    driveUri = DRIVE_URI,
+                    lastLocal = Instant.parse("2026-11-08T02:00:00Z"),
+                    lastDrive = Instant.parse("2026-11-08T02:00:05Z"),
+                )
+            }
+        }
+        rule.waitFor(hasTestTag("backup-last-drive"))
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("drive-choose"))
+        save("copias-drive-$name")
+        runBlocking { c.settingsRepository.updateBackupStatus { it.copy(lastError = BackupMessages.DRIVE_FAILED) } }
+        rule.waitFor(hasTestTag("drive-error"))
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("drive-choose"))
+        save("copias-drive-error-$name")
+        runBlocking { c.settingsRepository.updateBackupStatus { it.copy(lastError = null) } }
+        rule.waitForGone(hasTestTag("drive-error"))
         rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("local-backup-antes-de-importar-2026-11-01-0900.zip"))
         rule.waitFor(hasText("Copia dañada"))
         save("copias-telefono-$name")
@@ -187,6 +236,7 @@ class CapturasTest {
      */
     private companion object {
         const val PICKED_URI = "content://capturas/Recetario-2026-11-13.zip"
+        const val DRIVE_URI = "content://capturas/Recetario-copia-automatica.zip"
     }
 
     private class FilePicker : ActivityResultRegistryOwner {

@@ -15,6 +15,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.recetario.AppContainer
 import app.recetario.RecetarioApp
+import app.recetario.backup.BackupDocuments
+import app.recetario.backup.ContentResolverDocuments
 import app.recetario.core.data.AppDatabase
 import app.recetario.core.data.DefaultCategories
 import app.recetario.recipes.model.Difficulty
@@ -34,15 +36,22 @@ val testClock: Clock = Clock.fixed(Instant.parse("2026-11-13T20:40:00Z"), ZoneId
 
 /**
  * Sustituye el contenedor de la app por uno con la base de datos en memoria (con las categorías de serie).
- * [elapsedRealtime] es el reloj de los temporizadores.
+ * [elapsedRealtime] es el reloj de los temporizadores; [documents], los documentos de fuera de las copias (null: los
+ * del sistema, con el `ContentResolver` de Robolectric).
  */
-fun installTestContainer(clock: Clock = testClock, elapsedRealtime: () -> Long = SystemClock::elapsedRealtime): AppContainer {
+fun installTestContainer(
+    clock: Clock = testClock,
+    elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
+    documents: BackupDocuments? = null,
+): AppContainer {
     val app = ApplicationProvider.getApplicationContext<RecetarioApp>()
     val db = Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
         .addCallback(DefaultCategories.callback)
         .build()
-    return AppContainer(app, clock = clock, database = db, settingsDataStore = testSettingsDataStore(), elapsedRealtime = elapsedRealtime)
-        .also { app.container = it }
+    return AppContainer(
+        app, clock = clock, database = db, settingsDataStore = testSettingsDataStore(), elapsedRealtime = elapsedRealtime,
+        backupDocuments = documents ?: ContentResolverDocuments(app.contentResolver),
+    ).also { app.container = it }
 }
 
 /** Ajustes en un archivo temporal propio de cada contenedor de prueba. */

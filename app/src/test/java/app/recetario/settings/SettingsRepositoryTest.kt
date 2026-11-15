@@ -109,5 +109,11 @@ class SettingsRepositoryTest {
         assertEquals(BackupStatus(lastLocal = at, driveUri = "content://x/y", lastError = "Sin permiso"), repo.backupStatus.first())
         repo.updateBackupStatus { it.copy(lastError = null, lastExternal = at) }
         assertEquals(BackupStatus(lastLocal = at, lastExternal = at, driveUri = "content://x/y"), repo.backupStatus.first())
+        // La última copia en Drive se guarda aparte de la última que salió del teléfono (que puede ser manual).
+        val later = at.plusSeconds(60)
+        repo.updateBackupStatus { it.copy(lastDrive = later) }
+        assertEquals(BackupStatus(lastLocal = at, lastExternal = at, lastDrive = later, driveUri = "content://x/y"), repo.backupStatus.first())
+        repo.updateBackupStatus { it.copy(lastDrive = null) }
+        assertEquals(null, repo.backupStatus.first().lastDrive)
     }
 }

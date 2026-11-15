@@ -47,7 +47,11 @@ class BackupTestEnv(private val tmp: TemporaryFolder, val clock: Clock = backupC
     )
     val recipes = RoomRecipeRepository(db, photos, clock)
     val shopping = RoomShoppingRepository(db, clock, settings.cupMl)
-    val manager = BackupManager(db, photos, settings, clock, cacheDir = cacheDir, filesDir = filesDir, appVersion = "0.1.0")
+    /** Los documentos «de fuera» (Drive, Descargas…). */
+    val documents = FakeDocuments()
+    val manager = BackupManager(
+        db, photos, settings, clock, cacheDir = cacheDir, filesDir = filesDir, documents = documents, appVersion = "0.1.0",
+    )
     val backupsDir = File(filesDir, "backups")
 
     fun close() = db.close()
@@ -95,6 +99,71 @@ class BackupTestEnv(private val tmp: TemporaryFolder, val clock: Clock = backupC
     fun cacheFiles(): List<String> = cacheDir.walkTopDown().filter { it != cacheDir }.map { it.relativeTo(cacheDir).path }.toList()
 
     fun backups(): List<String> = (backupsDir.listFiles() ?: emptyArray()).map { it.name }.sorted()
+}
+
+/**
+ * Documentos de prueba (Drive, Descargas…): [input] es el archivo que se abre al importar; lo que se escribe queda
+ * en [files] al cerrarse. [failOutput] hace fallar la escritura a mitad; [grantPersistable] = false, que el
+ * proveedor no dé permiso persistente.
+ */
+class FakeDocuments(@Volatile var input: ByteArray = ByteArray(0), @Volatile var failOutput: Boolean = false) : BackupDocuments {
+    val files: MutableMap<String, ByteArray> = java.util.concurrent.ConcurrentHashMap()
+    val opened: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+    val openedForWriting: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+    val deleted: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+    val persisted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    val released: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+
+    @Volatile
+    var grantPersistable = true
+
+    /** Lo último que se escribió (en cualquier documento). */
+    val written: ByteArray get() = lastWritten ?: ByteArray(0)
+
+    @Volatile
+    private var lastWritten: ByteArray? = null
+
+    override fun openInput(uri: String): java.io.InputStream {
+        opened += uri
+        return java.io.ByteArrayInputStream(files[uri] ?: input)
+    }
+
+    override fun openOutput(uri: String): java.io.OutputStream {
+        openedForWriting += uri
+        if (failOutput) {
+            return object : java.io.OutputStream() {
+                override fun write(b: Int) = throw java.io.IOException("disco lleno")
+                override fun write(b: ByteArray, off: Int, len: Int) = throw java.io.IOException("disco lleno")
+            }
+        }
+        // «wt»: se vacía al abrir.
+        files[uri] = ByteArray(0)
+        return object : ByteArrayOutputStream() {
+            override fun close() {
+                val bytes = toByteArray()
+                files[uri] = bytes
+                lastWritten = bytes
+            }
+        }
+    }
+
+    override fun delete(uri: String) {
+        deleted += uri
+        files.remove(uri)
+    }
+
+    override fun takePersistableAccess(uri: String): Boolean {
+        if (!grantPersistable) return false
+        persisted += uri
+        return true
+    }
+
+    override fun releasePersistableAccess(uri: String) {
+        released += uri
+        persisted -= uri
+    }
+
+    override fun hasPersistedAccess(uri: String): Boolean = uri in persisted
 }
 
 data class Snapshot(

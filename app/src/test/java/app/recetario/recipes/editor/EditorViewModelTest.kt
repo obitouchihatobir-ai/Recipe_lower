@@ -61,6 +61,7 @@ private class FakeRecipeRepository : RecipeRepository {
     override suspend fun deleteTag(name: String) = error("no se usa")
     override suspend fun isPhotoReferenced(name: String): Boolean =
         recipes.value.values.any { r -> r.coverPhoto == name || r.steps.any { name in it.photos } }
+    override fun observeFirstRecipeAt(): Flow<Instant?> = error("no se usa")
 }
 
 private class TestClock(var now: Instant) : Clock() {

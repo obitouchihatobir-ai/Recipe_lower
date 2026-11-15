@@ -19,7 +19,22 @@ object BackupMessages {
     const val NO_PICKER = "No hay ninguna app para elegir el archivo."
     const val INCOMPLETE = "La copia está incompleta: faltan fotos."
     const val DAMAGED = "Copia dañada"
+
+    /** La copia automática no llegó a Drive (falló la escritura o se perdió el permiso). */
+    const val DRIVE_FAILED = "No se pudo guardar en Google Drive. Vuelve a elegir el archivo."
+    const val DRIVE_SAVED = "Copia guardada en Google Drive."
+    const val DRIVE_UNUSABLE = "No se puede usar ese archivo para las copias automáticas. Elige otro."
+    const val NOTHING_TO_SAVE = "Aún no tienes recetas: no hay nada que guardar."
+
+    /** «Guardar fuera»: llegó el documento creado, pero ya no se sabe qué copia guardar (Android cerró la app). */
+    const val SAVE_OUTSIDE_LOST = "No se pudo guardar la copia. Inténtalo de nuevo."
+
+    /** Recordatorio de Inicio. */
+    const val REMINDER = "Hace más de 30 días que no guardas una copia fuera del teléfono."
 }
+
+/** Nombre que se propone al elegir el archivo de Google Drive de la copia automática. */
+const val DRIVE_DOCUMENT_NAME = "Recetario-copia-automatica.zip"
 
 /** «Copia importada: 3 recetas, 1 foto.», y si alguna foto no se pudo copiar, «2 fotos no se pudieron copiar.» */
 fun importSummary(recipes: Int, images: Int, failedImages: Int = 0): String {
@@ -45,10 +60,13 @@ fun exportFileName(date: LocalDate): String = "Recetario-$date.zip"
 /** Copia automática que se guarda antes de «Reemplazar todo»: `antes-de-importar-2026-11-13-2140.zip`. */
 fun safetyCopyFileName(dateTime: LocalDateTime): String = "antes-de-importar-${dateTime.format(STAMP)}.zip"
 
+/** Copia automática semanal del teléfono: `Recetario-2026-11-15-0300.zip`. */
+fun weeklyBackupFileName(dateTime: LocalDateTime): String = "Recetario-${dateTime.format(STAMP)}.zip"
+
 private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm")
 private val LONG_DATE = DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("es-ES"))
 
-/** Copias guardadas en el teléfono (`filesDir/backups/`). La Tarea 16 añade las automáticas. */
+/** Copias guardadas en el teléfono (`filesDir/backups/`): las previas a importar y las semanales. */
 enum class LocalBackupKind(val label: String) { BEFORE_IMPORT("Antes de importar"), AUTOMATIC("Copia automática") }
 
 /** Lo que dice el nombre de una copia del teléfono: de qué tipo es, cuándo se hizo y su número si hubo varias ese minuto. */
@@ -84,3 +102,11 @@ fun sortLocalBackupsNewestFirst(names: List<String>): List<String> {
 fun lastExternalText(lastExternal: Instant?, zone: ZoneId): String =
     if (lastExternal == null) "Todavía no has guardado ninguna copia fuera del teléfono."
     else "Última copia guardada fuera del teléfono: ${lastExternal.atZone(zone).format(LONG_DATE)}"
+
+/** «Última copia en el teléfono: 13 de noviembre de 2026, 21:40» (la semanal) o «…: todavía ninguna». */
+fun lastLocalText(lastLocal: Instant?, zone: ZoneId): String = "Última copia en el teléfono: ${dateOrNone(lastLocal, zone)}"
+
+/** «Última copia en Drive: …» o «…: todavía ninguna». */
+fun lastDriveText(lastDrive: Instant?, zone: ZoneId): String = "Última copia en Drive: ${dateOrNone(lastDrive, zone)}"
+
+private fun dateOrNone(at: Instant?, zone: ZoneId): String = at?.atZone(zone)?.format(LONG_DATE) ?: "todavía ninguna"
