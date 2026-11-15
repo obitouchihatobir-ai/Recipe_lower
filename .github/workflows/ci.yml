@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Pruebas de la lógica pura
+        run: ./gradlew -p logic test
+
+      - name: Pruebas de los scripts de firma
+        run: bash scripts/signing/test-signing-scripts.sh
+
+      - name: Pruebas de la app y APK de depuración y release
+        run: ./gradlew testDebugUnitTest assembleDebug assembleRelease
+
+      # Cuenta las pruebas de logic/ y de :app en sus informes JUnit (XML) y lo deja en el registro y en el
+      # resumen de la ejecución. Corre también si algo falló, para ver cuántas fallaron.
+      - name: Contar las pruebas
+        if: always()
+        run: python3 scripts/ci/count-tests.py logic/build/test-results app/build/test-results
+
+      # Capturas de las pantallas en los tres temas (CapturasTest), para revisarlas a ojo.
+      - name: Subir capturas de pantalla
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: capturas
+          path: app/build/capturas/
+          if-no-files-found: ignore
+
+      # Sin RECETARIO_KEYSTORE, el APK release sale sin firmar. Su versión debe
+      # salir de app/version.properties: versionCode = major*10000 + minor*100 + patch.
+      # Room regenera el esquema en cada compilación: si cambia y no está commiteado, falla
+      # e imprime el JSON para poder versionarlo.
+      - name: Comprobar que el esquema de Room está versionado
+        run: |
+          if [ -n "$(git status --porcelain app/schemas)" ]; then
+            git status --short app/schemas
+            for f in $(git status --porcelain app/schemas | awk '{print $2}'); do
+              if [ -d "$f" ]; then find "$f" -type f -name '*.json' -exec sh -c 'echo "=== $1"; cat "$1"' _ {} \; ; else echo "=== $f"; cat "$f"; fi
+            done
+            exit 1
+          fi
+
+      - name: Comprobar el APK release sin firmar y su versión
+        run: |
+          dir=app/build/outputs/apk/release
+          test -f "$dir/app-release-unsigned.apk"
+          jq '.elements[0] | {versionCode, versionName, outputFile}' "$dir/output-metadata.json"
+          IFS=. read -r major minor patch < <(sed -n 's/^versionName=//p' app/version.properties)
+          code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))
+          jq -e --argjson code "$code" --arg name "$major.$minor.$patch" \
+            '.elements[0] | .versionCode == $code and .versionName == $name
+              and .outputFile == "app-release-unsigned.apk"' \
+            "$dir/output-metadata.json"
+
+      # Ensaya la firma de release.yml con una llave desechable (frase de prueba,
+      # no la real): el APK debe salir firmado por CN=Recetario.
+      - name: Ensayar la firma con una llave de prueba
+        env:
+          SIGNING_PASSPHRASE: frase de prueba solo para CI
+        run: |
+          export RECETARIO_KEYSTORE="$RUNNER_TEMP/prueba.p12"
+          trap 'rm -f "$RECETARIO_KEYSTORE"' EXIT
+          scripts/signing/create-keystore.sh "$RUNNER_TEMP/prueba.p12.enc"
+          scripts/signing/decrypt-keystore.sh "$RUNNER_TEMP/prueba.p12.enc" "$RECETARIO_KEYSTORE"
+          ./gradlew assembleRelease
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk |
+            tee "$RUNNER_TEMP/firma.txt"
+          grep -q 'certificate DN: CN=Recetario$' "$RUNNER_TEMP/firma.txt"
+
+      # El APK del ensayo, firmado con la llave desechable de esta ejecución, se sube como
+      # artefacto «sazon-apk» para probarlo en el móvil (se entrega por el chat). No es una
+      # versión publicada: cada ejecución crea su propia llave, así que no se instala encima
+      # de otro APK (ni de este flujo ni de «Publicar APK») sin desinstalar antes.
+      - name: Preparar Sazon-<versión>-prueba.apk
+        run: |
+          version="$(sed -n 's/^versionName=//p' app/version.properties)"
+          test -n "$version"
+          mkdir -p "$RUNNER_TEMP/sazon-apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/sazon-apk/Sazon-$version-prueba.apk"
+          ls -l "$RUNNER_TEMP/sazon-apk"
+
+      - name: Subir el APK de prueba
+        uses: actions/upload-artifact@v6
+        with:
+          name: sazon-apk
+          path: ${{ runner.temp }}/sazon-apk/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Subir informes de prueba
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: informes-de-prueba
+          path: |
+            logic/build/reports/tests/
+            app/build/reports/tests/
+          if-no-files-found: ignore

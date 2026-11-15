@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receta y modo cocina</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Nunito:wght@400;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --page-bg: #ECEAE6; --page-ink: #222; --page-muted: #6b6b6b; --page-card: #fff; --page-line: #dcd9d3; --page-accent: #222; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --page-bg: #0f0f11; --page-ink: #eee; --page-muted: #9a9a9a; --page-card: #1a1a1d; --page-line: #2c2c30; --page-accent: #eee; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page-bg); color: var(--page-ink); font-family: Inter, system-ui, sans-serif; padding: 28px 16px 60px; }
+  header { max-width: 980px; margin: 0 auto 22px; }
+  header .step { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--page-muted); margin: 0 0 6px; }
+  header h1 { font-size: 24px; margin: 0 0 8px; font-weight: 600; }
+  header p { margin: 0 0 8px; color: var(--page-muted); line-height: 1.5; max-width: 680px; }
+  .seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--page-card); border: 1px solid var(--page-line); margin-top: 6px; }
+  .seg button { border: 0; background: transparent; color: var(--page-ink); font: 600 13px Inter, sans-serif; padding: 8px 14px; border-radius: 999px; cursor: pointer; }
+  .seg button.on { background: var(--page-accent); color: var(--page-bg); }
+  .grid { display: flex; flex-wrap: wrap; gap: 36px 28px; justify-content: center; max-width: 1040px; margin: 0 auto; }
+  .option { width: 300px; display: flex; flex-direction: column; }
+  .option .label { font-weight: 600; font-size: 17px; }
+  .option .desc { color: var(--page-muted); font-size: 14px; line-height: 1.45; margin: 4px 0 14px; min-height: 60px; }
+
+  /* ---------- Teléfono ---------- */
+  .phone { position: relative; width: 300px; height: 760px; border-radius: 38px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--font-body); box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 20px 50px -20px rgba(0,0,0,.35); }
+  .scroll { height: 100%; overflow-y: auto; scrollbar-width: none; scroll-behavior: smooth; }
+  .scroll::-webkit-scrollbar { display: none; }
+  .round { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--ink); font-size: 15px; cursor: pointer; backdrop-filter: blur(6px); transition: transform .15s; }
+  .round:active { transform: scale(.9); }
+  .h-font { font-family: var(--font-head); font-weight: var(--head-weight); letter-spacing: var(--head-tracking); }
+  .muted { color: var(--muted); }
+
+  /* Detalle */
+  .hero { height: 220px; position: relative; display: grid; place-items: center; font-size: 84px; background: var(--hero); }
+  .hero .bar { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; }
+  .fav.on { color: var(--accent); }
+  .fav { transition: transform .3s cubic-bezier(.2,.9,.2,1.6); }
+  .fav.pop { transform: scale(1.25); }
+  .body { padding: 16px 18px 110px; background: var(--bg); border-radius: 24px 24px 0 0; margin-top: -22px; position: relative; }
+  .r-title { margin: 0; font-size: 26px; line-height: 1.15; }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 0; }
+  .pill { font-size: 11.5px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
+  .pill.acc { background: var(--soft); border-color: transparent; color: var(--accent-strong); }
+  .block { margin-top: 18px; }
+  .block-title { font-size: 16px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; }
+  .flavor-wrap { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+  .wheel .shape { transform-origin: 60px 60px; transform: scale(0); transition: transform .9s cubic-bezier(.2,.9,.2,1.1); }
+  .wheel.show .shape { transform: scale(1); }
+  .legend { font-size: 12px; line-height: 1.7; }
+  .legend .bar { display: inline-block; height: 5px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-left: 6px; transition: width .8s cubic-bezier(.2,.9,.2,1); }
+  .stepper { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 3px; background: var(--surface); }
+  .stepper button { width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--soft); color: var(--accent-strong); font: 700 16px Inter, sans-serif; cursor: pointer; }
+  .stepper span { min-width: 64px; text-align: center; font-size: 12.5px; font-weight: 600; font-family: var(--font-body); letter-spacing: 0; }
+  .ings { list-style: none; margin: 0; padding: 0; }
+  .ings li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer; }
+  .ings li:last-child { border-bottom: 0; }
+  .ck { width: 20px; height: 20px; border-radius: 50%; border: 1.8px solid var(--line); flex-shrink: 0; display: grid; place-items: center; transition: background .2s, border-color .2s; }
+  .ck svg { width: 12px; height: 12px; stroke: var(--accent-ink); stroke-width: 3; fill: none; opacity: 0; transform: scale(.4); transition: opacity .2s, transform .25s cubic-bezier(.2,.9,.2,1.6); }
+  li.done .ck { background: var(--accent); border-color: var(--accent); }
+  li.done .ck svg { opacity: 1; transform: none; }
+  .ings .name { flex: 1; transition: opacity .2s; }
+  li.done .name { text-decoration: line-through; opacity: .5; }
+  .qty { font-weight: 600; font-variant-numeric: tabular-nums; transition: color .3s; }
+  .qty.flash { color: var(--accent); }
+  .need { margin-top: 12px; width: 100%; border: 1px dashed var(--accent); background: transparent; color: var(--accent-strong); font: 600 13px var(--font-body); padding: 10px; border-radius: 999px; cursor: pointer; }
+  .steps-prev { display: flex; flex-direction: column; gap: 10px; }
+  .sp { display: grid; grid-template-columns: 54px 1fr; gap: 10px; align-items: center; }
+  .sp .th { height: 54px; border-radius: 12px; display: grid; place-items: center; font-size: 24px; background: var(--soft); }
+  .sp b { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .sp p { margin: 2px 0 0; font-size: 13px; line-height: 1.35; }
+  .pair { padding: 14px; border-radius: var(--radius); background: var(--today-bg); color: var(--today-ink); border: var(--today-border); }
+  .pair .eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; opacity: .85; }
+  .pair .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; padding: 8px; border-radius: 12px; background: var(--today-item); }
+  .pair .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--today-ico); font-size: 18px; }
+  .pair b { font-size: 13px; display: block; } .pair small { font-size: 11.5px; opacity: .8; }
+  .pair p { font-size: 12.5px; line-height: 1.4; margin: 10px 0 0; opacity: .9; }
+  .note-card { padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); font-size: 13px; line-height: 1.45; }
+  .cta { position: absolute; left: 18px; right: 18px; bottom: 18px; z-index: 3; border: 0; border-radius: 999px; padding: 15px; background: var(--accent); color: var(--accent-ink); font: 700 15px var(--font-body); box-shadow: 0 12px 28px -10px var(--accent); cursor: pointer; transition: transform .15s; }
+  .cta:active { transform: scale(.97); }
+  .toast { position: absolute; left: 18px; right: 18px; bottom: 82px; z-index: 4; padding: 11px 14px; border-radius: 14px; background: var(--ink); color: var(--bg); font-size: 12.5px; font-weight: 600; transform: translateY(20px); opacity: 0; transition: all .35s cubic-bezier(.2,.9,.2,1); pointer-events: none; }
+  .toast.show { transform: none; opacity: 1; }
+
+  /* Modo cocina A */
+  .cook { height: 100%; display: flex; flex-direction: column; padding: 16px 18px 18px; }
+  .cook-top { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 600; }
+  .awake { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .progress { display: flex; gap: 4px; margin: 12px 0 14px; }
+  .progress i { flex: 1; height: 4px; border-radius: 4px; background: var(--line); position: relative; overflow: hidden; }
+  .progress i::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .45s cubic-bezier(.2,.9,.2,1); }
+  .progress i.on::after { transform: scaleX(1); }
+  .stage { flex: 1; position: relative; overflow: hidden; }
+  .stage-in { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .slide-next { animation: inR .45s cubic-bezier(.2,.9,.2,1); }
+  .slide-prev { animation: inL .45s cubic-bezier(.2,.9,.2,1); }
+  @keyframes inR { from { transform: translateX(60px); opacity: 0; } }
+  @keyframes inL { from { transform: translateX(-60px); opacity: 0; } }
+  .big-photo { height: 190px; border-radius: var(--radius); display: grid; place-items: center; font-size: 72px; background: var(--soft); flex-shrink: 0; }
+  .step-num { margin: 16px 0 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .step-text { margin: 0; font-size: 21px; line-height: 1.35; }
+  .uses { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .timer { margin-top: 14px; align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; border: 1.5px solid var(--accent); color: var(--accent-strong); font-weight: 700; font-size: 14px; cursor: pointer; font-variant-numeric: tabular-nums; background: transparent; font-family: var(--font-body); }
+  .timer.running { background: var(--accent); color: var(--accent-ink); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent); } }
+  .cook-nav { display: flex; gap: 8px; margin-top: 12px; }
+  .cook-nav button { flex: 1; padding: 14px; border-radius: 999px; font: 700 14px var(--font-body); cursor: pointer; transition: transform .15s; }
+  .cook-nav button:active { transform: scale(.96); }
+  .cook-nav .prev { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+  .cook-nav .next { background: var(--accent); color: var(--accent-ink); border: 0; }
+  .cook-nav button:disabled { opacity: .4; }
+
+  /* Modo cocina B */
+  .list-cook { padding: 16px 18px 40px; }
+  .lstep { display: grid; grid-template-columns: 30px 1fr; gap: 10px; padding: 12px 0; transition: opacity .3s; }
+  .lnum { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; border: 1.5px solid var(--line); color: var(--muted); transition: all .3s; }
+  .lstep .ltext { font-size: 14px; line-height: 1.4; color: var(--muted); transition: all .3s; margin: 4px 0 0; }
+  .lstep.done { opacity: .55; }
+  .lstep.done .lnum { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .lstep.cur .lnum { border-color: var(--accent); color: var(--accent-strong); }
+  .lstep.cur .lbox { padding: 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+  .lstep.cur .ltext { font-size: 18px; color: var(--ink); margin: 0; }
+  .lstep .extra { display: none; }
+  .lstep.cur .extra { display: block; animation: fadeUp .4s cubic-bezier(.2,.9,.2,1); }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } }
+  .lstep .lphoto { height: 120px; border-radius: 12px; display: grid; place-items: center; font-size: 52px; background: var(--soft); margin-top: 10px; }
+  .lstep .row { display: flex; gap: 8px; margin-top: 10px; }
+  .done-btn { flex: 1; border: 0; border-radius: 999px; padding: 10px; background: var(--accent); color: var(--accent-ink); font: 700 13px var(--font-body); cursor: pointer; }
+  .lstep .timer { margin-top: 0; padding: 8px 12px; font-size: 13px; }
+  .finish { text-align: center; padding: 24px 8px; display: none; }
+  .finish.show { display: block; animation: fadeUp .5s cubic-bezier(.2,.9,.2,1); }
+  .finish .big { font-size: 46px; }
+
+  /* Entrada */
+  .play .anim { animation: up .65s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 90ms); }
+  @keyframes up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .play .anim, .slide-next, .slide-prev { animation: none; } }
+
+  /* ---------- Temas ---------- */
+  .theme-a { --bg: #F6EFE6; --surface: #FFFAF3; --soft: #F1E1D2; --ink: #2B2118; --muted: #8A7A6A; --line: #E8DACB; --accent: #C2563A; --accent-strong: #A9452C; --accent-ink: #FFF8F0;
+    --font-head: 'Fraunces', Georgia, serif; --font-body: 'Inter', sans-serif; --head-weight: 600; --head-tracking: -0.01em; --radius: 18px;
+    --hero: linear-gradient(150deg, #F6C58F, #E58A4E);
+    --today-bg: linear-gradient(140deg, #C2563A, #D98048); --today-ink: #FFF8F0; --today-border: none; --today-item: rgba(255,248,240,.14); --today-ico: rgba(255,248,240,.22); }
+  .theme-b { --bg: #FFFFFF; --surface: #F6F9F5; --soft: #E8F2E7; --ink: #1E2A22; --muted: #7A887E; --line: #E2EAE2; --accent: #4E8A5C; --accent-strong: #3E7449; --accent-ink: #FFFFFF;
+    --font-head: 'Nunito', sans-serif; --font-body: 'Nunito', sans-serif; --head-weight: 800; --head-tracking: -0.015em; --radius: 24px;
+    --hero: linear-gradient(150deg, #FFE3B8, #F9C08A);
+    --today-bg: #EAF3E9; --today-ink: #1E2A22; --today-border: none; --today-item: #FFFFFF; --today-ico: #EAF3E9; }
+  .theme-c { --bg: #141416; --surface: #1E1E22; --soft: #2A2620; --ink: #F2EDE4; --muted: #9A948A; --line: #2C2C31; --accent: #E0A458; --accent-strong: #E9B677; --accent-ink: #1A1408;
+    --font-head: 'Playfair Display', Georgia, serif; --font-body: 'Inter', sans-serif; --head-weight: 600; --head-tracking: 0; --radius: 16px;
+    --hero: linear-gradient(150deg, #4A3420, #2A2018);
+    --today-bg: linear-gradient(165deg, #2A241B, #1C1C20); --today-ink: #F2EDE4; --today-border: 1px solid rgba(224,164,88,.35); --today-item: rgba(255,255,255,.04); --today-ico: rgba(224,164,88,.14); }
+
+  .note { max-width: 680px; margin: 30px auto 0; color: var(--page-muted); font-size: 14px; line-height: 1.55; }
+  .note b { color: var(--page-ink); }
+</style>
+</head>
+<body class="play">
+<header>
+  <p class="step">Boceto 3 · Receta y modo cocina</p>
+  <h1>Así se vería una receta, y dos formas de cocinarla</h1>
+  <p>A la izquierda, la receta: cambia las porciones con − / + y las cantidades se recalculan; toca un ingrediente para tacharlo, y «Lo que necesito» manda el resto a la compra. A la derecha, dos versiones del modo cocina para que elijas: pasos uno a uno, o la lista completa con el paso actual resaltado. Los temporizadores funcionan.</p>
+  <div class="seg" id="themeSeg">
+    <button data-t="a" class="on">Cálido</button><button data-t="b">Fresco</button><button data-t="c">Nocturno</button>
+  </div>
+</header>
+
+<div class="grid">
+  <!-- Detalle -->
+  <section class="option">
+    <div class="label">La receta</div>
+    <p class="desc">Foto, datos rápidos, rueda de sabores, ingredientes con porciones, pasos, maridaje y tus notas.</p>
+    <div class="phone themed theme-a">
+      <div class="scroll" id="detailScroll">
+        <div class="hero">🎃
+          <div class="bar"><span class="round">←</span><span class="round fav" id="fav">♡</span></div>
+        </div>
+        <div class="body">
+          <h2 class="r-title h-font anim" style="--i:0">Crema de calabaza</h2>
+          <div class="meta anim" style="--i:1">
+            <span class="pill">⏱ 35 min</span><span class="pill">Fácil</span><span class="pill">Comida</span><span class="pill acc">Vegetariana</span><span class="pill acc">Se sirve caliente</span>
+          </div>
+
+          <div class="block anim" style="--i:2">
+            <h3 class="block-title h-font">Sabor</h3>
+            <div class="flavor-wrap">
+              <svg class="wheel" id="wheel" viewBox="0 0 120 120" width="120" height="120"></svg>
+              <div class="legend" id="legend"></div>
+            </div>
+          </div>
+
+          <div class="block anim" style="--i:3">
+            <h3 class="block-title h-font">Ingredientes
+              <span class="stepper"><button id="minus">−</button><span id="serv">4 porciones</span><button id="plus">+</button></span>
+            </h3>
+            <ul class="ings" id="ings"></ul>
+            <button class="need" id="need">🛒 Lo que necesito → a la compra</button>
+          </div>
+
+          <div class="block">
+            <h3 class="block-title h-font">Pasos <span class="muted" style="font-size:12px;font-family:var(--font-body)">4 pasos</span></h3>
+            <div class="steps-prev" id="stepsPrev"></div>
+          </div>
+
+          <div class="block">
+            <h3 class="block-title h-font">Maridaje</h3>
+            <div class="pair">
+              <span class="eyebrow">De tu recetario</span>
+              <div class="row"><span class="ico">🍎</span><div><b>Sidra caliente con canela</b><small>Bebida · dulce · ligera</small></div></div>
+              <div class="row"><span class="ico">🍷</span><div><b>Un blanco con cuerpo</b><small>Sugerencia general · Chardonnay</small></div></div>
+              <p>Lo dulce de la calabaza pide algo suave y aromático, y un poco de acidez equilibra la crema.</p>
+            </div>
+          </div>
+
+          <div class="block">
+            <h3 class="block-title h-font">Mis notas</h3>
+            <div class="note-card">La próxima vez: un toque de jengibre y menos caldo.<br><span class="muted" style="font-size:12px">La hiciste 3 veces · última hace 2 semanas · ★★★★☆</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="toast" id="toast"></div>
+      <button class="cta">▶ Modo cocina</button>
+    </div>
+  </section>
+
+  <!-- Cocina A -->
+  <section class="option">
+    <div class="label">Modo cocina · A · Paso a paso</div>
+    <p class="desc">Un paso por pantalla, foto grande y letra grande. Pasas con los botones o deslizando. La pantalla no se apaga.</p>
+    <div class="phone themed theme-a">
+      <div class="cook">
+        <div class="cook-top"><span class="round" style="background:var(--surface)">✕</span><span id="aCount">Paso 1 de 4</span><span class="awake">☀ Pantalla<br>encendida</span></div>
+        <div class="progress" id="aProg"><i></i><i></i><i></i><i></i></div>
+        <div class="stage"><div class="stage-in" id="aStage"></div></div>
+        <div class="cook-nav"><button class="prev" id="aPrev">← Anterior</button><button class="next" id="aNext">Siguiente →</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cocina B -->
+  <section class="option">
+    <div class="label">Modo cocina · B · Lista</div>
+    <p class="desc">Ves todos los pasos a la vez. El actual se agranda con su foto; al marcarlo como hecho, la lista avanza sola.</p>
+    <div class="phone themed theme-a">
+      <div class="scroll" id="bScroll">
+        <div class="list-cook">
+          <div class="cook-top" style="margin-bottom:8px"><span class="round" style="background:var(--surface)">✕</span><span class="h-font" style="font-size:16px">Crema de calabaza</span><span class="awake">☀</span></div>
+          <div id="bList"></div>
+          <div class="finish" id="finish"><div class="big">🎉</div><h3 class="h-font" style="margin:6px 0">¡Listo!</h3><p class="muted" style="font-size:13px;margin:0">¿La anotamos en tu diario de cocina?</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="note">
+  <p>Respóndeme en el chat: <b>¿qué modo cocina prefieres, A o B?</b> Y si algo de la pantalla de la receta sobra, falta o lo pondrías en otro orden, dímelo.</p>
+</div>
+
+<script>
+  /* ---------- Temas ---------- */
+  document.querySelectorAll('#themeSeg button').forEach(b => b.addEventListener('click', () => {
+    const apply = () => {
+      document.querySelectorAll('#themeSeg button').forEach(x => x.classList.toggle('on', x === b));
+      document.querySelectorAll('.themed').forEach(p => { p.classList.remove('theme-a','theme-b','theme-c'); p.classList.add('theme-' + b.dataset.t); });
+    };
+    document.startViewTransition ? document.startViewTransition(apply) : apply();
+  }));
+
+  /* ---------- Rueda de sabores ---------- */
+  const flavors = [['Dulce',3],['Salado',3],['Ácido',1],['Amargo',0],['Picante',1]];
+  (function wheel() {
+    const svg = document.getElementById('wheel'); const c = 60, R = 46, n = flavors.length;
+    const pt = (i, r) => { const a = -Math.PI/2 + i * 2*Math.PI/n; return [c + r*Math.cos(a), c + r*Math.sin(a)]; };
+    let g = '';
+    for (let k = 1; k <= 4; k++) g += `<polygon points="${flavors.map((_,i)=>pt(i, R*k/4).join(',')).join(' ')}" fill="none" stroke="var(--line)" stroke-width="1"/>`;
+    flavors.forEach((f,i) => { const [x,y] = pt(i,R); g += `<line x1="${c}" y1="${c}" x2="${x}" y2="${y}" stroke="var(--line)"/>`; const [lx,ly] = pt(i,R+9); g += `<text x="${lx}" y="${ly+3}" font-size="7.5" text-anchor="middle" fill="var(--muted)" font-family="Inter">${f[0]}</text>`; });
+    const shape = flavors.map((f,i)=>pt(i, Math.max(f[1],0.25)*R/4).join(',')).join(' ');
+    g += `<polygon class="shape" points="${shape}" fill="var(--accent)" fill-opacity=".28" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+    svg.innerHTML = g;
+    document.getElementById('legend').innerHTML = flavors.map(f => `<div>${f[0]}<span class="bar" data-w="${f[1]*14}" style="width:0"></span></div>`).join('');
+    setTimeout(() => { svg.classList.add('show'); document.querySelectorAll('.legend .bar').forEach(b => b.style.width = b.dataset.w + 'px'); }, 500);
+  })();
+
+  /* ---------- Ingredientes y porciones ---------- */
+  const BASE = 4;
+  const ings = [
+    ['Calabaza', 800, 'g'], ['Cebolla', 1, 'u'], ['Ajo', 2, 'dientes'], ['Caldo de verduras', 750, 'ml'],
+    ['Crema / nata', 100, 'ml'], ['Mantequilla', 20, 'g'], ['Nuez moscada', null, 'una pizca'], ['Sal y pimienta', null, 'al gusto']
+  ];
+  let serv = 4;
+  const frac = v => { const w = Math.floor(v), r = v - w; const f = r < .125 ? '' : r < .375 ? '¼' : r < .625 ? '½' : r < .875 ? '¾' : ''; const whole = r >= .875 ? w + 1 : w; return (whole ? whole : '') + f || '¼'; };
+  const fmt = (q, u) => {
+    if (q === null) return u;
+    const v = q * serv / BASE;
+    if (u === 'g' || u === 'ml') { const r = v >= 100 ? Math.round(v/10)*10 : Math.round(v/5)*5 || Math.round(v); return r >= 1000 ? (r/1000).toString().replace('.', ',') + (u === 'g' ? ' kg' : ' l') : r + ' ' + u; }
+    if (u === 'u') return frac(v);
+    return frac(v) + ' ' + u;
+  };
+  const ul = document.getElementById('ings');
+  ul.innerHTML = ings.map((g,i) => `<li data-i="${i}"><span class="ck"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><span class="name">${g[0]}</span><span class="qty"></span></li>`).join('');
+  function renderQty(flash) {
+    document.getElementById('serv').textContent = serv + (serv === 1 ? ' porción' : ' porciones');
+    ul.querySelectorAll('li').forEach(li => { const g = ings[li.dataset.i]; const q = li.querySelector('.qty'); q.textContent = fmt(g[1], g[2]); if (flash && g[1] !== null) { q.classList.add('flash'); setTimeout(() => q.classList.remove('flash'), 350); } });
+  }
+  ul.addEventListener('click', e => { const li = e.target.closest('li'); if (li) li.classList.toggle('done'); });
+  document.getElementById('minus').onclick = () => { if (serv > 1) { serv--; renderQty(true); } };
+  document.getElementById('plus').onclick = () => { if (serv < 12) { serv++; renderQty(true); } };
+  renderQty(false);
+  document.getElementById('need').onclick = () => {
+    const n = ul.querySelectorAll('li:not(.done)').length;
+    const t = document.getElementById('toast');
+    t.textContent = `✓ ${n} ingredientes añadidos a tu lista de compra`;
+    t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2200);
+  };
+  const fav = document.getElementById('fav');
+  fav.onclick = () => { fav.classList.toggle('on'); fav.textContent = fav.classList.contains('on') ? '♥' : '♡'; fav.classList.add('pop'); setTimeout(() => fav.classList.remove('pop'), 250); };
+
+  /* ---------- Pasos ---------- */
+  const steps = [
+    { ico: '🔪', text: 'Pela la calabaza, quítale las semillas y córtala en cubos medianos.', uses: ['Calabaza 800 g'], timer: 0 },
+    { ico: '🧅', text: 'Derrite la mantequilla y sofríe la cebolla y el ajo picados hasta que estén transparentes.', uses: ['Mantequilla 20 g', 'Cebolla 1', 'Ajo 2 dientes'], timer: 300 },
+    { ico: '🍲', text: 'Añade la calabaza y el caldo. Cuece a fuego medio hasta que la calabaza esté tierna.', uses: ['Caldo 750 ml'], timer: 1200 },
+    { ico: '🥣', text: 'Tritura, añade la crema y ajusta de sal, pimienta y una pizca de nuez moscada.', uses: ['Crema 100 ml', 'Nuez moscada'], timer: 0 }
+  ];
+  document.getElementById('stepsPrev').innerHTML = steps.map((s,i) => `<div class="sp"><div class="th">${s.ico}</div><div><b>Paso ${i+1}</b><p>${s.text}</p></div></div>`).join('');
+
+  const mmss = s => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+  function timerButton(seconds) {
+    if (!seconds) return null;
+    const b = document.createElement('button'); b.className = 'timer'; let left = seconds, id = null;
+    const paint = () => b.textContent = id ? `⏸ ${mmss(left)}` : (left === seconds ? `⏱ Iniciar ${mmss(left)}` : `▶ ${mmss(left)}`);
+    b.onclick = () => { if (id) { clearInterval(id); id = null; b.classList.remove('running'); } else { id = setInterval(() => { left = Math.max(0, left - 1); paint(); if (!left) { clearInterval(id); id = null; b.classList.remove('running'); b.textContent = '✓ ¡Tiempo!'; } }, 1000); b.classList.add('running'); } paint(); };
+    paint(); return b;
+  }
+
+  /* Modo A */
+  let ai = 0;
+  function renderA(dir) {
+    const st = document.getElementById('aStage'); const s = steps[ai];
+    st.className = 'stage-in' + (dir ? (dir > 0 ? ' slide-next' : ' slide-prev') : '');
+    st.innerHTML = `<div class="big-photo">${s.ico}</div><div class="step-num">Paso ${ai+1}</div><p class="step-text">${s.text}</p><div class="uses">${s.uses.map(u => `<span class="pill">${u}</span>`).join('')}</div>`;
+    const t = timerButton(s.timer); if (t) st.appendChild(t);
+    void st.offsetWidth;
+    document.getElementById('aCount').textContent = `Paso ${ai+1} de ${steps.length}`;
+    document.querySelectorAll('#aProg i').forEach((x,i) => x.classList.toggle('on', i <= ai));
+    document.getElementById('aPrev').disabled = ai === 0;
+    document.getElementById('aNext').textContent = ai === steps.length - 1 ? '¡Terminado! ✓' : 'Siguiente →';
+  }
+  document.getElementById('aNext').onclick = () => { if (ai < steps.length - 1) { ai++; renderA(1); } else { ai = 0; renderA(-1); } };
+  document.getElementById('aPrev').onclick = () => { if (ai > 0) { ai--; renderA(-1); } };
+  let sx = null; const stage = document.querySelector('.stage');
+  stage.addEventListener('pointerdown', e => sx = e.clientX);
+  stage.addEventListener('pointerup', e => { if (sx === null) return; const dx = e.clientX - sx; sx = null; if (dx < -40 && ai < steps.length - 1) { ai++; renderA(1); } else if (dx > 40 && ai > 0) { ai--; renderA(-1); } });
+  renderA(0);
+
+  /* Modo B */
+  let bi = 0;
+  const bList = document.getElementById('bList');
+  bList.innerHTML = steps.map((s,i) => `<div class="lstep" data-i="${i}"><div class="lnum">${i+1}</div><div class="lbox"><p class="ltext">${s.text}</p><div class="extra"><div class="lphoto">${s.ico}</div><div class="uses">${s.uses.map(u => `<span class="pill">${u}</span>`).join('')}</div><div class="row"><span class="tslot"></span><button class="done-btn">Hecho ✓</button></div></div></div></div>`).join('');
+  bList.querySelectorAll('.lstep').forEach((el, i) => { const t = timerButton(steps[i].timer); if (t) el.querySelector('.tslot').appendChild(t); });
+  function renderB() {
+    bList.querySelectorAll('.lstep').forEach((el,i) => { el.classList.toggle('done', i < bi); el.classList.toggle('cur', i === bi); const n = el.querySelector('.lnum'); n.textContent = i < bi ? '✓' : i + 1; });
+    document.getElementById('finish').classList.toggle('show', bi >= steps.length);
+    const cur = bList.querySelector('.lstep.cur') || document.getElementById('finish');
+    const sc = document.getElementById('bScroll'); sc.scrollTo({ top: Math.max(0, cur.offsetTop - 70), behavior: 'smooth' });
+  }
+  bList.addEventListener('click', e => { if (e.target.classList.contains('done-btn')) { bi++; renderB(); } });
+  renderB();
+</script>
+</body>
+</html>
