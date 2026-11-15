@@ -38,6 +38,12 @@ jobs:
       - name: Pruebas de la app y APK de depuración y release
         run: ./gradlew testDebugUnitTest assembleDebug assembleRelease
 
+      # Cuenta las pruebas de logic/ y de :app en sus informes JUnit (XML) y lo deja en el registro y en el
+      # resumen de la ejecución. Corre también si algo falló, para ver cuántas fallaron.
+      - name: Contar las pruebas
+        if: always()
+        run: python3 scripts/ci/count-tests.py logic/build/test-results app/build/test-results
+
       # Capturas de las pantallas en los tres temas (CapturasTest), para revisarlas a ojo.
       - name: Subir capturas de pantalla
         if: always()
@@ -107,6 +113,7 @@ jobs:
           name: sazon-apk
           path: ${{ runner.temp }}/sazon-apk/
           if-no-files-found: error
+          retention-days: 14
 
       - name: Subir informes de prueba
         if: failure()
