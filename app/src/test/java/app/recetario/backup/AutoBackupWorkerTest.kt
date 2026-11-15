@@ -215,17 +215,19 @@ class AutoBackupWorkerTest {
     }
 
     @Test
-    fun worker_providerWithoutWt_retriesWithW_andTheLengthCheckCatchesOldBytes() {
+    fun worker_providerWithoutWt_overALongerOldCopy_doesNotTryW_andLeavesItWhole() {
         seed()
         setStatus { it.copy(driveUri = driveUri, lastExternal = t0) }
         drive.rejectWt = true
         drive.wKeepsOldTail = true
-        // La copia de la semana pasada, más larga que la nueva.
-        driveFile().writeBytes(ByteArray(200_000) { 7 })
+        // La copia de la semana pasada, más larga que la nueva: con «w» quedaría su final detrás.
+        val old = ByteArray(200_000) { 7 }
+        driveFile().writeBytes(old)
 
         assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
 
-        assertThat(drive.modes).containsExactly("wt", "w").inOrder()
+        assertThat(drive.modes).containsExactly("wt")
+        assertThat(driveFile().readBytes().toList()).isEqualTo(old.toList())
         assertThat(status().lastError).isEqualTo(BackupMessages.DRIVE_FAILED)
         assertThat(status().lastExternal).isEqualTo(t0)
         assertThat(localCopies()).containsExactly("Sazon-2026-11-13-2140.zip")

@@ -37,26 +37,28 @@ val testClock: Clock = Clock.fixed(Instant.parse("2026-11-13T20:40:00Z"), ZoneId
 /**
  * Sustituye el contenedor de la app por uno con la base de datos en memoria (con las categorías de serie).
  * [elapsedRealtime] es el reloj de los temporizadores; [documents], los documentos de fuera de las copias (null: los
- * del sistema, con el `ContentResolver` de Robolectric).
+ * del sistema, con el `ContentResolver` de Robolectric); [settingsDataStore], los ajustes (por ejemplo, unos que no se
+ * pueden guardar).
  */
 fun installTestContainer(
     clock: Clock = testClock,
     elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     documents: BackupDocuments? = null,
+    settingsDataStore: DataStore<Preferences> = testSettingsDataStore(),
 ): AppContainer {
     val app = ApplicationProvider.getApplicationContext<RecetarioApp>()
     val db = Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
         .addCallback(DefaultCategories.callback)
         .build()
     return AppContainer(
-        app, clock = clock, database = db, settingsDataStore = testSettingsDataStore(), localStateDataStore = testSettingsDataStore(),
+        app, clock = clock, database = db, settingsDataStore = settingsDataStore, localStateDataStore = testSettingsDataStore(),
         elapsedRealtime = elapsedRealtime,
         backupDocuments = documents ?: ContentResolverDocuments(app.contentResolver),
     ).also { app.container = it }
 }
 
 /** Ajustes (o estado del teléfono) en un archivo temporal propio de cada contenedor de prueba. */
-private fun testSettingsDataStore(): DataStore<Preferences> = PreferenceDataStoreFactory.create(
+fun testSettingsDataStore(): DataStore<Preferences> = PreferenceDataStoreFactory.create(
     scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     produceFile = { File(Files.createTempDirectory("ajustes").toFile(), "ajustes.preferences_pb") },
 )

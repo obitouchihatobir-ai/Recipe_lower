@@ -156,6 +156,26 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun save_ofANewRecipe_remembersItsIdInTheSavedState_soAfterProcessDeathItReopensThatRecipe() = runTest(dispatcher) {
+        val handle = SavedStateHandle()
+        val vm = EditorViewModel(handle, repo, photos, DraftStore(draftsDir), clock, ioDispatcher = dispatcher)
+        runCurrent()
+        vm.fillValid()
+
+        val id = vm.save()!!
+
+        assertThat(handle.get<String>("id")).isEqualTo(id)
+        // Android cerró la app: el editor vuelve con ese estado y abre la receta guardada, no un formulario vacío.
+        val restored = EditorViewModel(
+            SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }), repo, photos, DraftStore(draftsDir), clock,
+            ioDispatcher = dispatcher,
+        )
+        runCurrent()
+        assertThat(restored.state.value.recipeId).isEqualTo(id)
+        assertThat(restored.state.value.title).isEqualTo("Tarta")
+    }
+
+    @Test
     fun stepText_doesNotAutoFillTimer() = runTest(dispatcher) {
         val vm = newVm()
         vm.onEvent(EditorEvent.AddStep)

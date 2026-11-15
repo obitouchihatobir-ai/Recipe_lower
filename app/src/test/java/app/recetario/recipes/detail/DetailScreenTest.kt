@@ -1,6 +1,11 @@
 package app.recetario.recipes.detail
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -10,11 +15,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
 import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
+import app.recetario.recipes.model.FlavorProfile
 import app.recetario.recipes.model.Step
 import app.recetario.recipes.quantity.MeasureUnit
 import app.recetario.testing.ingredient
@@ -237,5 +244,52 @@ class DetailScreenTest {
         // 1 s después del segundo toque (3 s tras el primero) el aviso sigue: su temporizador se reinició.
         rule.mainClock.advanceTimeBy(1_000)
         assertThat(toastShown()).isTrue()
+    }
+
+    @Test
+    fun aShortConvertibleQuantity_stillHasA48dpTouchTarget() {
+        runBlocking {
+            container.recipeRepository.save(
+                sampleRecipe("r1", "Crema de calabaza", ingredients = listOf(ingredient("i1", "Sal", 2.0, MeasureUnit.GRAM))),
+            )
+        }
+        launch()
+        rule.waitFor(hasText("2 g"))
+
+        rule.onNodeWithText("2 g").assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test
+    fun flavor_isHidden_whenAllFiveTastesAreZero() {
+        save()
+        launch()
+        rule.waitFor(hasText("Crema de calabaza"))
+        rule.waitFor(hasText("800 g"))
+
+        assertThat(rule.onAllNodes(hasText("Sabor")).fetchSemanticsNodes()).isEmpty()
+    }
+
+    @Test
+    fun flavor_isShown_whenSomeTasteIsSet() {
+        runBlocking {
+            container.recipeRepository.save(sampleRecipe("r1", "Crema de calabaza", flavor = FlavorProfile(sweet = 2)))
+        }
+        launch()
+        rule.waitFor(hasText("Crema de calabaza"))
+
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Sabor"))
+        rule.onNodeWithText("Sabor").assertIsDisplayed()
+    }
+
+    @Test
+    fun servingsStepper_buttonsAreReadByTheirNameOnly() {
+        save()
+        launch()
+        rule.waitFor(hasText("800 g"))
+
+        // TalkBack lee «Quitar una porción», no «−».
+        for (name in listOf("Quitar una porción", "Añadir una porción")) {
+            rule.onNodeWithContentDescription(name).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Text))
+        }
     }
 }
