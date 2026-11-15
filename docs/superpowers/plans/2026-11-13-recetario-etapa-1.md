@@ -77,6 +77,11 @@ El entorno de Claude Code no permite aceptar la licencia del SDK de Android, as�
 - La Task 12 no añade la fila «Copias de seguridad» en Ajustes; la añade la Task 15 junto con su destino.
 - La Task 16 cambia la copia previa de «Reemplazar todo» para que use `writeLocalBackup()`, que entra en la rotación.
 
+## Enmienda 2 (2026-11-15, petición del usuario)
+
+- La app se llama **«Sazón»** y usa el icono que aportó el usuario (`docs/branding/sazon-icono-original.png`). Se añade la **Task 16b «Marca Sazón»** antes del cierre: nombre visible, icono adaptativo con capa monocroma, nombres de archivo `Sazon-…` (sin tilde) para copias y APK, y documentación. No cambian `applicationId` (`app.recetario`), paquetes ni clases.
+- Al cerrar la etapa, el APK se entrega **por el chat**: CI sube como artefacto `sazon-apk` un APK release firmado con la llave desechable del ensayo. Lleva una llave provisional: para instalar después uno firmado con la llave definitiva (flujo de GitHub, §9) hay que desinstalar; antes se hace «Exportar copia» y después se importa.
+
 ## Foco de revisión
 
 Cinco entradas que el spec implica y que la gente encontrará, aunque ninguna prueba de función las cubra de forma natural:
