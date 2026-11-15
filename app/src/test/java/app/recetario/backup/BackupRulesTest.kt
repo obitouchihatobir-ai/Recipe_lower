@@ -14,8 +14,9 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * Copia de seguridad de Android (§8.5): solo la base de datos y los ajustes, sin fotos (no caben en sus 25 MB),
- * sin las copias del teléfono, sin borradores y sin la caché; igual en la nube y al pasar a otro teléfono.
+ * Copia de seguridad de Android (§8.5): solo la base de datos y los ajustes (una lista cerrada), sin fotos (no caben en
+ * sus 25 MB), sin las copias del teléfono, sin borradores, sin el estado del teléfono y sin la caché; igual en la nube
+ * y al pasar a otro teléfono.
  */
 @RunWith(AndroidJUnit4::class)
 class BackupRulesTest {
@@ -53,28 +54,25 @@ class BackupRulesTest {
         any { it.include && it.domain == domain && covers(it.path, path) } &&
             none { !it.include && it.domain == domain && covers(it.path, path) }
 
+    /** Solo una lista de lo que se guarda (sin exclusiones): lo que se añada a `files/` no entra solo. */
     private fun checkSection(name: String, rules: List<Rule>) {
-        assertWithMessage("$name: hay reglas").that(rules).isNotEmpty()
-        for ((domain, path) in listOf("database" to "recetario.db", "database" to "recetario.db-wal", "file" to "datastore/ajustes.preferences_pb")) {
-            assertWithMessage("$name: $domain/$path se guarda").that(rules.backsUp(domain, path)).isTrue()
-        }
+        assertWithMessage("$name: solo inclusiones").that(rules.filter { !it.include }).isEmpty()
+        assertWithMessage("$name: lista de lo que se guarda").that(rules.map { it.domain to it.path }).containsExactly(
+            "database" to "recetario.db",
+            "database" to "recetario.db-wal",
+            "file" to "datastore/ajustes.preferences_pb",
+        )
         for ((domain, path) in listOf(
             "file" to "photos/0b9c-portada.jpg",
             "file" to "backups/Recetario-2026-11-15-0300.zip",
             "file" to "backups/antes-de-importar-2026-11-13-2140.zip",
             "file" to "drafts/new.json",
+            // El estado del teléfono (archivo de Drive, fechas de las copias, avisos…) no viaja a otro teléfono.
+            "file" to "datastore/estado-local.preferences_pb",
             "database" to "androidx.work.workdb",
             "root" to "cache/camera/foto.jpg",
         )) {
             assertWithMessage("$name: $domain/$path no se guarda").that(rules.backsUp(domain, path)).isFalse()
-        }
-        val excluded = rules.filter { !it.include }.map { it.domain to it.path }
-        assertWithMessage("$name: exclusiones explícitas").that(excluded)
-            .containsAtLeast("file" to "photos/", "file" to "backups/", "file" to "drafts/")
-        // Lint (FullBackupContent, fatal al compilar la versión release) exige que cada exclusión esté dentro de una inclusión.
-        for (exclude in rules.filter { !it.include }) {
-            assertWithMessage("$name: ${exclude.path} está dentro de algo incluido")
-                .that(rules.any { it.include && it.domain == exclude.domain && covers(it.path, exclude.path) }).isTrue()
         }
     }
 

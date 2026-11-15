@@ -379,7 +379,8 @@ class BackupManager(
     private fun rotate(kind: LocalBackupKind, keep: Int, justWritten: File) {
         try {
             val names = localBackupsDir.list()?.toList().orEmpty()
-            for (name in filesToDelete(names, keep, kind, protect = setOfNotNull(justWritten.name, restoring))) {
+            val now = LocalDateTime.now(clock)
+            for (name in filesToDelete(names, now, keep, kind, protect = setOfNotNull(justWritten.name, restoring))) {
                 if (!File(localBackupsDir, name).delete()) Log.w(TAG, "No se pudo borrar la copia antigua $name")
             }
         } catch (e: Exception) {

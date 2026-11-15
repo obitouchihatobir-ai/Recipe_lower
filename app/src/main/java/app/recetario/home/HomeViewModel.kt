@@ -78,7 +78,7 @@ class HomeViewModel(
                 categories = categories,
                 recent = recentRecipes(summaries).map { it.toCardData(byId) },
                 favorites = favoriteRecipes(summaries).map { it.toCardData(byId) },
-                backupNotice = backupNoticeFor(at, status.lastError, status.lastExternal, firstRecipeAt),
+                backupNotice = backupNoticeFor(at, null, status.lastError, status.lastExternal, firstRecipeAt),
                 today = local.toLocalDate(),
             )
         }.flowOn(dispatcher)

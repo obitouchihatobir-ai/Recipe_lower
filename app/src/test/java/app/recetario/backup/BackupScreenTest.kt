@@ -332,6 +332,79 @@ class BackupScreenTest {
     }
 
     @Test
+    fun drive_existingCopy_asksBeforeReplacing_andReplaces() {
+        saveRecipe()
+        val existing = backupWithPaella()
+        documents.files[driveUri] = existing
+        val picker = launch(FakePicker(Uri.parse(driveUri)))
+
+        tap("drive-setup")
+
+        rule.waitFor(hasTestTag("drive-replace-panel"))
+        rule.onNodeWithText("Ese archivo ya tiene una copia con 1 receta; ahora tienes 1.").assertExists()
+        rule.onNodeWithTag("drive-import-first").assertExists()
+        // Aún no se ha tocado nada: ni el archivo ni el estado ni el permiso.
+        assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(existing.toList())
+        assertThat(documents.openedForWriting).isEmpty()
+        assertThat(documents.persisted).isEmpty()
+        assertThat(status().driveUri).isNull()
+
+        rule.onNodeWithTag("drive-replace").performClick()
+
+        rule.waitFor(hasText("Copia guardada en Google Drive."))
+        assertThat(picker.inputs.single()).isEqualTo("Recetario-copia-automatica.zip")
+        assertThat(documents.persisted).containsExactly(driveUri)
+        assertThat(status().driveUri).isEqualTo(driveUri)
+        val local = java.io.File(container.backupManager.localBackupsDir, "Recetario-2026-11-13-2140.zip")
+        assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(local.readBytes().toList())
+    }
+
+    @Test
+    fun drive_existingCopy_importFirst_opensTheImport_andSavesNothing() {
+        saveRecipe()
+        val existing = backupWithPaella()
+        documents.files[driveUri] = existing
+        launch(FakePicker(Uri.parse(driveUri)))
+
+        tap("drive-setup")
+        rule.waitFor(hasTestTag("drive-import-first"))
+        rule.onNodeWithTag("drive-import-first").performClick()
+
+        rule.waitFor(hasTestTag("import-mode-panel"))
+        rule.onNodeWithTag("drive-replace-panel").assertDoesNotExist()
+        assertThat(status().driveUri).isNull()
+        assertThat(documents.persisted).isEmpty()
+        assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(existing.toList())
+
+        // Y la importación es la de siempre, desde ese archivo.
+        rule.onNodeWithTag("import-merge").performClick()
+        rule.waitFor(hasText("Copia importada: 1 receta, 0 fotos."))
+        assertThat(recipeIds()).containsExactly("copia", "local")
+        assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(existing.toList())
+    }
+
+    @Test
+    fun drive_existingFileThatIsNotACopy_asks_andCancelLeavesItAsItWas() {
+        saveRecipe()
+        documents.files[driveUri] = "mis notas".toByteArray()
+        launch(FakePicker(Uri.parse(driveUri)))
+
+        tap("drive-setup")
+
+        rule.waitFor(hasText("Ese archivo no es una copia de la app. ¿Reemplazarlo?"))
+        rule.onNodeWithTag("drive-import-first").assertDoesNotExist()
+        rule.onNodeWithTag("drive-cancel").performClick()
+        rule.waitForGone(hasTestTag("drive-replace-panel"))
+
+        assertThat(String(documents.files.getValue(driveUri))).isEqualTo("mis notas")
+        assertThat(documents.deleted).isEmpty()
+        assertThat(documents.openedForWriting).isEmpty()
+        assertThat(documents.persisted).isEmpty()
+        assertThat(status().driveUri).isNull()
+        rule.onNodeWithTag("drive-setup").assertExists()
+    }
+
+    @Test
     fun drive_fileWithoutPersistentPermission_isDeleted_andNothingIsSaved() {
         saveRecipe()
         documents.grantPersistable = false

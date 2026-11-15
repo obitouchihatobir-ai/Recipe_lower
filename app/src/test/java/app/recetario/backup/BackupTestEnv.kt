@@ -1,7 +1,9 @@
 package app.recetario.backup
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.recetario.core.data.AppDatabase
@@ -17,6 +19,7 @@ import app.recetario.shopping.ShoppingItemEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
@@ -42,8 +45,15 @@ class BackupTestEnv(private val tmp: TemporaryFolder, val clock: Clock = backupC
     val cacheDir: File = tmp.newFolder()
     val photos = PhotoStore(File(filesDir, "photos"))
     private val settingsFile = File(tmp.newFolder(), "ajustes.preferences_pb")
+    private val localStateFile = File(tmp.newFolder(), "estado-local.preferences_pb")
+
+    /** El estado del teléfono («estado-local»); con [SwitchableDataStore.failWrites] no se puede guardar. */
+    val localState = SwitchableDataStore(
+        PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob()), produceFile = { localStateFile }),
+    )
     val settings = SettingsRepository(
         PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob()), produceFile = { settingsFile }),
+        localState,
     )
     val recipes = RoomRecipeRepository(db, photos, clock)
     val shopping = RoomShoppingRepository(db, clock, settings.cupMl)
@@ -101,21 +111,53 @@ class BackupTestEnv(private val tmp: TemporaryFolder, val clock: Clock = backupC
     fun backups(): List<String> = (backupsDir.listFiles() ?: emptyArray()).map { it.name }.sorted()
 }
 
+/** Un DataStore que puede dejar de guardar (disco lleno…) cuando [failWrites] es true. */
+class SwitchableDataStore(private val delegate: DataStore<Preferences>) : DataStore<Preferences> {
+    @Volatile
+    var failWrites = false
+
+    override val data: Flow<Preferences> = delegate.data
+
+    override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences {
+        if (failWrites) throw java.io.IOException("No se pudo guardar")
+        return delegate.updateData(transform)
+    }
+}
+
 /**
- * Documentos de prueba (Drive, Descargas…): [input] es el archivo que se abre al importar; lo que se escribe queda
- * en [files] al cerrarse. [failOutput] hace fallar la escritura a mitad; [grantPersistable] = false, que el
- * proveedor no dé permiso persistente.
+ * Documentos de prueba (Drive, Descargas…): [input] es el archivo que se abre al importar (si el documento no tiene
+ * nada escrito en [files]); lo que se escribe queda en [files] al cerrarse.
+ * - [failOutput]: la escritura falla a mitad; [failOpenOutput]: ni siquiera se puede abrir para escribir;
+ * - [rejectedModes]: modos que el proveedor no admite (por ejemplo «wt»);
+ * - [wKeepsOldTail]: con «w» no vacía el archivo (quedan los bytes viejos del final);
+ * - [dropLastByte]: el proveedor pierde el último byte (la copia queda corta);
+ * - [grantPersistable] = false: el proveedor no da permiso persistente;
+ * - [inputGates]: abrir ese documento para leer espera a que se abra la barrera.
  */
 class FakeDocuments(@Volatile var input: ByteArray = ByteArray(0), @Volatile var failOutput: Boolean = false) : BackupDocuments {
     val files: MutableMap<String, ByteArray> = java.util.concurrent.ConcurrentHashMap()
     val opened: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     val openedForWriting: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+    val modes: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     val deleted: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     val persisted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     val released: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+    val inputGates: MutableMap<String, java.util.concurrent.CountDownLatch> = java.util.concurrent.ConcurrentHashMap()
 
     @Volatile
     var grantPersistable = true
+
+    @Volatile
+    var failOpenOutput = false
+
+    @Volatile
+    var rejectedModes: Set<String> = emptySet()
+
+    @Volatile
+    var wKeepsOldTail = false
+
+    @Volatile
+    var dropLastByte = false
 
     /** Lo último que se escribió (en cualquier documento). */
     val written: ByteArray get() = lastWritten ?: ByteArray(0)
@@ -124,23 +166,31 @@ class FakeDocuments(@Volatile var input: ByteArray = ByteArray(0), @Volatile var
     private var lastWritten: ByteArray? = null
 
     override fun openInput(uri: String): java.io.InputStream {
+        inputGates[uri]?.await(10, java.util.concurrent.TimeUnit.SECONDS)
         opened += uri
         return java.io.ByteArrayInputStream(files[uri] ?: input)
     }
 
-    override fun openOutput(uri: String): java.io.OutputStream {
+    override fun openOutput(uri: String, mode: String): java.io.OutputStream {
         openedForWriting += uri
+        modes += mode
+        if (failOpenOutput) throw java.io.FileNotFoundException("No se puede abrir $uri")
+        if (mode in rejectedModes) throw java.io.FileNotFoundException("Modo no admitido: $mode")
         if (failOutput) {
             return object : java.io.OutputStream() {
                 override fun write(b: Int) = throw java.io.IOException("disco lleno")
                 override fun write(b: ByteArray, off: Int, len: Int) = throw java.io.IOException("disco lleno")
             }
         }
-        // «wt»: se vacía al abrir.
-        files[uri] = ByteArray(0)
+        val old = files[uri] ?: ByteArray(0)
+        val keepTail = mode == "w" && wKeepsOldTail
+        // «wt» (y «w» en un proveedor que se porta bien): se vacía al abrir.
+        if (!keepTail) files[uri] = ByteArray(0)
         return object : ByteArrayOutputStream() {
             override fun close() {
-                val bytes = toByteArray()
+                var bytes = toByteArray()
+                if (keepTail && old.size > bytes.size) bytes += old.copyOfRange(bytes.size, old.size)
+                if (dropLastByte && bytes.isNotEmpty()) bytes = bytes.copyOf(bytes.size - 1)
                 files[uri] = bytes
                 lastWritten = bytes
             }

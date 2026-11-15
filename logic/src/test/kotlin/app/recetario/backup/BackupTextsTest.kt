@@ -99,6 +99,9 @@ class BackupTextsTest {
         assertThat(BackupMessages.DRIVE_FAILED).isEqualTo("No se pudo guardar en Google Drive. Vuelve a elegir el archivo.")
         assertThat(BackupMessages.SAVE_OUTSIDE_LOST).isEqualTo("No se pudo guardar la copia. Inténtalo de nuevo.")
         assertThat(DRIVE_DOCUMENT_NAME).isEqualTo("Recetario-copia-automatica.zip")
+        assertThat(BackupMessages.DRIVE_NOT_A_COPY).isEqualTo("Ese archivo no es una copia de la app. ¿Reemplazarlo?")
+        assertThat(driveExistingCopyText(backupRecipes = 12, localRecipes = 40)).isEqualTo("Ese archivo ya tiene una copia con 12 recetas; ahora tienes 40.")
+        assertThat(driveExistingCopyText(backupRecipes = 1, localRecipes = 1)).isEqualTo("Ese archivo ya tiene una copia con 1 receta; ahora tienes 1.")
     }
 
     @Test

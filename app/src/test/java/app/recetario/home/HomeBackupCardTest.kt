@@ -2,7 +2,6 @@ package app.recetario.home
 
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -19,6 +18,8 @@ import app.recetario.testing.sampleRecipe
 import app.recetario.testing.testClock
 import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
+import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -49,6 +50,8 @@ class HomeBackupCardTest {
     private fun saveOldRecipe() = runBlocking { container.recipeRepository.save(sampleRecipe("tortilla", "Tortilla de patatas")) }
 
     private fun setStatus(status: BackupStatus) = runBlocking { container.settingsRepository.updateBackupStatus { status } }
+
+    private fun status() = runBlocking { container.settingsRepository.backupStatus.first() }
 
     private fun launch() {
         rule.setContent { RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(container) } }
@@ -108,17 +111,44 @@ class HomeBackupCardTest {
     }
 
     @Test
-    fun dismiss_hidesTheCardForToday_evenAfterRecreation() {
+    fun localError_isShown_andOpensBackups() {
         saveOldRecipe()
-        val restoration = StateRestorationTester(rule)
-        restoration.setContent { RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(container) } }
+        setStatus(BackupStatus(lastExternal = testClock.instant(), localError = BackupMessages.LOCAL_FAILED))
+        launch()
+
+        rule.waitFor(hasText("No se pudo hacer la copia semanal en el teléfono."))
+        rule.onNodeWithText("Abrir copias").performClick()
+
+        rule.waitFor(hasTestTag("backup-screen"))
+    }
+
+    @Test
+    fun bothErrors_areShown_theLocalOneFirst() {
+        saveOldRecipe()
+        setStatus(BackupStatus(lastExternal = testClock.instant(), localError = BackupMessages.LOCAL_FAILED, lastError = BackupMessages.DRIVE_FAILED))
+        launch()
+
+        rule.waitFor(hasText(BackupMessages.LOCAL_FAILED))
+        rule.waitFor(hasText(BackupMessages.DRIVE_FAILED))
+        val local = rule.onNodeWithText(BackupMessages.LOCAL_FAILED).fetchSemanticsNode().boundsInRoot
+        val drive = rule.onNodeWithText(BackupMessages.DRIVE_FAILED).fetchSemanticsNode().boundsInRoot
+        assertThat(local.top).isLessThan(drive.top)
+    }
+
+    @Test
+    fun dismiss_isSavedForTodayAndThatNotice_andAnotherNoticeShowsAgain() {
+        saveOldRecipe()
+        launch()
         rule.waitFor(hasTestTag("home-backup-card"))
 
         rule.onNodeWithTag("home-backup-dismiss").performClick()
-        rule.waitForGone(hasTestTag("home-backup-card"))
 
-        restoration.emulateSavedInstanceStateRestore()
-        rule.waitFor(hasText("Tortilla de patatas"))
-        rule.onNodeWithTag("home-backup-card").assertDoesNotExist()
+        rule.waitForGone(hasTestTag("home-backup-card"))
+        rule.waitUntil(5_000) { status().noticeDismissed != null }
+        assertThat(status().noticeDismissed).isEqualTo("2026-11-13|recordatorio")
+
+        // Falla Drive: es otro aviso y sale aunque hoy se ocultara el recordatorio.
+        runBlocking { container.settingsRepository.updateBackupStatus { it.copy(lastError = BackupMessages.DRIVE_FAILED) } }
+        rule.waitFor(hasText(BackupMessages.DRIVE_FAILED))
     }
 }

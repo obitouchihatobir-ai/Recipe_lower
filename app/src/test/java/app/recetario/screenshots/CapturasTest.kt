@@ -158,15 +158,18 @@ class CapturasTest {
         captureHomeNotice(c, nav, name)
     }
 
-    /** Inicio con el recordatorio de los 30 días y con el error de la copia automática en Drive. */
+    /** Inicio con el recordatorio de los 30 días y con los errores de la copia automática (teléfono y Drive). */
     private fun captureHomeNotice(c: AppContainer, nav: NavHostController, name: String) {
         runBlocking { c.settingsRepository.updateBackupStatus { BackupStatus() } }
         rule.runOnIdle { nav.popBackStack(Home, inclusive = false) }
         rule.waitFor(hasTestTag("home-backup-card"))
         rule.waitFor(hasText("Hace más de 30 días que no guardas una copia fuera del teléfono."))
         save("inicio-aviso-$name")
-        runBlocking { c.settingsRepository.updateBackupStatus { it.copy(lastError = BackupMessages.DRIVE_FAILED) } }
+        runBlocking {
+            c.settingsRepository.updateBackupStatus { it.copy(localError = BackupMessages.LOCAL_FAILED, lastError = BackupMessages.DRIVE_FAILED) }
+        }
         rule.waitFor(hasText(BackupMessages.DRIVE_FAILED))
+        rule.waitFor(hasText(BackupMessages.LOCAL_FAILED))
         save("inicio-error-$name")
     }
 
@@ -192,6 +195,14 @@ class CapturasTest {
         rule.waitFor(hasTestTag("backup-last-external"))
         rule.waitFor(hasTestTag("drive-setup"))
         save("copias-$name")
+
+        // Elegir para Drive un archivo que ya tiene una copia: se pregunta antes de sobrescribirlo.
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("drive-setup"))
+        rule.onNodeWithTag("drive-setup").performClick()
+        rule.waitFor(hasTestTag("drive-replace-panel"))
+        save("copias-drive-existente-$name")
+        rule.onNodeWithTag("drive-cancel").performClick()
+        rule.waitForGone(hasTestTag("drive-replace-panel"))
 
         // Copia automática con Google Drive ya elegido (y su permiso), y después con el error de Drive.
         val resolver = ApplicationProvider.getApplicationContext<Context>().contentResolver

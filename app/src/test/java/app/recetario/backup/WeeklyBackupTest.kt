@@ -68,16 +68,29 @@ class WeeklyBackupTest {
     }
 
     @Test
-    fun writeLocalBackup_twiceInTheSameMinute_neverOverwrites() = runBlocking<Unit> {
+    fun writeLocalBackup_twiceInTheSameMinute_neverOverwrites_andKeepsOnlyTheNewestOfTheWeek() = runBlocking<Unit> {
         seed()
         val first = env.manager.writeLocalBackup()!!
-        val bytes = first.readBytes()
+        assertThat(first.name).isEqualTo("Recetario-2026-11-13-2140.zip")
 
         val second = env.manager.writeLocalBackup()
 
+        // Nunca pisa la anterior (otro nombre); después, la de esta semana sustituye a la anterior de la semana.
         assertThat(second?.name).isEqualTo("Recetario-2026-11-13-2140-2.zip")
-        assertThat(first.readBytes().toList()).isEqualTo(bytes.toList())
-        assertThat(env.backups()).containsExactly("Recetario-2026-11-13-2140.zip", "Recetario-2026-11-13-2140-2.zip")
+        assertThat(env.backups()).containsExactly("Recetario-2026-11-13-2140-2.zip")
+        assertThat(env.manager.localBackups()).containsExactly(LocalBackup("Recetario-2026-11-13-2140-2.zip", recipes = 2))
+    }
+
+    @Test
+    fun retryingManyTimesInAWeek_keepsTheCopiesOfThePreviousWeeks() = runBlocking<Unit> {
+        seed()
+        val history = listOf("Recetario-2026-10-25-0300.zip", "Recetario-2026-11-01-0300.zip", "Recetario-2026-11-08-0300.zip")
+        history.forEach { validCopy(it) }
+        validCopy("Recetario-2026-11-10-0300.zip")
+
+        repeat(4) { assertThat(env.manager.backupNow()).isInstanceOf(AutoBackupResult.Saved::class.java) }
+
+        assertThat(env.backups()).containsExactlyElementsIn(history + "Recetario-2026-11-13-2140-4.zip")
     }
 
     @Test
@@ -146,7 +159,23 @@ class WeeklyBackupTest {
         // Nada nuevo en el teléfono (ni el temporal), la copia anterior intacta y Drive sin tocar.
         assertThat(env.backups()).containsExactly("Recetario-2026-11-08-0300.zip")
         assertThat(env.documents.openedForWriting).isEmpty()
-        assertThat(status()).isEqualTo(app.recetario.settings.BackupStatus(lastExternal = t0, driveUri = drive))
+        assertThat(status()).isEqualTo(
+            app.recetario.settings.BackupStatus(lastExternal = t0, driveUri = drive, localError = "No se pudo hacer la copia semanal en el teléfono."),
+        )
+    }
+
+    @Test
+    fun localFailure_isRecorded_andTheNextSuccessClearsIt() = runBlocking<Unit> {
+        seed()
+        env.backupsDir.writeText("no es una carpeta")
+
+        assertThat(env.manager.writeLocalBackup()).isNull()
+        assertThat(status().localError).isEqualTo(BackupMessages.LOCAL_FAILED)
+
+        env.backupsDir.delete()
+        assertThat(env.manager.writeLocalBackup()).isNotNull()
+        assertThat(status().localError).isNull()
+        assertThat(status().lastLocal).isEqualTo(env.clock.instant())
     }
 
     @Test
@@ -190,6 +219,52 @@ class WeeklyBackupTest {
         assertThat(s.lastExternal).isEqualTo(t0)
         assertThat(s.lastDrive).isEqualTo(t0)
         assertThat(s.driveUri).isEqualTo(drive)
+    }
+
+    @Test
+    fun copyToExternal_checksTheLengthReadBack_aShortDocumentIsAFailure() = runBlocking<Unit> {
+        seed()
+        env.settings.updateBackupStatus { it.copy(driveUri = drive, lastExternal = t0) }
+        val file = env.manager.writeLocalBackup()!!
+        env.documents.dropLastByte = true
+
+        assertThat(env.manager.copyToExternal(file, drive)).isFalse()
+
+        assertThat(env.documents.opened).contains(drive)
+        assertThat(status().lastError).isEqualTo(BackupMessages.DRIVE_FAILED)
+        assertThat(status().lastExternal).isEqualTo(t0)
+    }
+
+    @Test
+    fun copyToExternal_providerWithoutWt_retriesOnceWithW() = runBlocking<Unit> {
+        seed()
+        env.settings.updateBackupStatus { it.copy(driveUri = drive) }
+        val file = env.manager.writeLocalBackup()!!
+        env.documents.rejectedModes = setOf("wt")
+
+        assertThat(env.manager.copyToExternal(file, drive)).isTrue()
+
+        assertThat(env.documents.modes).containsExactly("wt", "w").inOrder()
+        assertThat(env.documents.files.getValue(drive).toList()).isEqualTo(file.readBytes().toList())
+        assertThat(status().lastError).isNull()
+        assertThat(status().lastExternal).isEqualTo(env.clock.instant())
+    }
+
+    @Test
+    fun copyToExternal_withW_thatLeavesOldBytes_isAFailure() = runBlocking<Unit> {
+        seed()
+        env.settings.updateBackupStatus { it.copy(driveUri = drive) }
+        val file = env.manager.writeLocalBackup()!!
+        // La copia de la semana pasada era más larga y este proveedor no vacía el archivo con «w».
+        env.documents.files[drive] = ByteArray(file.length().toInt() + 5_000) { 7 }
+        env.documents.rejectedModes = setOf("wt")
+        env.documents.wKeepsOldTail = true
+
+        assertThat(env.manager.copyToExternal(file, drive)).isFalse()
+
+        assertThat(env.documents.modes).containsExactly("wt", "w").inOrder()
+        assertThat(status().lastError).isEqualTo(BackupMessages.DRIVE_FAILED)
+        assertThat(status().lastExternal).isNull()
     }
 
     @Test
@@ -306,6 +381,24 @@ class WeeklyBackupTest {
         val fresh = "content://descargas/Recetario-2026-11-13 (1).zip"
         assertThat(env.manager.exportToDocument(fresh)).isEqualTo(ExportResult.Error("No se pudo guardar la copia."))
         assertThat(env.documents.deleted).containsExactly(fresh)
+    }
+
+    @Test
+    fun exportToDocument_ifItCannotBeOpened_neverDeletesAnExistingFile() = runBlocking<Unit> {
+        seed()
+        val existing = "content://descargas/Recetario-2026-11-01.zip"
+        env.documents.files[existing] = "copia anterior".toByteArray()
+        env.documents.failOpenOutput = true
+
+        assertThat(env.manager.exportToDocument(existing)).isEqualTo(ExportResult.Error("No se pudo guardar la copia."))
+
+        assertThat(env.documents.deleted).isEmpty()
+        assertThat(String(env.documents.files.getValue(existing))).isEqualTo("copia anterior")
+        // Uno nuevo (vacío) que no se pudo abrir sí se borra.
+        val fresh = "content://descargas/Recetario-2026-11-13.zip"
+        assertThat(env.manager.exportToDocument(fresh)).isEqualTo(ExportResult.Error("No se pudo guardar la copia."))
+        assertThat(env.documents.deleted).containsExactly(fresh)
+        assertThat(env.cacheFiles()).isEmpty()
     }
 
     @Test

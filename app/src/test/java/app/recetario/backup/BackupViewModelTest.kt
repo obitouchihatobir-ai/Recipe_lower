@@ -75,4 +75,46 @@ class BackupViewModelTest {
         assertThat(env.documents.files.getValue(created).toList()).isEqualTo(File(env.backupsDir, name).readBytes().toList())
         assertThat(env.documents.deleted).isEmpty()
     }
+
+    private fun eventually(what: String, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (!condition()) {
+            check(System.currentTimeMillis() < deadline) { "No llegó a pasar: $what" }
+            Thread.sleep(20)
+        }
+    }
+
+    @Test
+    fun driveFile_whenItCannotBeSaved_releasesThePermission_andDeletesTheEmptyDocument() {
+        val vm = viewModel(SavedStateHandle())
+        val newDrive = "content://drive/Recetario-copia-automatica.zip"
+        env.localState.failWrites = true
+
+        vm.onDriveDocumentCreated(newDrive)
+
+        assertThat(vm.nextMessage()).isEqualTo("No se pudo guardar la copia.")
+        assertThat(env.documents.deleted).containsExactly(newDrive)
+        assertThat(env.documents.persisted).isEmpty()
+        assertThat(env.documents.released).contains(newDrive)
+        assertThat(env.documents.openedForWriting).isEmpty()
+    }
+
+    @Test
+    fun driveFile_arrivingWhileBusy_deletesTheEmptyDocument_andChangesNothing() {
+        val vm = viewModel(SavedStateHandle())
+        // Una comprobación en curso (el archivo que se importa tarda en abrirse).
+        val importing = "content://descargas/copia.zip"
+        val gate = java.util.concurrent.CountDownLatch(1)
+        env.documents.inputGates[importing] = gate
+        vm.onImportFilePicked(importing)
+
+        val newDrive = "content://drive/Recetario-copia-automatica.zip"
+        vm.onDriveDocumentCreated(newDrive)
+
+        eventually("borrar el documento vacío") { newDrive in env.documents.deleted }
+        gate.countDown()
+        assertThat(env.documents.persisted).isEmpty()
+        assertThat(env.documents.openedForWriting).isEmpty()
+        assertThat(runBlocking { env.settings.backupStatus.first().driveUri }).isNull()
+    }
 }

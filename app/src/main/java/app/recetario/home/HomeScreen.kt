@@ -225,7 +225,7 @@ private fun BackupNoticeCard(notice: BackupNotice, onBackup: () -> Unit, onDismi
         Column(Modifier.weight(1f).padding(top = 8.dp)) {
             Text(
                 when (notice) {
-                    is BackupNotice.Error -> notice.message
+                    is BackupNotice.Error -> notice.messages.joinToString("\n")
                     BackupNotice.Reminder -> BackupMessages.REMINDER
                 },
                 color = if (isError) MaterialTheme.colorScheme.error else c.ink,

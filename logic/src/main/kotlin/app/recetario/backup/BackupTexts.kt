@@ -31,7 +31,17 @@ object BackupMessages {
 
     /** Recordatorio de Inicio. */
     const val REMINDER = "Hace más de 30 días que no guardas una copia fuera del teléfono."
+
+    /** La copia semanal no se pudo escribir o comprobar en el teléfono (se muestra en Inicio y en Copias). */
+    const val LOCAL_FAILED = "No se pudo hacer la copia semanal en el teléfono."
+
+    /** El archivo elegido para Drive ya tenía algo que no es una copia. */
+    const val DRIVE_NOT_A_COPY = "Ese archivo no es una copia de la app. ¿Reemplazarlo?"
 }
+
+/** El archivo elegido para Drive ya tiene una copia: «Ese archivo ya tiene una copia con 12 recetas; ahora tienes 40.» */
+fun driveExistingCopyText(backupRecipes: Int, localRecipes: Int): String =
+    "Ese archivo ya tiene una copia con ${recipeCountText(backupRecipes)}; ahora tienes $localRecipes."
 
 /** Nombre que se propone al elegir el archivo de Google Drive de la copia automática. */
 const val DRIVE_DOCUMENT_NAME = "Recetario-copia-automatica.zip"

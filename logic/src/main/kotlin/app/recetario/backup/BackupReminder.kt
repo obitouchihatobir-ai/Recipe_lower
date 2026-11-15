@@ -2,6 +2,7 @@ package app.recetario.backup
 
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 
 /** Días sin una copia fuera del teléfono (Drive o exportación manual) tras los que Inicio lo recuerda. */
 private val REMINDER_AFTER: Duration = Duration.ofDays(30)
@@ -17,18 +18,36 @@ fun shouldRemindBackup(now: Instant, lastExternal: Instant?, firstRecipeAt: Inst
     return Duration.between(since, now) > REMINDER_AFTER
 }
 
-/** Tarjeta de Inicio sobre las copias. */
+/** Tarjeta de Inicio sobre las copias. [kind] distingue un aviso de otro al ocultarlo hasta mañana. */
 sealed interface BackupNotice {
-    /** La copia automática no se pudo guardar en Drive (o se perdió el permiso): [message] lo explica. */
-    data class Error(val message: String) : BackupNotice
+    val kind: String
+
+    /**
+     * La copia automática falló: en el teléfono ([localError]) o en Drive ([driveError], también si se perdió el
+     * permiso). Si fallan las dos se muestran las dos, primero la del teléfono.
+     */
+    data class Error(val localError: String?, val driveError: String?) : BackupNotice {
+        val messages: List<String> get() = listOfNotNull(localError, driveError)
+        override val kind: String
+            get() = when {
+                localError != null && driveError != null -> "error-telefono-drive"
+                localError != null -> "error-telefono"
+                else -> "error-drive"
+            }
+    }
 
     /** Hace más de 30 días que no sale ninguna copia del teléfono. */
-    data object Reminder : BackupNotice
+    data object Reminder : BackupNotice {
+        override val kind: String = "recordatorio"
+    }
 }
 
-/** Primero el error de la copia automática (aunque no haya recetas); si no lo hay, el recordatorio. */
-fun backupNoticeFor(now: Instant, lastError: String?, lastExternal: Instant?, firstRecipeAt: Instant?): BackupNotice? = when {
-    lastError != null -> BackupNotice.Error(lastError)
+/** Primero los errores de la copia automática (aunque no haya recetas); si no los hay, el recordatorio. */
+fun backupNoticeFor(now: Instant, localError: String?, driveError: String?, lastExternal: Instant?, firstRecipeAt: Instant?): BackupNotice? = when {
+    localError != null || driveError != null -> BackupNotice.Error(localError, driveError)
     shouldRemindBackup(now, lastExternal, firstRecipeAt) -> BackupNotice.Reminder
     else -> null
 }
+
+/** Clave con la que se guarda que el usuario ocultó [notice] el día [day]: otro día u otro aviso vuelven a salir. */
+fun noticeDismissalKey(day: LocalDate, notice: BackupNotice): String = "$day|${notice.kind}"

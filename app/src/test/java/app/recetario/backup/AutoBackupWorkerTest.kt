@@ -40,20 +40,39 @@ import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
-/** Proveedor de documentos de prueba que hace de Google Drive: guarda en [dir] y anota el modo de cada apertura. */
+/**
+ * Proveedor de documentos de prueba que hace de Google Drive: guarda en [dir] y anota el modo de cada apertura para
+ * escribir ([modes]) y cuántas veces se leyó ([reads]). [rejectWt]: no admite «wt»; [wKeepsOldTail]: con «w» no
+ * vacía el archivo, como algunos proveedores.
+ */
 class FakeDriveProvider : ContentProvider() {
     lateinit var dir: File
     val modes: MutableList<String> = CopyOnWriteArrayList()
 
     @Volatile
+    var reads = 0
+
+    @Volatile
     var fail = false
+
+    @Volatile
+    var rejectWt = false
+
+    @Volatile
+    var wKeepsOldTail = false
 
     override fun onCreate() = true
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
-        modes += mode
+        if (mode == "r") reads++ else modes += mode
         if (fail) throw FileNotFoundException("Drive no responde")
-        return ParcelFileDescriptor.open(File(dir, uri.lastPathSegment!!), ParcelFileDescriptor.parseMode(mode))
+        if (rejectWt && mode == "wt") throw FileNotFoundException("Modo no admitido: wt")
+        val flags = if (mode == "w" && wKeepsOldTail) {
+            ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE
+        } else {
+            ParcelFileDescriptor.parseMode(mode)
+        }
+        return ParcelFileDescriptor.open(File(dir, uri.lastPathSegment!!), flags)
     }
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, args: Array<out String>?, sort: String?): Cursor? = null
@@ -94,8 +113,8 @@ class AutoBackupWorkerTest {
 
     private fun status() = runBlocking { container.settingsRepository.backupStatus.first() }
 
-    private fun runWorker(): ListenableWorker.Result =
-        runBlocking { TestListenableWorkerBuilder<AutoBackupWorker>(context).build().doWork() }
+    private fun runWorker(attempt: Int = 0): ListenableWorker.Result =
+        runBlocking { TestListenableWorkerBuilder<AutoBackupWorker>(context, runAttemptCount = attempt).build().doWork() }
 
     private fun localCopies() = container.backupManager.localBackupsDir.list()?.sorted().orEmpty()
 
@@ -115,6 +134,8 @@ class AutoBackupWorkerTest {
         assertThat(runBlocking { container.backupManager.localBackups() })
             .containsExactly(LocalBackup(local.name, recipes = 2))
         assertThat(drive.modes).containsExactly("wt")
+        // Después de escribir se lee para comprobar el tamaño.
+        assertThat(drive.reads).isAtLeast(1)
         assertThat(driveFile().readBytes().toList()).isEqualTo(local.readBytes().toList())
         val now = testClock.instant()
         assertThat(status()).isEqualTo(BackupStatus(lastLocal = now, lastExternal = now, lastDrive = now, driveUri = driveUri))
@@ -161,15 +182,69 @@ class AutoBackupWorkerTest {
     }
 
     @Test
-    fun worker_localFailure_retries_andNeverTouchesDrive() {
+    fun worker_localFailure_retries_recordsTheError_andNeverTouchesDrive() {
         seed()
         setStatus { it.copy(driveUri = driveUri) }
         container.backupManager.localBackupsDir.apply { parentFile?.mkdirs() }.writeText("no es una carpeta")
 
-        assertThat(runWorker()).isEqualTo(ListenableWorker.Result.retry())
+        assertThat(runWorker(attempt = 0)).isEqualTo(ListenableWorker.Result.retry())
+        assertThat(runWorker(attempt = 2)).isEqualTo(ListenableWorker.Result.retry())
 
         assertThat(drive.modes).isEmpty()
-        assertThat(status()).isEqualTo(BackupStatus(driveUri = driveUri))
+        assertThat(status()).isEqualTo(BackupStatus(driveUri = driveUri, localError = "No se pudo hacer la copia semanal en el teléfono."))
+    }
+
+    @Test
+    fun worker_localFailure_afterThreeAttempts_waitsForTheNextWeek() {
+        seed()
+        container.backupManager.localBackupsDir.apply { parentFile?.mkdirs() }.writeText("no es una carpeta")
+
+        assertThat(runWorker(attempt = 3)).isEqualTo(ListenableWorker.Result.success())
+
+        assertThat(status().localError).isEqualTo(BackupMessages.LOCAL_FAILED)
+    }
+
+    @Test
+    fun worker_localSuccess_clearsAnOldLocalError() {
+        seed()
+        setStatus { it.copy(localError = BackupMessages.LOCAL_FAILED) }
+
+        assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
+
+        assertThat(status()).isEqualTo(BackupStatus(lastLocal = testClock.instant()))
+    }
+
+    @Test
+    fun worker_providerWithoutWt_retriesWithW_andTheLengthCheckCatchesOldBytes() {
+        seed()
+        setStatus { it.copy(driveUri = driveUri, lastExternal = t0) }
+        drive.rejectWt = true
+        drive.wKeepsOldTail = true
+        // La copia de la semana pasada, más larga que la nueva.
+        driveFile().writeBytes(ByteArray(200_000) { 7 })
+
+        assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
+
+        assertThat(drive.modes).containsExactly("wt", "w").inOrder()
+        assertThat(status().lastError).isEqualTo(BackupMessages.DRIVE_FAILED)
+        assertThat(status().lastExternal).isEqualTo(t0)
+        assertThat(localCopies()).containsExactly("Recetario-2026-11-13-2140.zip")
+    }
+
+    @Test
+    fun worker_providerWithoutWt_andAnEmptyFile_savesWithW() {
+        seed()
+        setStatus { it.copy(driveUri = driveUri) }
+        drive.rejectWt = true
+        drive.wKeepsOldTail = true
+
+        assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
+
+        assertThat(drive.modes).containsExactly("wt", "w").inOrder()
+        val local = File(container.backupManager.localBackupsDir, "Recetario-2026-11-13-2140.zip")
+        assertThat(driveFile().readBytes().toList()).isEqualTo(local.readBytes().toList())
+        assertThat(status().lastError).isNull()
+        assertThat(status().lastExternal).isEqualTo(testClock.instant())
     }
 
     @SuppressLint("RestrictedApi")

@@ -49,12 +49,13 @@ fun installTestContainer(
         .addCallback(DefaultCategories.callback)
         .build()
     return AppContainer(
-        app, clock = clock, database = db, settingsDataStore = testSettingsDataStore(), elapsedRealtime = elapsedRealtime,
+        app, clock = clock, database = db, settingsDataStore = testSettingsDataStore(), localStateDataStore = testSettingsDataStore(),
+        elapsedRealtime = elapsedRealtime,
         backupDocuments = documents ?: ContentResolverDocuments(app.contentResolver),
     ).also { app.container = it }
 }
 
-/** Ajustes en un archivo temporal propio de cada contenedor de prueba. */
+/** Ajustes (o estado del teléfono) en un archivo temporal propio de cada contenedor de prueba. */
 private fun testSettingsDataStore(): DataStore<Preferences> = PreferenceDataStoreFactory.create(
     scope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     produceFile = { File(Files.createTempDirectory("ajustes").toFile(), "ajustes.preferences_pb") },

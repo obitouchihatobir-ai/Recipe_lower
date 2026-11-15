@@ -1,6 +1,8 @@
 package app.recetario.settings
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.core.ui.theme.ThemeSettings
 import kotlinx.coroutines.CoroutineScope
@@ -25,12 +27,17 @@ class SettingsRepositoryTest {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var repo: SettingsRepository
+    private lateinit var store: DataStore<Preferences>
+    private lateinit var localStore: DataStore<Preferences>
 
     @Before
     fun setUp() {
-        val store = PreferenceDataStoreFactory.create(scope = scope) { folder.newFile("ajustes.preferences_pb").also { it.delete() } }
-        repo = SettingsRepository(store)
+        store = PreferenceDataStoreFactory.create(scope = scope) { folder.newFile("ajustes.preferences_pb").also { it.delete() } }
+        localStore = PreferenceDataStoreFactory.create(scope = scope) { folder.newFile("estado-local.preferences_pb").also { it.delete() } }
+        repo = SettingsRepository(store, localStore)
     }
+
+    private suspend fun keysOf(dataStore: DataStore<Preferences>): Set<String> = dataStore.data.first().asMap().keys.map { it.name }.toSet()
 
     @After
     fun tearDown() = scope.cancel()
@@ -51,7 +58,10 @@ class SettingsRepositoryTest {
         file.writeBytes(ByteArray(64) { (it * 31 + 7).toByte() })
         val corruptScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         try {
-            val corrupt = SettingsRepository(createSettingsDataStore(corruptScope) { file })
+            val corrupt = SettingsRepository(
+                createSettingsDataStore(corruptScope) { file },
+                createSettingsDataStore(corruptScope) { folder.newFile("estado-local-limpio.preferences_pb").also { it.delete() } },
+            )
             assertEquals(ThemeSettings(), corrupt.themeSettings.first())
             assertEquals(240, corrupt.cupMl.first())
             assertEquals(BackupStatus(), corrupt.backupStatus.first())
@@ -68,6 +78,55 @@ class SettingsRepositoryTest {
         assertEquals(false, repo.notificationPermissionAsked.first())
         repo.setNotificationPermissionAsked()
         assertEquals(true, repo.notificationPermissionAsked.first())
+        // Es del teléfono: va en «estado-local», que no viaja con la copia de Android.
+        assertEquals(setOf("notifications_permission_asked"), keysOf(localStore))
+        assertEquals(emptySet<String>(), keysOf(store))
+    }
+
+    @Test
+    fun backupStatus_deviceStateLivesInEstadoLocal_onlyLastExternalInAjustes() = runTest {
+        val at = Instant.ofEpochMilli(1_760_000_000_000)
+        repo.updateBackupStatus {
+            BackupStatus(
+                lastLocal = at, lastExternal = at, driveUri = "content://x/y", lastError = "Drive", lastDrive = at,
+                localError = "Teléfono", noticeDismissed = "2026-11-15|recordatorio",
+            )
+        }
+        assertEquals(
+            BackupStatus(at, at, "content://x/y", "Drive", at, "Teléfono", "2026-11-15|recordatorio"),
+            repo.backupStatus.first(),
+        )
+        assertEquals(setOf("backup_last_external"), keysOf(store))
+        assertEquals(
+            setOf(
+                "backup_last_local", "backup_drive_uri", "backup_last_error", "backup_last_drive", "backup_local_error",
+                "backup_notice_dismissed",
+            ),
+            keysOf(localStore),
+        )
+        // Y se borran.
+        repo.updateBackupStatus { BackupStatus() }
+        assertEquals(BackupStatus(), repo.backupStatus.first())
+        assertEquals(emptySet<String>(), keysOf(store) + keysOf(localStore))
+    }
+
+    @Test
+    fun corruptLocalState_fallsBackToEmpty_andCanBeWrittenAgain() = runTest {
+        val file = folder.newFile("estado-local-corrupto.preferences_pb")
+        file.writeBytes(ByteArray(64) { (it * 17 + 3).toByte() })
+        val corruptScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        try {
+            val corrupt = SettingsRepository(
+                createSettingsDataStore(corruptScope) { folder.newFile("ajustes-limpio.preferences_pb").also { it.delete() } },
+                createSettingsDataStore(corruptScope) { file },
+            )
+            assertEquals(BackupStatus(), corrupt.backupStatus.first())
+            assertEquals(false, corrupt.notificationPermissionAsked.first())
+            corrupt.updateBackupStatus { it.copy(localError = "Teléfono") }
+            assertEquals("Teléfono", corrupt.backupStatus.first().localError)
+        } finally {
+            corruptScope.cancel()
+        }
     }
 
     @Test

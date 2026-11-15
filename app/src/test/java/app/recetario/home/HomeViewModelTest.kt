@@ -65,7 +65,7 @@ class HomeViewModelTest {
     fun greeting_isReevaluatedOnEachTick() = runTest(dispatcher) {
         val clock = MovableClock(Instant.parse("2026-11-13T11:59:00Z"))
         val ticks = MutableSharedFlow<Unit>()
-        val vm = HomeViewModel(EmptyRepository(), flowOf(BackupStatus()), clock, ticks = ticks, dispatcher = dispatcher)
+        val vm = HomeViewModel(EmptyRepository(), flowOf(BackupStatus()), clock, ticks = ticks, dispatcher = dispatcher, dismissNotice = {})
         backgroundScope.launch { vm.state.collect {} }
         runCurrent()
         assertThat(vm.state.value.greeting).isEqualTo("Buenos días")
@@ -87,7 +87,7 @@ class HomeViewModelTest {
         val ticks = MutableSharedFlow<Unit>()
         val firstRecipeAt = MutableStateFlow<Instant?>(null)
         val status = MutableStateFlow(BackupStatus(lastExternal = Instant.parse("2026-10-20T10:00:00Z")))
-        val vm = HomeViewModel(EmptyRepository(firstRecipeAt), status, clock, ticks = ticks, dispatcher = dispatcher)
+        val vm = HomeViewModel(EmptyRepository(firstRecipeAt), status, clock, ticks = ticks, dispatcher = dispatcher, dismissNotice = {})
         backgroundScope.launch { vm.state.collect {} }
         runCurrent()
         // Sin recetas no hay nada que recordar.
@@ -109,10 +109,40 @@ class HomeViewModelTest {
         // Un error de la copia automática va antes que el recordatorio.
         status.value = status.value.copy(lastError = BackupMessages.DRIVE_FAILED)
         runCurrent()
-        assertThat(vm.state.value.backupNotice).isEqualTo(BackupNotice.Error(BackupMessages.DRIVE_FAILED))
+        assertThat(vm.state.value.backupNotice).isEqualTo(BackupNotice.Error(localError = null, driveError = BackupMessages.DRIVE_FAILED))
+        // Y si además falló la copia del teléfono, las dos.
+        status.value = status.value.copy(localError = BackupMessages.LOCAL_FAILED)
+        runCurrent()
+        assertThat(vm.state.value.backupNotice)
+            .isEqualTo(BackupNotice.Error(localError = BackupMessages.LOCAL_FAILED, driveError = BackupMessages.DRIVE_FAILED))
 
         status.value = BackupStatus(lastExternal = clock.now)
         runCurrent()
         assertThat(vm.state.value.backupNotice).isNull()
+    }
+
+    @Test
+    fun dismissingTheNotice_savesTheDayAndKind_andAnotherNoticeShowsAgain() = runTest(dispatcher) {
+        val clock = MovableClock(Instant.parse("2026-11-20T10:00:00Z"))
+        val status = MutableStateFlow(BackupStatus())
+        val saved = mutableListOf<String>()
+        val vm = HomeViewModel(
+            EmptyRepository(flowOf(Instant.parse("2026-01-01T10:00:00Z"))), status, clock,
+            ticks = MutableSharedFlow(), dispatcher = dispatcher,
+            dismissNotice = { key -> saved += key; status.value = status.value.copy(noticeDismissed = key) },
+        )
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertThat(vm.state.value.backupNotice).isEqualTo(BackupNotice.Reminder)
+
+        vm.dismissBackupNotice()
+        runCurrent()
+
+        assertThat(saved).containsExactly("2026-11-20|recordatorio")
+        assertThat(vm.state.value.backupNotice).isNull()
+        // Otro aviso (un error de Drive) sí sale el mismo día.
+        status.value = status.value.copy(lastError = BackupMessages.DRIVE_FAILED)
+        runCurrent()
+        assertThat(vm.state.value.backupNotice).isEqualTo(BackupNotice.Error(localError = null, driveError = BackupMessages.DRIVE_FAILED))
     }
 }
