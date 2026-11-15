@@ -18,7 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import app.recetario.R
 import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.SectionTitle
 import app.recetario.core.ui.theme.LocalRecetarioColors
@@ -39,7 +41,7 @@ fun AboutRoute(onBack: () -> Unit) {
     AboutContent(versionName = remember(context) { versionName(context) }, onBack = onBack)
 }
 
-/** Acerca de: nombre, versión, créditos y las licencias de las fuentes (cada una se abre en una pantalla con desplazamiento). */
+/** Acerca de: nombre de la app (`app_name`, «Sazón»), versión, créditos y las licencias de las fuentes (cada una se abre en una pantalla con desplazamiento). */
 @Composable
 fun AboutContent(versionName: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val c = LocalRecetarioColors.current
@@ -51,7 +53,7 @@ fun AboutContent(versionName: String, onBack: () -> Unit, modifier: Modifier = M
     }
     SettingsPage("Acerca de", onBack, tag = "about-screen", modifier = modifier) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 4.dp)) {
-            Text("Recetario", color = c.ink, style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.app_name), color = c.ink, style = MaterialTheme.typography.headlineSmall)
             MutedText("Versión $versionName", Modifier.testTag("about-version"), fontSizeSp = 14)
             MutedText("Hecho con cariño para cocinar en casa", Modifier.padding(top = 8.dp), fontSizeSp = 14)
             SectionTitle("Licencias de las fuentes", Modifier.padding(top = 24.dp, bottom = 4.dp))

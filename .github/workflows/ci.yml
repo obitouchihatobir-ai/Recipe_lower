@@ -38,7 +38,7 @@ jobs:
       - name: Pruebas de la app y APK de depuración y release
         run: ./gradlew testDebugUnitTest assembleDebug assembleRelease
 
-      # Capturas de Inicio, Recetas y el editor en los tres temas (CapturasTest), para revisarlas a ojo.
+      # Capturas de las pantallas en los tres temas (CapturasTest), para revisarlas a ojo.
       - name: Subir capturas de pantalla
         if: always()
         uses: actions/upload-artifact@v6
@@ -88,6 +88,25 @@ jobs:
           "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk |
             tee "$RUNNER_TEMP/firma.txt"
           grep -q 'certificate DN: CN=Recetario$' "$RUNNER_TEMP/firma.txt"
+
+      # El APK del ensayo, firmado con la llave desechable de esta ejecución, se sube como
+      # artefacto «sazon-apk» para probarlo en el móvil (se entrega por el chat). No es una
+      # versión publicada: cada ejecución crea su propia llave, así que no se instala encima
+      # de otro APK (ni de este flujo ni de «Publicar APK») sin desinstalar antes.
+      - name: Preparar Sazon-<versión>-prueba.apk
+        run: |
+          version="$(sed -n 's/^versionName=//p' app/version.properties)"
+          test -n "$version"
+          mkdir -p "$RUNNER_TEMP/sazon-apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/sazon-apk/Sazon-$version-prueba.apk"
+          ls -l "$RUNNER_TEMP/sazon-apk"
+
+      - name: Subir el APK de prueba
+        uses: actions/upload-artifact@v6
+        with:
+          name: sazon-apk
+          path: ${{ runner.temp }}/sazon-apk/
+          if-no-files-found: error
 
       - name: Subir informes de prueba
         if: failure()

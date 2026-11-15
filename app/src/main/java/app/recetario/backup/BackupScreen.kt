@@ -214,7 +214,7 @@ fun BackupContent(
             AutomaticBackupCard(state, zone, busy, onChooseDriveFile, onRetryDrive)
             BackupCard(
                 title = "Recuperar una copia",
-                text = "Abre un archivo .zip del Recetario. Podrás combinarlo con lo que ya tienes o reemplazarlo todo.",
+                text = "Abre un archivo .zip de Sazón. Podrás combinarlo con lo que ya tienes o reemplazarlo todo.",
             ) {
                 OutlinedButton(
                     onClick = onImport,

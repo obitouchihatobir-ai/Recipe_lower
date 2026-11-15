@@ -1,7 +1,7 @@
 name: Publicar APK
 
 # Compila el APK firmado y lo publica en GitHub Releases como
-# Recetario-<versionName>.apk, en la versión v<versionName>.
+# Sazon-<versionName>.apk (sin tilde), en la versión v<versionName>.
 on:
   push:
     branches: [main]
@@ -67,7 +67,7 @@ jobs:
 
       # app-release.apk solo existe si el APK está firmado (sin firma sería
       # app-release-unsigned.apk), así que este paso falla si algo no firmó.
-      - name: Preparar Recetario-<versión>.apk
+      - name: Preparar Sazon-<versión>.apk
         id: apk
         run: |
           version="$(sed -n 's/^versionName=//p' app/version.properties)"
@@ -75,7 +75,7 @@ jobs:
             echo "::error::No se encuentra versionName en app/version.properties"
             exit 1
           fi
-          apk="$RUNNER_TEMP/Recetario-$version.apk"
+          apk="$RUNNER_TEMP/Sazon-$version.apk"
           mv app/build/outputs/apk/release/app-release.apk "$apk"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "path=$apk" >> "$GITHUB_OUTPUT"
@@ -94,6 +94,6 @@ jobs:
           else
             gh release create "$tag" "$APK" \
               --target "$GITHUB_SHA" \
-              --title "Recetario $VERSION" \
-              --notes "Versión $VERSION de Recetario. Para instalarla o actualizarla, descarga Recetario-$VERSION.apk desde el móvil y ábrelo. Guía paso a paso: $guide"
+              --title "Sazón $VERSION" \
+              --notes "Versión $VERSION de Sazón. Para instalarla o actualizarla, descarga Sazon-$VERSION.apk desde el móvil y ábrelo. Guía paso a paso: $guide"
           fi
