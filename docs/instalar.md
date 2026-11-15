@@ -72,4 +72,5 @@ Ese APK va firmado con una **llave provisional**, distinta en cada ejecución, y
 1. En la app, entra en **Ajustes › Copias de seguridad** y toca **Exportar copia**. Guarda el archivo `Sazon-AAAA-MM-DD.zip` fuera de la app: en **Descargas** o en Google Drive.
 2. Desinstala Sazón: mantén pulsado su icono y elige **Desinstalar**. Al desinstalar se borran las recetas del móvil; por eso has hecho antes la copia.
 3. Instala la versión nueva (pasos 3 y 4).
-4. Abre **Ajustes › Copias de seguridad**, toca **Importar copia** y elige el archivo del punto 1.
+4. Abre **Ajustes › Copias de seguridad**, toca **Importar copia** y elige el archivo del punto 1. Elige **Reemplazar todo**: en la app recién instalada no hay nada que perder y así vuelven también el tema y el tamaño de la taza (con «Combinar» solo vuelven las recetas, las fotos, las categorías y la compra).
+5. Si usabas la copia automática en Google Drive, vuelve a tocar **Guardar también en Google Drive** en esa misma pantalla: la app nueva no conserva el permiso para escribir en el archivo. Si eliges el archivo de antes, la app te pregunta antes de sobrescribirlo.
