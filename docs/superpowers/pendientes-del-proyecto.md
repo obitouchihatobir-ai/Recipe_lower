@@ -2,17 +2,6 @@
 
 Decisiones y peticiones del usuario que todavía no tienen diseño ni plan propio. Al diseñar cada etapa, pásalas a su diseño y bórralas de aquí.
 
-## Etapa 1: pulido de animaciones (después de la revisión final)
-Todas breves, sin bloquear el toque y apagadas con «quitar animaciones» del sistema.
-- Al abrir la app, el vapor del icono sube y se desvanece mientras carga.
-- Al guardar una receta, un ✓ que se dibuja solo; la tarjeta nueva entra en la lista con un pequeño rebote.
-- Modo cocina:
-  - «Hecho ✓» tacha el paso con una línea animada y despliega el siguiente;
-  - «¡Listo!» con un confeti suave de ingredientes (🌿🍋🧄).
-- Temporizador: anillo que se va vaciando; late cuando termina.
-- Lista de compra: la casilla se rellena y la fila se desliza hasta «Comprado».
-- Porciones: los números cambian rodando, como un contador.
-
 ## Etapa 2 (además de lo que ya dice el diseño, §5 y §8)
 - **Fichas para compartir recetas.** Sustituyen a «compartir una receta como imagen».
   - Formatos: texto, imagen (PNG) y PDF.
