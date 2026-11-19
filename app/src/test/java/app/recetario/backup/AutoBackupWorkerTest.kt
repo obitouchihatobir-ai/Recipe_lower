@@ -20,6 +20,8 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
 import app.recetario.AppContainer
+import app.recetario.RecetarioApp
+import app.recetario.core.data.GuardResult
 import app.recetario.settings.BackupStatus
 import app.recetario.testing.installTestContainer
 import app.recetario.testing.sampleRecipe
@@ -124,15 +126,15 @@ class AutoBackupWorkerTest {
     fun worker_upgradeCopyFailed_neverOpensTheDatabase() {
         // Sin datos ni consultas: la base de datos (en memoria) aún no se ha abierto.
         assertThat(container.database.isOpen).isFalse()
-        val app = context as app.recetario.RecetarioApp
-        app.upgrade = app.recetario.core.data.GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED)
+        val app = context as RecetarioApp
+        app.upgrade = GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED)
         try {
             // Abrir la base de datos la migraría sin copia previa: el trabajo termina sin tocarla.
             assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
             assertThat(container.database.isOpen).isFalse()
             assertThat(localCopies()).isEmpty()
         } finally {
-            app.upgrade = app.recetario.core.data.GuardResult.Ready
+            app.upgrade = GuardResult.Ready
         }
     }
 
