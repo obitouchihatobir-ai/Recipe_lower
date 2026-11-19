@@ -48,12 +48,10 @@ class SplashTest {
         assertThat(animator.totalDuration).isEqualTo(SPLASH_EXIT_MS)
 
         animator.start()
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SPLASH_EXIT_MS / 2))
-        assertThat(icon.translationY).isLessThan(0f)
-        assertThat(icon.alpha).isGreaterThan(0f)
+        // Nada se quita de golpe: hasta que termina la animación, la pantalla de arranque sigue.
         assertThat(removed).isEqualTo(0)
 
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SPLASH_EXIT_MS))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SPLASH_EXIT_MS + 100))
         assertThat(icon.alpha).isEqualTo(0f)
         assertThat(icon.translationY).isLessThan(0f)
         assertThat(splash.alpha).isEqualTo(0f)

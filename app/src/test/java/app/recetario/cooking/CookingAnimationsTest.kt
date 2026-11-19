@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -66,6 +67,12 @@ class CookingAnimationsTest {
         if (rule.mainClock.autoAdvance) rule.waitForIdle() else rule.mainClock.advanceTimeByFrame()
     }
 
+    /** Cambia el estado desde la prueba y avisa a Compose (con el reloj parado no lo haría solo). */
+    private fun update(block: () -> Unit) = rule.runOnUiThread {
+        block()
+        Snapshot.sendApplyNotifications()
+    }
+
     private fun progressOf(matcher: SemanticsMatcher): Float =
         rule.onNode(matcher.and(SemanticsMatcher.keyIsDefined(AnimationProgress)), useUnmergedTree = true)
             .fetchSemanticsNode().config[AnimationProgress]
@@ -76,7 +83,7 @@ class CookingAnimationsTest {
     fun hecho_strikesTheStepFromLeftToRight() {
         open(reduced = false)
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { state = state.copy(currentIndex = 1, doneSteps = setOf(0)) }
+        update { state = state.copy(currentIndex = 1, doneSteps = setOf(0)) }
         rule.mainClock.advanceTimeBy(STRIKE_MS / 2L)
         val half = progressOf(step1Text)
         assertThat(half).isGreaterThan(0f)
@@ -89,7 +96,7 @@ class CookingAnimationsTest {
     fun hecho_withReducedMotion_isStruckAtOnce() {
         open(reduced = true)
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { state = state.copy(currentIndex = 1, doneSteps = setOf(0)) }
+        update { state = state.copy(currentIndex = 1, doneSteps = setOf(0)) }
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
         assertThat(progressOf(step1Text)).isEqualTo(1f)
@@ -107,7 +114,7 @@ class CookingAnimationsTest {
     fun listo_rainsConfettiBehind_withoutBlockingTouches_once() {
         open(reduced = false)
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { state = state.copy(currentIndex = 2, doneSteps = setOf(0, 1)) }
+        update { state = state.copy(currentIndex = 2, doneSteps = setOf(0, 1)) }
         rule.mainClock.advanceTimeBy(100)
         rule.onNodeWithTag("confetti").assertExists()
         // El botón de debajo del confeti responde mientras cae.
@@ -117,7 +124,7 @@ class CookingAnimationsTest {
         rule.mainClock.advanceTimeBy(CONFETTI_MS + 200L)
         rule.onNodeWithTag("confetti").assertDoesNotExist()
         // Sigue terminado (por ejemplo, al recomponer): no vuelve a caer.
-        rule.runOnUiThread { state = state.copy(checkedIngredients = setOf("x")) }
+        update { state = state.copy(checkedIngredients = setOf("x")) }
         rule.mainClock.advanceTimeBy(100)
         rule.onNodeWithTag("confetti").assertDoesNotExist()
     }
@@ -126,7 +133,7 @@ class CookingAnimationsTest {
     fun listo_withReducedMotion_hasNoConfetti() {
         open(reduced = true)
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { state = state.copy(currentIndex = 2, doneSteps = setOf(0, 1)) }
+        update { state = state.copy(currentIndex = 2, doneSteps = setOf(0, 1)) }
         rule.mainClock.advanceTimeBy(100)
         rule.onNodeWithText("¡Listo!").assertExists()
         rule.onNodeWithTag("confetti").assertDoesNotExist()

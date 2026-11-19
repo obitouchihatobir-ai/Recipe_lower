@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -49,6 +50,12 @@ class MotionTest {
         }
     }
 
+    /** Cambia el estado desde la prueba y avisa a Compose (con el reloj parado no lo haría solo). */
+    private fun update(block: () -> Unit) = rule.runOnUiThread {
+        block()
+        Snapshot.sendApplyNotifications()
+    }
+
     private fun progressOf(matcher: SemanticsMatcher): Float =
         rule.onNode(matcher.and(SemanticsMatcher.keyIsDefined(AnimationProgress)), useUnmergedTree = true)
             .fetchSemanticsNode().config[AnimationProgress]
@@ -83,7 +90,7 @@ class MotionTest {
         var checked by mutableStateOf(false)
         show(reduced = false) { AnimatedCheck(checked, Modifier.testTag("check")) }
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { checked = true }
+        update { checked = true }
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
         assertThat(progressOf(hasTestTag("check"))).isLessThan(1f)
@@ -96,10 +103,10 @@ class MotionTest {
         var checked by mutableStateOf(false)
         show(reduced = true) { AnimatedCheck(checked, Modifier.testTag("check")) }
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { checked = true }
+        update { checked = true }
         rule.mainClock.advanceTimeByFrame()
         assertThat(progressOf(hasTestTag("check"))).isEqualTo(1f)
-        rule.runOnUiThread { checked = false }
+        update { checked = false }
         rule.mainClock.advanceTimeByFrame()
         assertThat(progressOf(hasTestTag("check"))).isEqualTo(0f)
     }
@@ -116,7 +123,7 @@ class MotionTest {
             }
         }
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { celebration.recipeSaved("r1") }
+        update { celebration.recipeSaved("r1") }
         rule.mainClock.advanceTimeBy(SAVED_CHECK_MS / 2L)
         rule.onNodeWithTag("saved-toast").assertExists()
         assertThat(progressOf(hasAnyAncestor(hasTestTag("saved-toast")))).isLessThan(1f)
@@ -136,7 +143,7 @@ class MotionTest {
         val celebration = SaveCelebration()
         show(reduced = true) { SavedToast(celebration) }
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { celebration.recipeSaved("r1") }
+        update { celebration.recipeSaved("r1") }
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
         assertThat(progressOf(hasAnyAncestor(hasTestTag("saved-toast")))).isEqualTo(1f)
@@ -158,7 +165,7 @@ class MotionTest {
         }
         val full = cardWidth()
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { celebration.recipeSaved("r1") }
+        update { celebration.recipeSaved("r1") }
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
         assertThat(cardWidth()).isLessThan(full)
@@ -167,9 +174,9 @@ class MotionTest {
         assertThat(cardWidth()).isWithin(0.5f).of(full)
         assertThat(celebration.bounceId).isNull()
         // Vuelve a componerse (por ejemplo, al volver a la pantalla): ya no rebota.
-        rule.runOnUiThread { shown = false }
+        update { shown = false }
         rule.mainClock.advanceTimeByFrame()
-        rule.runOnUiThread { shown = true }
+        update { shown = true }
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
         assertThat(cardWidth()).isWithin(0.5f).of(full)
@@ -186,7 +193,7 @@ class MotionTest {
         }
         val full = cardWidth()
         rule.mainClock.autoAdvance = false
-        rule.runOnUiThread { celebration.recipeSaved("r1") }
+        update { celebration.recipeSaved("r1") }
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
         assertThat(cardWidth()).isEqualTo(full)
@@ -198,7 +205,7 @@ class MotionTest {
     fun savedCard_thatNeverShowedUp_doesNotBounceAfterTheToast() {
         val celebration = SaveCelebration()
         show(reduced = false) { SavedToast(celebration) }
-        rule.runOnUiThread { celebration.recipeSaved("r9") }
+        update { celebration.recipeSaved("r9") }
         rule.mainClock.advanceTimeBy(SAVED_TOAST_MS + 500)
         assertThat(celebration.bounceId).isNull()
     }
