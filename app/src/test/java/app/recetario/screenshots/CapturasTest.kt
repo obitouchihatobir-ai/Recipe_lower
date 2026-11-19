@@ -31,6 +31,8 @@ import app.recetario.backup.BackupMessages
 import app.recetario.backup.backupOf
 import app.recetario.backup.backupZip
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 import java.io.ByteArrayInputStream
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -178,6 +180,7 @@ class CapturasTest {
         rule.onNodeWithTag("detail-list").performScrollToNode(plus)
         rule.mainClock.autoAdvance = false
         rule.onNode(plus).performClick()
+        pumpUntil { rule.onAllNodes(hasText("5 porciones")).fetchSemanticsNodes().isNotEmpty() }
         rule.mainClock.advanceTimeBy(SERVINGS_ROLL_MS / 2L)
         save("detalle-porciones-rodando-$name", settleMs = 0)
         rule.mainClock.autoAdvance = true
@@ -347,6 +350,9 @@ class CapturasTest {
         rule.onNodeWithTag("cooking-list").performScrollToNode(hasText("⏱ Iniciar 10:00"))
         rule.onNodeWithText("⏱ Iniciar 10:00").performClick()
         rule.waitFor(hasContentDescription("Pausar el temporizador del paso 2", substring = true))
+        // Pasan 4 de sus 10 minutos: el anillo se ha vaciado un 40 % (lo repinta la cuenta atrás).
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(4))
+        rule.waitFor(hasText("6:00"))
         save("cocina-temporizador-$name")
 
         markDone(2)
@@ -368,9 +374,22 @@ class CapturasTest {
         }
         rule.mainClock.autoAdvance = false
         rule.onNode(button).performClick()
+        // El paso nuevo llega del ViewModel (otro despachador): se dan fotogramas hasta que se ve.
+        val next = if (step == 4) "¡Listo!" else "Paso ${step + 1} de 4"
+        pumpUntil { rule.onAllNodes(hasText(next)).fetchSemanticsNodes().isNotEmpty() }
         rule.mainClock.advanceTimeBy(midwayMs)
         save(midwayCapture, settleMs = 0)
         rule.mainClock.autoAdvance = true
+    }
+
+    /** Con el reloj parado, avanza fotograma a fotograma (dejando trabajar a los otros hilos) hasta [done]. */
+    private fun pumpUntil(done: () -> Boolean) {
+        repeat(500) {
+            rule.mainClock.advanceTimeByFrame()
+            if (done()) return
+            Thread.sleep(10)
+        }
+        error("condición no cumplida")
     }
 
     /** Guarda una captura; antes adelanta el reloj [settleMs] ms (0: tal cual, a mitad de una animación). */

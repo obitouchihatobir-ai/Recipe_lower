@@ -1,4 +1,3 @@
-import java.time.Duration
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -81,20 +80,6 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
-}
-
-// TEMPORAL (diagnóstico de un cuelgue): qué prueba empieza y un límite de tiempo.
-tasks.withType<Test>().configureEach {
-    testLogging {
-        events("started", "failed", "standard_error")
-        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-    }
-    filter {
-        for (c in listOf("SmokeTest", "RecorridoEtapa1Test", "MotionTest", "CookingAnimationsTest", "SplashTest", "ShoppingScreenTest", "CapturasTest")) {
-            includeTestsMatching("*.$c")
-        }
-    }
-    timeout.set(Duration.ofMinutes(14))
 }
 
 room {

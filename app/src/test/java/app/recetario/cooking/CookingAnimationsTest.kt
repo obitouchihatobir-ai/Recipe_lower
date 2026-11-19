@@ -135,7 +135,7 @@ class CookingAnimationsTest {
         rule.mainClock.autoAdvance = false
         update { state = state.copy(currentIndex = 2, doneSteps = setOf(0, 1)) }
         rule.mainClock.advanceTimeBy(100)
-        rule.onNodeWithText("¡Listo!").assertExists()
+        rule.onNode(hasText("Has terminado todos los pasos.")).assertExists()
         rule.onNodeWithTag("confetti").assertDoesNotExist()
     }
 

@@ -107,7 +107,6 @@ class RecorridoEtapa1Test {
 
     private fun walk(theme: ThemeChoice) {
         themeName = theme.name.lowercase()
-        app.recetario.testing.startWatchdog("recorrido-$themeName", 150)
         container = installTestContainer(clock = clock, documents = documents)
         val dayTheme = if (theme == ThemeChoice.FRESCO) ThemeChoice.FRESCO else ThemeChoice.CALIDO
         runBlocking {

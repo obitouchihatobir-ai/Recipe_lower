@@ -125,17 +125,17 @@ class MotionTest {
         rule.mainClock.autoAdvance = false
         update { celebration.recipeSaved("r1") }
         rule.mainClock.advanceTimeBy(SAVED_CHECK_MS / 2L)
-        rule.onNodeWithTag("saved-toast").assertExists()
+        rule.onNodeWithTag("saved-toast", useUnmergedTree = true).assertExists()
         assertThat(progressOf(hasAnyAncestor(hasTestTag("saved-toast")))).isLessThan(1f)
         rule.mainClock.advanceTimeBy(SAVED_CHECK_MS.toLong())
         assertThat(progressOf(hasAnyAncestor(hasTestTag("saved-toast")))).isEqualTo(1f)
         // Un toque justo encima del aviso llega a lo que hay debajo.
-        val toast = rule.onNodeWithTag("saved-toast").fetchSemanticsNode().boundsInRoot
+        val toast = rule.onNodeWithTag("saved-toast", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         rule.onRoot().performTouchInput { click(toast.center) }
         rule.mainClock.advanceTimeByFrame()
         assertThat(taps).isEqualTo(1)
         rule.mainClock.advanceTimeBy(SAVED_TOAST_MS + 500)
-        rule.onNodeWithTag("saved-toast").assertDoesNotExist()
+        rule.onNodeWithTag("saved-toast", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
