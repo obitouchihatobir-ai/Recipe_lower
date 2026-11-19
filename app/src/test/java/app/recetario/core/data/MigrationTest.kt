@@ -79,12 +79,15 @@ class MigrationTest {
             val upper = sql.uppercase()
             assertThat(upper).doesNotContain("DROP")
             assertThat(upper).doesNotContain("ALTER")
+            // «ON DELETE …» de las claves foráneas sí puede salir; borrar filas, no.
             assertThat(upper).doesNotContain("DELETE FROM")
-            assertThat(upper).doesNotContain("UPDATE ")
             assertThat(upper).doesNotContain("INSERT")
             assertThat(upper.startsWith("CREATE TABLE") || upper.startsWith("CREATE INDEX") ||
                 upper.startsWith("CREATE UNIQUE INDEX")).isTrue()
         }
+        // Solo tablas nuevas: ninguna de la versión 1.
+        val created = statements.mapNotNull { Regex("^CREATE TABLE IF NOT EXISTS `(\\w+)`").find(it)?.groupValues?.get(1) }
+        assertThat(created).containsExactlyElementsIn(NEW_TABLES)
     }
 
     private fun insertV1Data(db: SupportSQLiteDatabase) {
