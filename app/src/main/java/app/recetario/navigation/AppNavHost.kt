@@ -67,6 +67,8 @@ fun AppNavHost(
     container: AppContainer,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
+    // Guardar una receta: aviso «✓ Receta guardada» y rebote de su tarjeta al volver (Inicio o Recetas).
+    saveCelebration: SaveCelebration = remember { SaveCelebration() },
 ) {
     val reduced = LocalReducedMotion.current
     val entry by navController.currentBackStackEntryAsState()
@@ -74,8 +76,7 @@ fun AppNavHost(
         entry?.destination?.hierarchy?.any { it.hasRoute(tab.routeClass) } == true
     }
     val detailTracker = remember { DetailTransitionTracker() }
-    // Guardar una receta: aviso «✓ Receta guardada» y rebote de su tarjeta al volver (Inicio o Recetas).
-    val celebration = remember { SaveCelebration() }
+    val celebration = saveCelebration
     val sharePhotos = detailTracker.involvesDetail(entry?.id, entry?.destination?.hasRoute(RecipeDetail::class) == true)
     Scaffold(
         modifier = modifier,

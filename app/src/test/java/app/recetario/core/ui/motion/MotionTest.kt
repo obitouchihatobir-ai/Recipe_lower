@@ -183,6 +183,27 @@ class MotionTest {
     }
 
     @Test
+    fun savedCard_otherRecipes_doNotBounce() {
+        val celebration = SaveCelebration()
+        show(reduced = false) {
+            CompositionLocalProvider(LocalSaveCelebration provides celebration) {
+                Box(Modifier.savedBounce("r1").size(100.dp).testTag("card"))
+                Box(Modifier.savedBounce("r2").size(100.dp).testTag("other"))
+            }
+        }
+        fun otherWidth() = rule.onNodeWithTag("other").fetchSemanticsNode().boundsInRoot.width
+        val full = otherWidth()
+        rule.mainClock.autoAdvance = false
+        update { celebration.recipeSaved("r1") }
+        repeat(20) {
+            rule.mainClock.advanceTimeByFrame()
+            assertThat(otherWidth()).isEqualTo(full)
+        }
+        // La de la receta guardada sí rebotó.
+        assertThat(celebration.bounceId).isNull()
+    }
+
+    @Test
     fun savedCard_otherRecipes_doNotBounce_andReducedMotionNeverMoves() {
         val celebration = SaveCelebration()
         show(reduced = true) {
@@ -202,11 +223,24 @@ class MotionTest {
     }
 
     @Test
-    fun savedCard_thatNeverShowedUp_doesNotBounceAfterTheToast() {
+    fun savedBounce_outlivesTheToast_untilTheCardShowsUp() {
         val celebration = SaveCelebration()
-        show(reduced = false) { SavedToast(celebration) }
+        var shown by mutableStateOf(false)
+        show(reduced = false) {
+            CompositionLocalProvider(LocalSaveCelebration provides celebration) {
+                SavedToast(celebration)
+                if (shown) Box(Modifier.savedBounce("r9").size(100.dp).testTag("card"))
+            }
+        }
+        rule.mainClock.autoAdvance = false
         update { celebration.recipeSaved("r9") }
         rule.mainClock.advanceTimeBy(SAVED_TOAST_MS + 500)
+        assertThat(celebration.bounceId).isEqualTo("r9")
+        update { shown = true }
+        rule.mainClock.advanceTimeByFrame()
+        val full = 100f * rule.density.density
+        rule.mainClock.advanceTimeByFrame()
+        assertThat(cardWidth()).isLessThan(full)
         assertThat(celebration.bounceId).isNull()
     }
 }

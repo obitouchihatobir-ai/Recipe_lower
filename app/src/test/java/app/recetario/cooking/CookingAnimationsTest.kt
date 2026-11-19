@@ -97,7 +97,7 @@ class CookingAnimationsTest {
         open(reduced = true)
         rule.mainClock.autoAdvance = false
         update { state = state.copy(currentIndex = 1, doneSteps = setOf(0)) }
-        rule.mainClock.advanceTimeByFrame()
+        // Ya en el primer fotograma en que el paso sale hecho: ni uno sin tachar.
         rule.mainClock.advanceTimeByFrame()
         assertThat(progressOf(step1Text)).isEqualTo(1f)
     }

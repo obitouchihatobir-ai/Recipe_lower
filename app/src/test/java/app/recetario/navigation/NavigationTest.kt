@@ -2,17 +2,27 @@ package app.recetario.navigation
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import app.recetario.AppContainer
+import app.recetario.core.ui.motion.SAVED_TOAST_MS
+import app.recetario.core.ui.motion.SaveCelebration
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.testing.installTestContainer
+import app.recetario.testing.sampleRecipe
 import app.recetario.testing.waitFor
+import app.recetario.testing.waitForGone
+import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -69,5 +79,91 @@ class NavigationTest {
         rule.onNodeWithText("Nueva receta").assertIsDisplayed()
         // La barra inferior solo está en las pestañas.
         rule.onNodeWithTag("tab-home").assertDoesNotExist()
+    }
+
+    // ------------------------------------------------------------------ rebote de la receta guardada
+
+    private val celebration = SaveCelebration()
+    private lateinit var nav: NavHostController
+
+    private fun launchWithCelebration() = rule.setContent {
+        nav = rememberNavController()
+        RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(container, navController = nav, saveCelebration = celebration) }
+    }
+
+    private val card = hasText("Crema de calabaza") and hasClickAction()
+
+    private fun cardWidth(): Float? =
+        rule.onAllNodes(card).fetchSemanticsNodes().singleOrNull()?.boundsInRoot?.width
+
+    /** Con el reloj parado, avanza fotograma a fotograma (dejando trabajar a Room) hasta [done]. */
+    private fun pumpUntil(done: () -> Boolean) {
+        repeat(500) {
+            rule.mainClock.advanceTimeByFrame()
+            if (done()) return
+            Thread.sleep(10)
+        }
+        error("condición no cumplida")
+    }
+
+    /** Vuelve atrás con el reloj parado y devuelve el ancho más pequeño de la tarjeta en los fotogramas siguientes. */
+    private fun backToTheListAndMeasure(): Float {
+        rule.mainClock.autoAdvance = false
+        rule.runOnUiThread { nav.popBackStack() }
+        pumpUntil { cardWidth() != null }
+        var smallest = Float.MAX_VALUE
+        repeat(60) {
+            cardWidth()?.let { smallest = minOf(smallest, it) }
+            rule.mainClock.advanceTimeByFrame()
+        }
+        rule.mainClock.autoAdvance = true
+        return smallest
+    }
+
+    @Test
+    fun editedRecipe_bouncesOnce_whenItsCardShowsUpAgainInTheList() {
+        runBlocking { container.recipeRepository.save(sampleRecipe("r1", "Crema de calabaza")) }
+        launchWithCelebration()
+        rule.onNodeWithTag("tab-recipes").performClick()
+        rule.waitFor(card)
+        rule.mainClock.advanceTimeBy(1_500)
+        val full = cardWidth()!!
+
+        // Recetas → detalle → editar → Guardar: se vuelve al detalle, donde no hay tarjeta.
+        rule.onNode(card).performClick()
+        rule.waitFor(hasTestTag("detail-list"))
+        rule.runOnIdle { nav.navigate(RecipeEditor(id = "r1")) }
+        rule.waitFor(hasTestTag("editor-title"))
+        rule.onNodeWithText("Guardar").performClick()
+        rule.waitForGone(hasTestTag("editor-title"))
+        rule.waitFor(hasTestTag("detail-list"))
+        // El aviso se va a su hora, pero el rebote sigue pendiente.
+        rule.mainClock.advanceTimeBy(SAVED_TOAST_MS + 500)
+        rule.onNodeWithTag("saved-toast", useUnmergedTree = true).assertDoesNotExist()
+        assertThat(celebration.bounceId).isEqualTo("r1")
+
+        // De vuelta en la lista, la tarjeta rebota (una vez).
+        assertThat(backToTheListAndMeasure()).isLessThan(full * 0.97f)
+        assertThat(cardWidth()!!).isWithin(0.5f).of(full)
+        assertThat(celebration.bounceId).isNull()
+
+        // Otra visita al detalle y vuelta: ya no rebota.
+        rule.onNode(card).performClick()
+        rule.waitFor(hasTestTag("detail-list"))
+        assertThat(backToTheListAndMeasure()).isWithin(0.5f).of(full)
+    }
+
+    @Test
+    fun pendingBounce_isDropped_whenGoingSomewhereElse() {
+        launchWithCelebration()
+        rule.waitFor(hasText("¿Qué cocinamos hoy?"))
+        rule.runOnUiThread { celebration.recipeSaved("r1") }
+        rule.onNodeWithTag("tab-recipes").performClick()
+        rule.waitForIdle()
+        // Recetas es una de las pantallas con tarjetas: sigue pendiente.
+        assertThat(celebration.bounceId).isEqualTo("r1")
+        rule.onNodeWithTag("tab-shopping").performClick()
+        rule.waitFor(hasTestTag("shopping-screen"))
+        assertThat(celebration.bounceId).isNull()
     }
 }
