@@ -71,6 +71,28 @@ class MigrationTest {
         }
     }
 
+    /**
+     * La base de datos de producción ([AppDatabase.create]) abre un archivo v1 de verdad y lo migra ella misma. Sin
+     * `.addMigrations(MIGRATION_1_2)` en `create`, esta prueba falla (la de arriba abre un archivo que ya es v2).
+     */
+    @Test
+    fun migrate1to2_productionDatabaseOpensV1File() {
+        createV1Database(helper, dbName)
+        val file = ApplicationProvider.getApplicationContext<Context>().getDatabasePath(dbName)
+        assertThat(readDatabaseFile(file, live = true).first).isEqualTo(1)
+
+        val db = AppDatabase.create(ApplicationProvider.getApplicationContext(), dbName)
+        try {
+            runBlocking {
+                assertThat(db.recipeDao().observeRecipe("r1").first()?.recipe?.title).isEqualTo("Sopa de tortilla")
+            }
+            assertThat(db.openHelper.readableDatabase.version).isEqualTo(2)
+        } finally {
+            db.close()
+        }
+        assertThat(readDatabaseFile(file, live = true)).isEqualTo(2 to listOf("Sopa de tortilla"))
+    }
+
     @Test
     fun migrate1to2_onlyCreates() {
         val statements = MIGRATION_1_2_SQL

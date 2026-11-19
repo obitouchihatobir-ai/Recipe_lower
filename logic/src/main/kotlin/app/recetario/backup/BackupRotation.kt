@@ -9,12 +9,15 @@ const val WEEKLY_BACKUPS_KEPT = 4
 /** Copias previas a «Reemplazar todo» (o a una importación que actualiza recetas) que se conservan. */
 const val SAFETY_COPIES_KEPT = 3
 
+/** Copias de la base de datos de antes de actualizar (de migrar) que se conservan (diseño de la etapa 2, §6.2). */
+const val UPDATE_COPIES_KEPT = 2
+
 /**
  * Copias del teléfono que sobran, solo de tipo [kind] (nunca de otro tipo ni un nombre que no sea de los nuestros:
  * temporales `.zip.tmp`, archivos ajenos):
  * - semanales ([LocalBackupKind.AUTOMATIC]): la más reciente de cada semana ISO, de las [keep] semanas más recientes.
  *   Así, varias copias en la misma semana («Reintentar») sustituyen a la de esa semana y no borran las anteriores;
- * - previas a importar: los [keep] archivos más recientes.
+ * - previas a importar y de antes de actualizar: los [keep] archivos más recientes.
  * Las fechas son las del nombre, en la hora del teléfono. Un nombre con fecha de más de un día después de [now] (el
  * reloj estuvo adelantado) no cuenta y nunca se borra. Tampoco se borra nunca uno de [protect] (la recién escrita,
  * la que se está restaurando).
@@ -35,7 +38,7 @@ fun filesToDelete(
         },
     )
     val kept: Set<String> = when (kind) {
-        LocalBackupKind.BEFORE_IMPORT -> ranked.take(keep).toSet()
+        LocalBackupKind.BEFORE_IMPORT, LocalBackupKind.BEFORE_UPDATE -> ranked.take(keep).toSet()
         LocalBackupKind.AUTOMATIC -> {
             // La primera de cada semana en el orden de más reciente a más antigua es la más reciente de esa semana.
             val weeks = LinkedHashMap<Pair<Int, Int>, String>()

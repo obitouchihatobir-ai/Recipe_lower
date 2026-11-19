@@ -2,6 +2,7 @@ package app.recetario
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
 import androidx.work.WorkManager
@@ -12,6 +13,8 @@ import app.recetario.backup.scheduleWeeklyBackup
 import app.recetario.cooking.TimerManager
 import app.recetario.cooking.launchTimerTicker
 import app.recetario.core.data.AppDatabase
+import app.recetario.core.data.DatabaseUpgradeGuard
+import app.recetario.core.data.GuardResult
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.data.RoomRecipeRepository
@@ -31,8 +34,20 @@ import java.time.Clock
 class RecetarioApp : Application() {
     lateinit var container: AppContainer
 
+    /**
+     * Cómo quedó la base de datos antes de abrirla ([DatabaseUpgradeGuard]). Si es [GuardResult.Failed], nada abre
+     * la base de datos (ni la pantalla ni la copia semanal): no se migra sin copia previa.
+     */
+    var upgrade: GuardResult = GuardResult.Ready
+
     override fun onCreate() {
         super.onCreate()
+        // Antes de que nada pueda abrir Room (la actividad, WorkManager, el servicio de los temporizadores).
+        upgrade = DatabaseUpgradeGuard(
+            dbFile = getDatabasePath(AppDatabase.FILE_NAME),
+            backupsDir = File(filesDir, BackupManager.BACKUPS_DIR),
+            clock = Clock.systemDefaultZone(),
+        ).prepare()
         container = AppContainer(this)
         // WorkManager se inicia solo (androidx.startup) antes de onCreate. En las pruebas de Robolectric no se
         // ejecutan los proveedores del manifiesto: ahí no está iniciado y no se programa nada.
@@ -59,6 +74,10 @@ class AppContainer(
     elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     /** Documentos de fuera (Drive, Descargas…) de las copias; las pruebas pasan uno falso. */
     val backupDocuments: BackupDocuments = ContentResolverDocuments(context.contentResolver),
+    /** Archivo de la base de datos (para restaurar una copia de antes de actualizar); null con la de memoria de las pruebas. */
+    databaseFile: File? = context.getDatabasePath(AppDatabase.FILE_NAME),
+    /** Reinicia el proceso tras restaurar la base de datos; las pruebas pasan uno falso (no pueden cerrar la JVM). */
+    restartApp: () -> Unit = { restartProcess(context.applicationContext) },
 ) {
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")
@@ -82,6 +101,8 @@ class AppContainer(
         filesDir = context.filesDir,
         documents = backupDocuments,
         appVersion = appVersionName(context),
+        databaseFile = databaseFile,
+        restartApp = restartApp,
     )
 
     /**
@@ -93,6 +114,17 @@ class AppContainer(
     init {
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launchTimerTicker(timerManager)
     }
+}
+
+/**
+ * Reinicia la app: abre de nuevo [MainActivity] en una tarea limpia y termina el proceso. Al arrancar, la guarda
+ * vuelve a mirar la base de datos (y, si es de una versión anterior, la copia y Room la migra).
+ */
+fun restartProcess(context: Context) {
+    val intent = Intent(context, MainActivity::class.java)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    context.startActivity(intent)
+    Runtime.getRuntime().exit(0)
 }
 
 private fun appVersionName(context: Context): String =

@@ -121,6 +121,22 @@ class AutoBackupWorkerTest {
     private fun driveFile() = File(drive.dir, "Sazon-copia-automatica.zip")
 
     @Test
+    fun worker_upgradeCopyFailed_neverOpensTheDatabase() {
+        // Sin datos ni consultas: la base de datos (en memoria) aún no se ha abierto.
+        assertThat(container.database.isOpen).isFalse()
+        val app = context as app.recetario.RecetarioApp
+        app.upgrade = app.recetario.core.data.GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED)
+        try {
+            // Abrir la base de datos la migraría sin copia previa: el trabajo termina sin tocarla.
+            assertThat(runWorker()).isEqualTo(ListenableWorker.Result.success())
+            assertThat(container.database.isOpen).isFalse()
+            assertThat(localCopies()).isEmpty()
+        } finally {
+            app.upgrade = app.recetario.core.data.GuardResult.Ready
+        }
+    }
+
+    @Test
     fun worker_writesVerifiedLocal_andCopiesToDrive() {
         seed()
         setStatus { it.copy(driveUri = driveUri, lastError = BackupMessages.DRIVE_FAILED) }

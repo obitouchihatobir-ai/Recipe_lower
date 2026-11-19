@@ -150,4 +150,46 @@ class BackupRotationTest {
         assertThat(name).isEqualTo("Sazon-2026-11-15-0305.zip")
         assertThat(parseLocalBackupName(name)?.kind).isEqualTo(LocalBackupKind.AUTOMATIC)
     }
+
+    @Test
+    fun rotation_beforeUpdate_keeps2() {
+        val names = listOf(
+            "antes-de-actualizar-v1-2026-11-01-0900.db",
+            "antes-de-actualizar-v1-2026-11-10-0900.db",
+            "antes-de-actualizar-v1-2026-11-13-2140.db",
+            "antes-de-actualizar-v1-2026-11-13-2140-2.db",
+            // Del futuro: no cuenta y no se borra.
+            "antes-de-actualizar-v1-2027-05-01-1000.db",
+        )
+        assertThat(UPDATE_COPIES_KEPT).isEqualTo(2)
+        assertThat(filesToDelete(names.shuffled(), now, keep = UPDATE_COPIES_KEPT, kind = LocalBackupKind.BEFORE_UPDATE))
+            .containsExactly("antes-de-actualizar-v1-2026-11-01-0900.db", "antes-de-actualizar-v1-2026-11-10-0900.db")
+        // La recién escrita nunca se borra.
+        assertThat(
+            filesToDelete(names, now, keep = UPDATE_COPIES_KEPT, kind = LocalBackupKind.BEFORE_UPDATE, protect = setOf("antes-de-actualizar-v1-2026-11-01-0900.db")),
+        ).containsExactly("antes-de-actualizar-v1-2026-11-10-0900.db")
+    }
+
+    @Test
+    fun rotation_otherKindsUntouched() {
+        val updates = listOf(
+            "antes-de-actualizar-v1-2026-09-01-1000.db",
+            "antes-de-actualizar-v1-2026-09-02-1000.db",
+            "antes-de-actualizar-v1-2026-09-03-1000.db",
+        )
+        val safety = listOf(
+            "antes-de-importar-2026-09-01-1000.zip",
+            "antes-de-importar-2026-09-02-1000.zip",
+            "antes-de-importar-2026-09-03-1000.zip",
+            "antes-de-importar-2026-09-04-1000.zip",
+        )
+        val others = listOf("antes-de-actualizar-v1-2026-09-01-1000.db.tmp", "antes-de-actualizar-v1-2026-09-01-1000.zip", "recetario.db")
+        val all = weekly + safety + updates + others
+        assertThat(filesToDelete(all, now, kind = LocalBackupKind.AUTOMATIC))
+            .containsExactly("Sazon-2026-10-11-0300.zip", "Sazon-2026-10-18-0300.zip")
+        assertThat(filesToDelete(all, now, keep = SAFETY_COPIES_KEPT, kind = LocalBackupKind.BEFORE_IMPORT))
+            .containsExactly("antes-de-importar-2026-09-01-1000.zip")
+        assertThat(filesToDelete(all, now, keep = UPDATE_COPIES_KEPT, kind = LocalBackupKind.BEFORE_UPDATE))
+            .containsExactly("antes-de-actualizar-v1-2026-09-01-1000.db")
+    }
 }

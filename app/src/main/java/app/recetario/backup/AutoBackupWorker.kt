@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.recetario.RecetarioApp
+import app.recetario.core.data.GuardResult
 import java.util.concurrent.TimeUnit
 
 /** Nombre único de la copia semanal en WorkManager. */
@@ -23,7 +24,13 @@ const val WEEKLY_BACKUP_WORK = "copia-semanal"
  */
 class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val manager = (applicationContext as RecetarioApp).container.backupManager
+        val app = applicationContext as RecetarioApp
+        // Sin copia previa a la migración no se abre la base de datos (abrirla la migraría): nada que copiar.
+        if (app.upgrade is GuardResult.Failed) {
+            Log.w(TAG, "No se hizo la copia de antes de actualizar: no se abre la base de datos")
+            return Result.success()
+        }
+        val manager = app.container.backupManager
         return when (val result = manager.backupNow()) {
             AutoBackupResult.LocalFailed -> if (runAttemptCount >= MAX_RETRIES) {
                 Log.w(TAG, "La copia semanal en el teléfono sigue fallando; se intentará la semana que viene")

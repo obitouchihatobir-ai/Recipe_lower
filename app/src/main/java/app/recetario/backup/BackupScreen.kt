@@ -93,6 +93,10 @@ fun BackupRoute(container: AppContainer, onBack: () -> Unit) {
     val saveOutsideLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.saveOutside(uri.toString())
     }
+    // Las copias de la base de datos de antes de actualizar no son zip.
+    val saveDatabaseOutsideLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) vm.saveOutside(uri.toString())
+    }
     // El archivo de Drive de la copia automática: se crea una vez y se sobrescribe cada semana.
     val driveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) vm.onDriveDocumentCreated(uri.toString())
@@ -120,7 +124,7 @@ fun BackupRoute(container: AppContainer, onBack: () -> Unit) {
         onSaveOutside = { name ->
             vm.prepareSaveOutside(name)
             try {
-                saveOutsideLauncher.launch(name)
+                (if (isDatabaseCopy(name)) saveDatabaseOutsideLauncher else saveOutsideLauncher).launch(name)
             } catch (_: ActivityNotFoundException) {
                 say(BackupMessages.NO_PICKER)
             }
@@ -194,6 +198,7 @@ fun BackupContent(
                 )
                 is ImportPanel.ConfirmReplace -> ConfirmReplacePanel(
                     comparison = replaceComparison(panel.preview.backupRecipes, panel.preview.localRecipes),
+                    databaseCopy = (panel.source as? ImportSource.Local)?.fileName?.let(::isDatabaseCopy) == true,
                     onConfirm = onConfirmReplace,
                     onDismiss = onDismissPanel,
                 )
@@ -238,8 +243,9 @@ fun BackupContent(
             if (state.work != null && state.work != BackupWork.DRIVE) WorkingRow(state.work)
             BackupCard(
                 title = "Copias en el teléfono",
-                text = "Las copias automáticas de cada semana (las 4 últimas) y las que se guardan antes de reemplazar " +
-                    "o actualizar recetas al importar (las 3 últimas). Puedes volver a ellas o guardarlas fuera.",
+                text = "Las copias automáticas de cada semana (las 4 últimas), las que se guardan antes de reemplazar " +
+                    "o actualizar recetas al importar (las 3 últimas) y las de antes de actualizar Sazón (las 2 últimas). " +
+                    "Puedes volver a ellas o guardarlas fuera.",
             ) {
                 val local = state.localBackups
                 if (local != null && local.isEmpty()) {
@@ -543,14 +549,20 @@ private fun ModeOption(title: String, explanation: String, color: Color, border:
 
 /** Segunda confirmación de «Reemplazar todo», en rojo. */
 @Composable
-private fun BoxScope.ConfirmReplacePanel(comparison: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun BoxScope.ConfirmReplacePanel(comparison: String, databaseCopy: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val c = LocalRecetarioColors.current
     BottomPanel(onDismiss, "replace-confirm-panel") {
         SectionTitle("¿Reemplazar todo?")
         Text(comparison, color = c.ink, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.W700)
         Text(
-            "Tus recetas, categorías, lista de la compra y ajustes se sustituirán por los de la copia. " +
-                "Antes se guardará en el teléfono una copia de lo que tienes ahora.",
+            if (databaseCopy) {
+                // La copia de la base de datos no lleva los ajustes; después la app se reinicia y la actualiza.
+                "Tus recetas, categorías y lista de la compra se sustituirán por las de la copia, y Sazón se reiniciará. " +
+                    "Antes se guardará en el teléfono una copia de lo que tienes ahora."
+            } else {
+                "Tus recetas, categorías, lista de la compra y ajustes se sustituirán por los de la copia. " +
+                    "Antes se guardará en el teléfono una copia de lo que tienes ahora."
+            },
             color = c.ink,
             style = MaterialTheme.typography.bodyMedium,
         )

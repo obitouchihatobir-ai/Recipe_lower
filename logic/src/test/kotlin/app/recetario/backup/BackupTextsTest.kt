@@ -124,4 +124,39 @@ class BackupTextsTest {
         assertThat(BackupMessages.INCOMPLETE).isEqualTo("La copia está incompleta: faltan fotos.")
         assertThat(BackupMessages.DAMAGED).isEqualTo("Copia dañada")
     }
+
+    @Test
+    fun parse_beforeUpdate() {
+        assertThat(parseLocalBackupName("antes-de-actualizar-v1-2026-11-20-0915.db"))
+            .isEqualTo(LocalBackupName(LocalBackupKind.BEFORE_UPDATE, LocalDateTime.of(2026, 11, 20, 9, 15), 1, fromVersion = 1))
+        assertThat(parseLocalBackupName("antes-de-actualizar-v12-2026-11-20-0915-3.db"))
+            .isEqualTo(LocalBackupName(LocalBackupKind.BEFORE_UPDATE, LocalDateTime.of(2026, 11, 20, 9, 15), 3, fromVersion = 12))
+        for (name in listOf(
+            "antes-de-actualizar-v1-2026-11-20-0915.zip",
+            "antes-de-actualizar-v1-2026-11-20-0915.db.tmp",
+            "antes-de-actualizar-v1-2026-11-20-0915.db-wal",
+            "antes-de-actualizar-2026-11-20-0915.db",
+            "antes-de-importar-2026-11-20-0915.db",
+            "Sazon-2026-11-20-0915.db",
+            "antes-de-actualizar-v1-2026-02-30-0915.db",
+        )) {
+            assertThat(parseLocalBackupName(name)).isNull()
+        }
+        assertThat(parseLocalBackupName("Sazon-2026-11-09-0305.zip")?.fromVersion).isNull()
+        assertThat(beforeUpdateFileName(1, LocalDateTime.of(2026, 11, 20, 9, 15, 59))).isEqualTo("antes-de-actualizar-v1-2026-11-20-0915.db")
+        assertThat(isDatabaseCopy("antes-de-actualizar-v1-2026-11-20-0915.db")).isTrue()
+        assertThat(isDatabaseCopy("antes-de-importar-2026-11-20-0915.zip")).isFalse()
+        assertThat(isDatabaseCopy("otra.db")).isFalse()
+    }
+
+    @Test
+    fun beforeUpdate_titleAndOrder() {
+        assertThat(localBackupTitle("antes-de-actualizar-v1-2026-11-20-0915.db")).isEqualTo("Antes de actualizar · 20 de noviembre de 2026, 09:15")
+        assertThat(sortLocalBackupsNewestFirst(listOf("Sazon-2026-11-14-0300.zip", "antes-de-actualizar-v1-2026-11-20-0915.db", "otra.zip")))
+            .containsExactly("antes-de-actualizar-v1-2026-11-20-0915.db", "Sazon-2026-11-14-0300.zip", "otra.zip").inOrder()
+        assertThat(BackupMessages.UPDATE_COPY_FAILED)
+            .isEqualTo("No hay espacio para hacer la copia de seguridad antes de actualizar. Libera espacio y vuelve a abrir Sazón.")
+        assertThat(BackupMessages.MIGRATION_FAILED)
+            .isEqualTo("No se pudo actualizar la base de datos. Tus recetas siguen guardadas en la copia previa.")
+    }
 }

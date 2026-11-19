@@ -37,6 +37,15 @@ object BackupMessages {
 
     /** El archivo elegido para Drive ya tenía algo que no es una copia. */
     const val DRIVE_NOT_A_COPY = "Ese archivo no es una copia de Sazón. ¿Reemplazarlo?"
+
+    /** No se pudo copiar la base de datos antes de migrarla: la app no migra ni abre la base de datos. */
+    const val UPDATE_COPY_FAILED = "No hay espacio para hacer la copia de seguridad antes de actualizar. Libera espacio y vuelve a abrir Sazón."
+
+    /** La migración lanzó una excepción: la copia previa (`antes-de-actualizar-…db`) sigue en el teléfono. */
+    const val MIGRATION_FAILED = "No se pudo actualizar la base de datos. Tus recetas siguen guardadas en la copia previa."
+
+    /** Se restauró una copia de antes de actualizar: la app se reinicia (y vuelve a migrar). */
+    const val DATABASE_RESTORED = "Copia restaurada. Sazón se reinicia."
 }
 
 /** El archivo elegido para Drive ya tiene una copia: «Ese archivo ya tiene una copia con 12 recetas; ahora tienes 40.» */
@@ -76,27 +85,54 @@ fun safetyCopyFileName(dateTime: LocalDateTime): String = "antes-de-importar-${d
 /** Copia automática semanal del teléfono: `Sazon-2026-11-15-0300.zip`. */
 fun weeklyBackupFileName(dateTime: LocalDateTime): String = "$FILE_PREFIX-${dateTime.format(STAMP)}.zip"
 
+/** Copia de la base de datos tal cual antes de migrarla: `antes-de-actualizar-v1-2026-11-20-0915.db`. */
+fun beforeUpdateFileName(fromVersion: Int, dateTime: LocalDateTime): String =
+    "$BEFORE_UPDATE_PREFIX-v$fromVersion-${dateTime.format(STAMP)}.db"
+
+private const val BEFORE_UPDATE_PREFIX = "antes-de-actualizar"
+
 private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmm")
 private val LONG_DATE = DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("es-ES"))
 
-/** Copias guardadas en el teléfono (`filesDir/backups/`): las previas a importar y las semanales. */
-enum class LocalBackupKind(val label: String) { BEFORE_IMPORT("Antes de importar"), AUTOMATIC("Copia automática") }
+/**
+ * Copias guardadas en el teléfono (`filesDir/backups/`): las previas a importar y las semanales (zip), y las de la
+ * base de datos tal cual antes de migrarla (`.db`).
+ */
+enum class LocalBackupKind(val label: String) {
+    BEFORE_IMPORT("Antes de importar"),
+    AUTOMATIC("Copia automática"),
+    BEFORE_UPDATE("Antes de actualizar"),
+}
 
-/** Lo que dice el nombre de una copia del teléfono: de qué tipo es, cuándo se hizo y su número si hubo varias ese minuto. */
-data class LocalBackupName(val kind: LocalBackupKind, val dateTime: LocalDateTime, val sequence: Int)
+/**
+ * Lo que dice el nombre de una copia del teléfono: de qué tipo es, cuándo se hizo y su número si hubo varias ese
+ * minuto; en las de antes de actualizar, también la versión de la base de datos que se copió ([fromVersion]).
+ */
+data class LocalBackupName(val kind: LocalBackupKind, val dateTime: LocalDateTime, val sequence: Int, val fromVersion: Int? = null)
 
 private val LOCAL_NAME = Regex("""^(antes-de-importar|$FILE_PREFIX)-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(?:-(\d{1,4}))?\.zip$""")
+private val UPDATE_NAME = Regex("""^$BEFORE_UPDATE_PREFIX-v(\d{1,4})-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(?:-(\d{1,4}))?\.db$""")
 
 fun parseLocalBackupName(name: String): LocalBackupName? {
-    val m = LOCAL_NAME.matchEntire(name) ?: return null
-    val (prefix, y, mo, d, h, mi) = m.destructured
-    val dateTime = try {
-        LocalDateTime.of(y.toInt(), mo.toInt(), d.toInt(), h.toInt(), mi.toInt())
-    } catch (_: Exception) {
-        return null
+    LOCAL_NAME.matchEntire(name)?.let { m ->
+        val (prefix, y, mo, d, h, mi) = m.destructured
+        val dateTime = dateTimeOf(y, mo, d, h, mi) ?: return null
+        val kind = if (prefix == FILE_PREFIX) LocalBackupKind.AUTOMATIC else LocalBackupKind.BEFORE_IMPORT
+        return LocalBackupName(kind, dateTime, m.groupValues[7].toIntOrNull() ?: 1)
     }
-    val kind = if (prefix == FILE_PREFIX) LocalBackupKind.AUTOMATIC else LocalBackupKind.BEFORE_IMPORT
-    return LocalBackupName(kind, dateTime, m.groupValues[7].toIntOrNull() ?: 1)
+    val m = UPDATE_NAME.matchEntire(name) ?: return null
+    val (version, y, mo, d, h, mi) = m.destructured
+    val dateTime = dateTimeOf(y, mo, d, h, mi) ?: return null
+    return LocalBackupName(LocalBackupKind.BEFORE_UPDATE, dateTime, m.groupValues[7].toIntOrNull() ?: 1, fromVersion = version.toInt())
+}
+
+/** Si [name] es una copia de la base de datos de antes de actualizar (un `.db`, no un zip de copia). */
+fun isDatabaseCopy(name: String): Boolean = parseLocalBackupName(name)?.kind == LocalBackupKind.BEFORE_UPDATE
+
+private fun dateTimeOf(y: String, mo: String, d: String, h: String, mi: String): LocalDateTime? = try {
+    LocalDateTime.of(y.toInt(), mo.toInt(), d.toInt(), h.toInt(), mi.toInt())
+} catch (_: Exception) {
+    null
 }
 
 /** «Antes de importar · 13 de noviembre de 2026, 21:40»; si el nombre no es de los nuestros, el nombre tal cual. */

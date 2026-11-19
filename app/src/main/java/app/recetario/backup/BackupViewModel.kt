@@ -433,6 +433,16 @@ class BackupViewModel(
         work.value = BackupWork.IMPORTING
         viewModelScope.launch {
             try {
+                if (source is ImportSource.Local && isDatabaseCopy(source.fileName)) {
+                    // Copia de la base de datos de antes de actualizar: si sale bien, la app se reinicia.
+                    _messages.trySend(
+                        when (val restored = manager.restoreBeforeUpdate(source.fileName)) {
+                            BackupResult.Ok -> BackupMessages.DATABASE_RESTORED
+                            is BackupResult.Error -> restored.message
+                        },
+                    )
+                    return@launch
+                }
                 val result = when (source) {
                     is ImportSource.Local -> manager.restoreLocal(source.fileName)
                     is ImportSource.Document -> withContext(io) {

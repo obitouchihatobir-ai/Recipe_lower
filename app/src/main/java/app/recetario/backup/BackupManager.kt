@@ -1,7 +1,9 @@
 package app.recetario.backup
 
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import app.recetario.core.data.AppDatabase
+import app.recetario.core.data.KEEP_ON_CORRUPTION
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.settings.BackupStatus
 import app.recetario.settings.SettingsRepository
@@ -20,6 +22,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -49,6 +52,12 @@ data class LocalBackup(val fileName: String, val recipes: Int?)
 sealed interface ExportResult {
     data object Ok : ExportResult
     data class Error(val message: String) : ExportResult
+}
+
+/** Resultado de restaurar una copia de la base de datos de antes de actualizar ([BackupManager.restoreBeforeUpdate]). */
+sealed interface BackupResult {
+    data object Ok : BackupResult
+    data class Error(val message: String) : BackupResult
 }
 
 /** Cómo terminó una copia automática ([BackupManager.backupNow]). */
@@ -81,13 +90,17 @@ class BackupManager(
     private val documents: BackupDocuments,
     appVersion: String = "",
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Archivo de [db] (`recetario.db`): el que sustituye [restoreBeforeUpdate]. Null si es de memoria (no se puede restaurar). */
+    private val databaseFile: File? = null,
+    /** Reinicia el proceso después de sustituir la base de datos. Las pruebas pasan uno falso. */
+    private val restartApp: () -> Unit = {},
 ) {
     private val mutex = Mutex()
     private val exporter = BackupExporter(db, photoStore, settings, clock, appVersion)
     private val importer = BackupImporter(db, photoStore, settings, cacheDir, ::writeSafetyCopy)
 
     /** Copias guardadas en el teléfono (`filesDir/backups/`). */
-    val localBackupsDir = File(filesDir, "backups")
+    val localBackupsDir = File(filesDir, BACKUPS_DIR)
 
     /** Copia del teléfono que se está restaurando (la rotación no la borra). Solo se usa con [mutex]. */
     private var restoring: String? = null
@@ -160,11 +173,15 @@ class BackupManager(
         withContext(io) { importer.preview(input) }
     }
 
-    /** Copias del teléfono, las más recientes primero (según su nombre), con sus recetas o dañadas. */
+    /**
+     * Copias del teléfono, las más recientes primero (según su nombre), con sus recetas o dañadas: los zip y las
+     * copias de la base de datos de antes de actualizar (`antes-de-actualizar-…db`; otros `.db` no se listan).
+     */
     suspend fun localBackups(): List<LocalBackup> = withContext(io) {
-        val names = localBackupsDir.listFiles { f -> f.isFile && f.name.endsWith(".zip") }.orEmpty().map { it.name }
+        val names = localBackupsDir.listFiles { f -> f.isFile && (f.name.endsWith(".zip") || isDatabaseCopy(f.name)) }
+            .orEmpty().map { it.name }
         sortLocalBackupsNewestFirst(names)
-            .map { LocalBackup(it, inspect(File(localBackupsDir, it))) }
+            .map { LocalBackup(it, inspectAny(File(localBackupsDir, it))) }
             // Una que la rotación borró mientras se leía no es una copia dañada: ya no está.
             .filter { File(localBackupsDir, it.fileName).isFile }
     }
@@ -173,6 +190,18 @@ class BackupManager(
         val file = localFile(fileName) ?: return PreviewResult.Error(BackupMessages.NOT_A_BACKUP)
         return mutex.withLock {
             withContext(io) {
+                if (isDatabaseCopy(fileName)) {
+                    val recipes = inspectDatabaseCopy(file) ?: return@withContext PreviewResult.Error(BackupMessages.NOT_A_BACKUP)
+                    val local = try {
+                        db.backupDao().recipeCount()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "No se pudieron contar las recetas", e)
+                        return@withContext PreviewResult.Error(BackupMessages.IMPORT_FAILED)
+                    }
+                    return@withContext PreviewResult.Ok(backupRecipes = recipes, localRecipes = local)
+                }
                 val input = try {
                     FileInputStream(file)
                 } catch (e: IOException) {
@@ -185,6 +214,7 @@ class BackupManager(
 
     /** «Restaurar»: «Reemplazar todo» con una copia del teléfono (antes se guarda otra de lo actual). */
     suspend fun restoreLocal(fileName: String): ImportResult {
+        if (isDatabaseCopy(fileName)) return ImportResult.Error(BackupMessages.NOT_A_BACKUP)
         val file = localFile(fileName) ?: return ImportResult.Error(BackupMessages.NOT_A_BACKUP)
         return mutex.withLock {
             withContext(io) {
@@ -218,6 +248,80 @@ class BackupManager(
                     Log.w(TAG, "No se pudo copiar la copia del teléfono", e)
                     ExportResult.Error(BackupMessages.EXPORT_FAILED)
                 }
+            }
+        }
+    }
+
+    /**
+     * «Guardar fuera» de una copia del teléfono directamente en el documento [uri] (la pantalla de error de la
+     * actualización, que no tiene ViewModel). Como [exportToDocument]: si no se pudo abrir, solo se borra si está
+     * vacío; si falló después de abrirlo, se borra.
+     */
+    suspend fun copyLocalToDocument(fileName: String, uri: String): ExportResult {
+        val file = localFile(fileName)
+        return mutex.withLock {
+            withContext(io + NonCancellable) {
+                if (file == null) {
+                    deleteDocumentIfEmpty(documents, uri)
+                    return@withContext ExportResult.Error(BackupMessages.EXPORT_FAILED)
+                }
+                when (copyToDocument(file, uri, "wt")) {
+                    CopyResult.OK -> ExportResult.Ok
+                    CopyResult.OPEN_FAILED -> {
+                        deleteDocumentIfEmpty(documents, uri)
+                        ExportResult.Error(BackupMessages.EXPORT_FAILED)
+                    }
+                    CopyResult.WRITE_FAILED -> {
+                        documents.delete(uri)
+                        ExportResult.Error(BackupMessages.EXPORT_FAILED)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * «Restaurar» una copia de la base de datos de antes de actualizar (§6.2): primero la copia previa a importar
+     * habitual (si no se puede, no se toca nada); después cierra la base de datos, la sustituye por la copia
+     * (borrando `-wal` y `-shm`, que son de la anterior) y reinicia la app, que vuelve a migrar. Las fotos no se
+     * tocan: la base de datos vieja apunta a fotos que siguen ahí. No se interrumpe a medias.
+     */
+    suspend fun restoreBeforeUpdate(fileName: String): BackupResult {
+        val file = localFile(fileName)?.takeIf { isDatabaseCopy(fileName) } ?: return BackupResult.Error(BackupMessages.NOT_A_BACKUP)
+        val target = databaseFile ?: return BackupResult.Error(BackupMessages.IMPORT_FAILED)
+        return mutex.withLock {
+            withContext(io + NonCancellable) {
+                if (inspectDatabaseCopy(file) == null) return@withContext BackupResult.Error(BackupMessages.NOT_A_BACKUP)
+                if (!writeSafetyCopy()) return@withContext BackupResult.Error(BackupMessages.SAFETY_COPY_FAILED)
+                // Primero junto a la base de datos, con fsync: si no cabe, la actual sigue abierta y sin tocar.
+                val staged = File(target.path + RESTORE_SUFFIX)
+                try {
+                    FileInputStream(file).use { input ->
+                        FileOutputStream(staged).use { out ->
+                            input.copyTo(out, BUFFER)
+                            out.flush()
+                            out.fd.sync()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "No se pudo preparar la copia para restaurarla", e)
+                    staged.delete()
+                    return@withContext BackupResult.Error(BackupMessages.IMPORT_FAILED)
+                }
+                db.close()
+                val result = try {
+                    // El WAL y la memoria compartida son de la base de datos anterior: con la nueva la estropearían.
+                    for (suffix in listOf("-wal", "-shm", "-journal")) File(target.path + suffix).delete()
+                    Files.move(staged.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                    BackupResult.Ok
+                } catch (e: Exception) {
+                    Log.e(TAG, "No se pudo sustituir la base de datos", e)
+                    staged.delete()
+                    BackupResult.Error(BackupMessages.IMPORT_FAILED)
+                }
+                // La base de datos ya está cerrada: en los dos casos la app tiene que volver a abrirla.
+                restartApp()
+                result
             }
         }
     }
@@ -300,7 +404,31 @@ class BackupManager(
 
     /** Solo copias de la carpeta, por su nombre simple (nunca una ruta). */
     private fun localFile(fileName: String): File? =
-        if (isSafeBackupFileName(fileName) && fileName.endsWith(".zip")) File(localBackupsDir, fileName).takeIf { it.isFile } else null
+        if (isSafeBackupFileName(fileName) && (fileName.endsWith(".zip") || isDatabaseCopy(fileName))) {
+            File(localBackupsDir, fileName).takeIf { it.isFile }
+        } else {
+            null
+        }
+
+    private fun inspectAny(file: File): Int? = if (isDatabaseCopy(file.name)) inspectDatabaseCopy(file) else inspect(file)
+
+    /**
+     * Número de recetas de una copia de la base de datos de antes de actualizar si se puede restaurar: se abre en
+     * solo lectura (está en diario clásico: no deja `-wal` ni `-shm`), pasa `PRAGMA quick_check` y tiene la tabla de
+     * recetas. Null si no.
+     */
+    private fun inspectDatabaseCopy(file: File): Int? = try {
+        val copy = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY, KEEP_ON_CORRUPTION)
+        try {
+            val ok = copy.rawQuery("PRAGMA quick_check", null).use { it.moveToFirst() && it.getString(0) == "ok" }
+            if (!ok) null else copy.rawQuery("SELECT COUNT(*) FROM recipes", null).use { if (it.moveToFirst()) it.getInt(0) else null }
+        } finally {
+            copy.close()
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "La copia ${file.name} no se puede restaurar", e)
+        null
+    }
 
     /**
      * Copia de lo actual antes de sustituir nada al importar, en `filesDir/backups/antes-de-importar-<fecha>.zip`,
@@ -499,9 +627,13 @@ class BackupManager(
         null
     }
 
-    private companion object {
-        const val TAG = "BackupManager"
-        const val EXPORT_PREFIX = "exportar-"
-        const val BUFFER = 64 * 1024
+    companion object {
+        /** Carpeta de las copias del teléfono, dentro de `filesDir`. */
+        const val BACKUPS_DIR = "backups"
+
+        private const val RESTORE_SUFFIX = ".restaurar"
+        private const val TAG = "BackupManager"
+        private const val EXPORT_PREFIX = "exportar-"
+        private const val BUFFER = 64 * 1024
     }
 }

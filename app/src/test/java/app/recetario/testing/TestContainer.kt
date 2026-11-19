@@ -38,22 +38,28 @@ val testClock: Clock = Clock.fixed(Instant.parse("2026-11-13T20:40:00Z"), ZoneId
  * Sustituye el contenedor de la app por uno con la base de datos en memoria (con las categorías de serie).
  * [elapsedRealtime] es el reloj de los temporizadores; [documents], los documentos de fuera de las copias (null: los
  * del sistema, con el `ContentResolver` de Robolectric); [settingsDataStore], los ajustes (por ejemplo, unos que no se
- * pueden guardar).
+ * pueden guardar); [database] y [databaseFile], una base de datos en archivo (por defecto, en memoria y sin archivo);
+ * [restartApp], el reinicio tras restaurar una copia de antes de actualizar (las pruebas no pueden cerrar la JVM).
  */
 fun installTestContainer(
     clock: Clock = testClock,
     elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     documents: BackupDocuments? = null,
     settingsDataStore: DataStore<Preferences> = testSettingsDataStore(),
+    database: AppDatabase? = null,
+    databaseFile: File? = null,
+    restartApp: () -> Unit = {},
 ): AppContainer {
     val app = ApplicationProvider.getApplicationContext<RecetarioApp>()
-    val db = Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
+    val db = database ?: Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
         .addCallback(DefaultCategories.callback)
         .build()
     return AppContainer(
         app, clock = clock, database = db, settingsDataStore = settingsDataStore, localStateDataStore = testSettingsDataStore(),
         elapsedRealtime = elapsedRealtime,
         backupDocuments = documents ?: ContentResolverDocuments(app.contentResolver),
+        databaseFile = databaseFile,
+        restartApp = restartApp,
     ).also { app.container = it }
 }
 
