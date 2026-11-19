@@ -1,5 +1,6 @@
 package app.recetario.core.ui.motion
 
+import android.content.Context
 import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
@@ -17,7 +18,10 @@ val LocalReducedMotion: ProvidableCompositionLocal<Boolean> = compositionLocalOf
 @Composable
 fun rememberSystemReducedMotion(): Boolean {
     val context = LocalContext.current
-    return remember(context) {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    return remember(context) { systemReducedMotion(context) }
 }
+
+/** Lo mismo fuera de Compose (la pantalla de arranque de `MainActivity`). */
+fun systemReducedMotion(context: Context): Boolean =
+    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+

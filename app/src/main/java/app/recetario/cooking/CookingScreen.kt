@@ -6,6 +6,7 @@ import android.view.accessibility.AccessibilityManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -43,6 +44,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.recetario.AppContainer
 import app.recetario.core.ui.components.MutedText
+import app.recetario.core.ui.motion.IngredientConfetti
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.recipes.data.PhotoStore
@@ -187,80 +189,99 @@ fun CookingContent(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(c.bg)) {
-        // Fija, fuera de la lista: «Paso N de M» no desaparece al desplazarse y TalkBack lo anuncia siempre.
-        CookingTopBar(
-            title = recipe?.title.orEmpty(),
-            progress = progressText(state),
-            onClose = onClose,
-            modifier = Modifier.padding(top = bars.calculateTopPadding() + 8.dp).padding(horizontal = 18.dp),
-        )
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxWidth().weight(1f).testTag("cooking-list"),
-            contentPadding = PaddingValues(
-                start = 18.dp,
-                end = 18.dp,
-                bottom = bars.calculateBottomPadding() + 40.dp,
-            ),
-        ) {
-            if (recipe == null) {
-                item(key = "empty") {
-                    if (!state.loading) MutedText("Esta receta ya no existe.", Modifier.padding(top = 24.dp), fontSizeSp = 15)
-                }
-            } else {
-                if (recipe.ingredients.isNotEmpty()) {
-                    item(key = "ingredients-title") {
-                        IngredientsHeader(
-                            open = ingredientsOpen,
-                            checked = state.checkedIngredients.size,
-                            total = recipe.ingredients.size,
-                            onToggle = { ingredientsOpen = !ingredientsOpen },
-                        )
+    // «¡Listo!»: un confeti de ingredientes cae una vez detrás del contenido (no al girar ni al volver a la
+    // pantalla ya terminada; sí si se vuelve a un paso y se termina otra vez). Nunca con animaciones quitadas.
+    var celebrated by rememberSaveable { mutableStateOf(false) }
+    var confetti by remember { mutableStateOf(false) }
+    LaunchedEffect(state.loading, state.finished) {
+        if (state.loading) return@LaunchedEffect
+        if (!state.finished) {
+            celebrated = false
+        } else if (!celebrated) {
+            celebrated = true
+            confetti = !reduced
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(c.bg)) {
+        if (confetti && !reduced) {
+            IngredientConfetti(onFinished = { confetti = false }, modifier = Modifier.matchParentSize().testTag("confetti"))
+        }
+        Column(Modifier.fillMaxSize()) {
+            // Fija, fuera de la lista: «Paso N de M» no desaparece al desplazarse y TalkBack lo anuncia siempre.
+            CookingTopBar(
+                title = recipe?.title.orEmpty(),
+                progress = progressText(state),
+                onClose = onClose,
+                modifier = Modifier.padding(top = bars.calculateTopPadding() + 8.dp).padding(horizontal = 18.dp),
+            )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxWidth().weight(1f).testTag("cooking-list"),
+                contentPadding = PaddingValues(
+                    start = 18.dp,
+                    end = 18.dp,
+                    bottom = bars.calculateBottomPadding() + 40.dp,
+                ),
+            ) {
+                if (recipe == null) {
+                    item(key = "empty") {
+                        if (!state.loading) MutedText("Esta receta ya no existe.", Modifier.padding(top = 24.dp), fontSizeSp = 15)
                     }
-                    if (ingredientsOpen) {
-                        itemsIndexed(recipe.ingredients, key = { _, ing -> "ing-${ing.id}" }) { index, ing ->
-                            CookingIngredientRow(
-                                ingredient = ing,
-                                sectionTitle = ing.section?.takeIf { it != recipe.ingredients.getOrNull(index - 1)?.section },
-                                quantity = state.quantities[ing.id].orEmpty(),
-                                checked = ing.id in state.checkedIngredients,
-                                showDivider = index < recipe.ingredients.lastIndex,
-                                onToggle = { onToggleIngredient(ing.id) },
+                } else {
+                    if (recipe.ingredients.isNotEmpty()) {
+                        item(key = "ingredients-title") {
+                            IngredientsHeader(
+                                open = ingredientsOpen,
+                                checked = state.checkedIngredients.size,
+                                total = recipe.ingredients.size,
+                                onToggle = { ingredientsOpen = !ingredientsOpen },
                             )
                         }
+                        if (ingredientsOpen) {
+                            itemsIndexed(recipe.ingredients, key = { _, ing -> "ing-${ing.id}" }) { index, ing ->
+                                CookingIngredientRow(
+                                    ingredient = ing,
+                                    sectionTitle = ing.section?.takeIf { it != recipe.ingredients.getOrNull(index - 1)?.section },
+                                    quantity = state.quantities[ing.id].orEmpty(),
+                                    checked = ing.id in state.checkedIngredients,
+                                    showDivider = index < recipe.ingredients.lastIndex,
+                                    onToggle = { onToggleIngredient(ing.id) },
+                                )
+                            }
+                        }
                     }
-                }
-                item(key = "steps-title") { StepsTitle(recipe.steps.size) }
-                if (recipe.steps.isEmpty()) {
-                    item(key = "no-steps") { MutedText("Esta receta aún no tiene pasos.", fontSizeSp = 15) }
-                }
-                itemsIndexed(recipe.steps, key = { _, step -> "step-${step.id}" }) { index, step ->
-                    val status = when {
-                        index == state.currentIndex -> StepStatus.CURRENT
-                        index in state.doneSteps -> StepStatus.DONE
-                        else -> StepStatus.PENDING
+                    item(key = "steps-title") { StepsTitle(recipe.steps.size) }
+                    if (recipe.steps.isEmpty()) {
+                        item(key = "no-steps") { MutedText("Esta receta aún no tiene pasos.", fontSizeSp = 15) }
                     }
-                    CookingStep(
-                        number = index + 1,
-                        step = step,
-                        status = status,
-                        uses = if (status == StepStatus.CURRENT) stepUses(recipe, step.ingredientIds, state.quantities) else emptyList(),
-                        timer = state.timers[step.id],
-                        emoji = state.categoryEmoji,
-                        photoStore = photoStore,
-                        now = now,
-                        onGoTo = { onGoTo(index) },
-                        onDone = onDone,
-                        onStartTimer = { onStartTimer(index) },
-                        onToggleTimer = { onToggleTimer(step.id) },
-                        onAddMinute = { onAddMinute(step.id) },
-                        onDismissTimer = { onDismissTimer(step.id) },
-                        focus = if (status == StepStatus.CURRENT) stepFocus else null,
-                    )
-                }
-                if (state.finished) {
-                    item(key = "finish") { FinishCard(onBack = onClose, focus = stepFocus) }
+                    itemsIndexed(recipe.steps, key = { _, step -> "step-${step.id}" }) { index, step ->
+                        val status = when {
+                            index == state.currentIndex -> StepStatus.CURRENT
+                            index in state.doneSteps -> StepStatus.DONE
+                            else -> StepStatus.PENDING
+                        }
+                        CookingStep(
+                            number = index + 1,
+                            step = step,
+                            status = status,
+                            uses = if (status == StepStatus.CURRENT) stepUses(recipe, step.ingredientIds, state.quantities) else emptyList(),
+                            timer = state.timers[step.id],
+                            emoji = state.categoryEmoji,
+                            photoStore = photoStore,
+                            now = now,
+                            onGoTo = { onGoTo(index) },
+                            onDone = onDone,
+                            onStartTimer = { onStartTimer(index) },
+                            onToggleTimer = { onToggleTimer(step.id) },
+                            onAddMinute = { onAddMinute(step.id) },
+                            onDismissTimer = { onDismissTimer(step.id) },
+                            focus = if (status == StepStatus.CURRENT) stepFocus else null,
+                        )
+                    }
+                    if (state.finished) {
+                        item(key = "finish") { FinishCard(onBack = onClose, focus = stepFocus) }
+                    }
                 }
             }
         }

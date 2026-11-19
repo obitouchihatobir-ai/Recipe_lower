@@ -14,8 +14,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalView
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import app.recetario.cooking.TimerNotifications
+import app.recetario.core.ui.motion.splashExitAnimator
+import app.recetario.core.ui.motion.systemReducedMotion
 import app.recetario.core.ui.theme.LocalThemeRevealOrigin
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
@@ -25,7 +28,26 @@ import app.recetario.settings.rememberResolvedTheme
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
+    /** Ya se leyeron los ajustes y hay algo que pintar: la pantalla de arranque puede irse. */
+    @Volatile
+    private var contentReady = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // La pantalla de arranque se queda mientras se leen los ajustes (antes no se pinta nada). Al irse, el icono
+        // sube y se desvanece; sin animaciones del sistema, se quita sin más.
+        val splash = installSplashScreen()
+        splash.setKeepOnScreenCondition { !contentReady }
+        if (!systemReducedMotion(this)) {
+            splash.setOnExitAnimationListener { provider ->
+                // En algunos teléfonos la pantalla de arranque no tiene icono (por ejemplo, al volver de Recientes).
+                val icon = try {
+                    provider.iconView
+                } catch (_: RuntimeException) {
+                    null
+                }
+                splashExitAnimator(icon, provider.view, onEnd = provider::remove).start()
+            }
+        }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as RecetarioApp).container
@@ -35,6 +57,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             // Primera vez: Automático con Cálido de día (§6.1). Hasta leer los ajustes no se pinta nada.
             val theme = rememberResolvedTheme(container) ?: return@setContent
+            SideEffect { contentReady = true }
             val view = LocalView.current
             SideEffect {
                 WindowCompat.getInsetsController(window, view).apply {

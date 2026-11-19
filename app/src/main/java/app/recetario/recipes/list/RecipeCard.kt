@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.recetario.core.ui.motion.savedBounce
 import app.recetario.core.ui.components.PhotoOrPlaceholder
 import app.recetario.core.ui.components.sharedRecipePhoto
 import app.recetario.core.ui.motion.LocalReducedMotion
@@ -123,6 +124,7 @@ fun RecipeGridCard(
     // de la línea de datos («Postre»). Solo la foto se redondea.
     Column(
         modifier
+            .savedBounce(card.id)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .padding(bottom = 4.dp),
@@ -164,6 +166,7 @@ fun RecipeListRow(
     val scale = pressScale(interaction)
     Row(
         modifier
+            .savedBounce(card.id)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .fillMaxWidth()
             .clip(RoundedCornerShape(radius))
