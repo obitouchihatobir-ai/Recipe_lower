@@ -75,6 +75,12 @@ Cada entrega acaba con un APK instalable encima del anterior, sin perder datos, 
 | **2C · Semana y fichas** | 0.4.0 | Menú de la semana (rellenar con sugerencias y la previsión, generar la lista de compra); fichas para compartir (texto, imagen y PDF, con formatos, diseños, opciones y vista previa). |
 | **2D · Extras** | 0.5.0 | Widgets (Hoy y Compra); modo cocina manos libres; calendario de temporada; las animaciones de la etapa 2; cierre de la etapa (recorrido de extremo a extremo y documentación). |
 
+**Cómo llegan las entregas (decisión del usuario: versión oficial firmada):**
+- **Antes de la 2A, la 0.1.0 oficial.** La etapa 1 pasa a `main`, siempre con el permiso del usuario. El usuario crea el secreto `SIGNING_PASSPHRASE` y lanza una vez «Crear llave de firma», que publica `Sazon-0.1.0.apk` firmado con la llave definitiva (guía en `docs/instalar.md`). El usuario pasa sus datos una sola vez: «Exportar copia» en el APK de prueba, desinstalarlo, instalar la 0.1.0 e «Importar copia» con «Reemplazar todo».
+- **Cada entrega** (0.2.0 a 0.5.0) se cierra fusionándola a `main`, con permiso del usuario cada vez. «Publicar APK» la publica, y se instala **encima** de la anterior sin perder datos.
+- La 0.2.0, instalada encima de la 0.1.0 con datos reales, es la prueba de verdad de la migración 1→2 y de su copia previa.
+- Los APK de prueba de CI (`sazon-apk`) siguen sirviendo para mirar avances a mitad de una entrega, en el teléfono o en otro dispositivo. Para instalarlos hay que desinstalar la versión oficial, así que el usuario no los instala sobre sus datos reales.
+
 Las tablas nuevas de las cuatro entregas se crean **todas en la migración 1→2** de la entrega 2A, aunque algunas se usen más tarde. Así la etapa 2 tiene **una sola migración** (decisión de Claude).
 
 ## 6. Datos
@@ -91,12 +97,13 @@ Las tablas nuevas de las cuatro entregas se crean **todas en la migración 1→2
   - `id`, `date`, `slot` (`DESAYUNO`, `COMIDA` o `CENA`), `recipeId` y `servings`;
   - único por `(date, slot)`;
   - si se borra la receta, se borran sus huecos del plan (son planes, no recetas).
-- **`pairing_ratings`**:
-  - `id`, `subjectRecipeId`, y la pareja: o `partnerRecipeId` u otra receta, o `partnerGenericId`, un elemento del catálogo;
-  - `liked` (sí o no) y `ratedAt`;
-  - única por pareja: valorar otra vez sustituye la valoración;
-  - se borra con la receta sujeto o con la receta pareja.
-- Índices: `cook_log(recipeId, date)`, `meal_plan(date)` y `pairing_ratings(subjectRecipeId)`.
+- **`pairing_ratings`** (decisión de Claude):
+  - `pairKey` (clave primaria), `aKind`, `aId`, `bKind`, `bId`, `liked` (sí o no) y `ratedAt`;
+  - cada lado es una receta propia (`RECIPE`, con su id) o un elemento del catálogo (`CATALOG`, con su id estable del JSON). Así se pueden valorar también las parejas que parten de una bebida del catálogo y las del menú completo;
+  - **la pareja no tiene orden:** los dos lados se guardan ordenados (`kind:id` menor primero) y `pairKey` es `"<a>|<b>"`, así que (A, B) y (B, A) son la misma valoración;
+  - valorar otra vez sustituye la valoración, y un 👎 oculta la pareja desde los dos lados;
+  - se borra si se borra cualquiera de las recetas que la forman. Una pareja de dos elementos del catálogo no se puede valorar.
+- Índices: `cook_log(recipeId, date)`, `meal_plan(date)`, `pairing_ratings(aId)` y `pairing_ratings(bId)`.
 
 `MIGRATION_1_2` solo hace `CREATE TABLE` y `CREATE INDEX`: no toca ninguna tabla existente. Lleva su prueba con `MigrationTestHelper`: una base de datos v1 con recetas, compra y categorías migra a v2 y conserva todo.
 
@@ -134,7 +141,8 @@ Las tablas nuevas de las cuatro entregas se crean **todas en la migración 1→2
 - `backup.json` añade `cookLog` (con sus fotos en el manifiesto `images`), `pantry`, `mealPlan`, `pairingRatings` y los ajustes nuevos de `ajustes`.
 - **Las copias v1 se siguen importando:** lo que falta se toma como vacío. Una copia v3 se rechaza con el aviso de «versión más nueva».
 - **«Combinar»:**
-  - diario y valoraciones: se añaden las que faltan por `id`; si el `id` existe, gana el `updatedAt` o el `ratedAt` más reciente;
+  - diario: se añaden las entradas que faltan por `id`; si el `id` existe, gana el `updatedAt` más reciente;
+  - valoraciones: por `pairKey`; si existe, gana el `ratedAt` más reciente;
   - despensa: por `normalized`;
   - menú: se añade el hueco si está libre en la copia local;
   - nunca se borra nada.
@@ -382,7 +390,7 @@ Valen las reglas de siempre: breves, sin bloquear el toque, con `LocalReducedMot
   - capturas en los tres temas (`CapturasTest`) y comparación con el estilo de los bocetos;
   - recorrido de extremo a extremo con `RecorridoEtapa2Test`, que amplía el de la etapa 1 con lo de cada entrega;
   - CI en verde;
-  - APK enviado por el chat.
+  - fusión a `main` con permiso del usuario, y versión publicada en Releases.
 - **Rendimiento:** con unas 500 recetas, Hoy y «¿Qué puedo hacer?» responden en menos de 200 ms en el hilo de fondo; la prueba usa datos sintéticos.
 
 ## 10. Solo se puede comprobar en un teléfono
