@@ -5,6 +5,7 @@ import app.recetario.recipes.model.FlavorProfile
 import app.recetario.recipes.model.Moment
 import app.recetario.recipes.model.RecipeSummary
 import app.recetario.recipes.model.ServeTemp
+import app.recetario.diary.CookStats
 import java.time.Instant
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -110,5 +111,47 @@ class RecipeFilterTest {
     fun sort_recent_newestFirst() {
         val list = listOf(r("1", "B", updatedAt = 5), r("2", "A", updatedAt = 9), r("3", "A2", updatedAt = 5))
         assertThat(ids(list.applyFilter(RecipeFilter()))).isEqualTo(listOf("2", "3", "1"))
+    }
+}
+
+class RecipeFilterPantryAndSortTest {
+    private fun r(id: String, title: String, vararg ingredients: String) = RecipeSummary(
+        id, title, "cat", null, 30, FlavorProfile(), null, emptySet(), null,
+        Difficulty.EASY, false, emptyList(), ingredients.toList(), Instant.EPOCH,
+    )
+
+    private fun ids(list: List<RecipeSummary>) = list.map { it.id }
+
+    @Test
+    fun pantryOnly_requiresAllNonBasic() {
+        val list = listOf(
+            r("ok", "A", "Tomate", "Sal", "Aceite de oliva"),
+            r("missing", "B", "Tomate", "Cebolla"),
+        )
+        val out = list.applyFilter(RecipeFilter(pantryOnly = true), pantry = listOf("tomates"))
+        assertThat(ids(out)).containsExactly("ok")
+        assertThat(ids(list.applyFilter(RecipeFilter()))).hasSize(2)
+    }
+
+    @Test
+    fun sort_mostCooked_tiesByTitle() {
+        val list = listOf(r("1", "Zeta"), r("2", "Beta"), r("3", "Alfa"), r("4", "Gamma"))
+        val stats = mapOf(
+            "1" to CookStats(5, null, null), "2" to CookStats(2, null, null),
+            "3" to CookStats(2, null, null),
+        )
+        val out = list.applyFilter(RecipeFilter(sort = SortOrder.MOST_COOKED), stats = stats)
+        assertThat(ids(out)).containsExactly("1", "3", "2", "4").inOrder()
+    }
+
+    @Test
+    fun sort_bestRated_unratedLast() {
+        val list = listOf(r("1", "Zeta"), r("2", "Beta"), r("3", "Alfa"), r("4", "Gamma"))
+        val stats = mapOf(
+            "1" to CookStats(1, null, 4.0), "2" to CookStats(1, null, 5.0),
+            "3" to CookStats(1, null, null), "4" to CookStats(1, null, 4.0),
+        )
+        val out = list.applyFilter(RecipeFilter(sort = SortOrder.BEST_RATED), stats = stats)
+        assertThat(ids(out)).containsExactly("2", "4", "1", "3").inOrder()
     }
 }

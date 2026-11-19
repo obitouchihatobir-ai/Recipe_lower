@@ -306,6 +306,8 @@ private fun ResultsBar(count: Int, sort: SortOrder, onSort: (SortOrder) -> Unit)
 internal fun sortLabel(sort: SortOrder) = when (sort) {
     SortOrder.RECENT -> "Recientes"
     SortOrder.ALPHABETIC -> "Alfabético"
+    SortOrder.MOST_COOKED -> "Más cocinadas"
+    SortOrder.BEST_RATED -> "Mejor valoradas"
 }
 
 @Composable

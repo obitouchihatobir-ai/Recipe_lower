@@ -1,6 +1,9 @@
 package app.recetario.recipes.search
 
 import app.recetario.core.text.normalize
+import app.recetario.diary.CookStats
+import app.recetario.pantry.DEFAULT_PANTRY_BASICS
+import app.recetario.pantry.missingIngredients
 import app.recetario.recipes.model.Difficulty
 import app.recetario.recipes.model.Moment
 import app.recetario.recipes.model.RecipeSummary
@@ -8,7 +11,7 @@ import app.recetario.recipes.model.ServeTemp
 
 enum class Taste { SWEET, SALTY }
 
-enum class SortOrder { RECENT, ALPHABETIC }
+enum class SortOrder { RECENT, ALPHABETIC, MOST_COOKED, BEST_RATED }
 
 /** Dulce si sweet >= 2 y sweet >= salty; salada si salty >= 2 y salty > sweet; si no, null. */
 fun classifyTaste(sweet: Int, salty: Int): Taste? = when {
@@ -28,10 +31,16 @@ data class RecipeFilter(
     val moment: Moment? = null,
     val difficulty: Difficulty? = null,
     val favoritesOnly: Boolean = false,
+    val pantryOnly: Boolean = false,
     val sort: SortOrder = SortOrder.RECENT,
 )
 
-fun List<RecipeSummary>.applyFilter(f: RecipeFilter): List<RecipeSummary> {
+fun List<RecipeSummary>.applyFilter(
+    f: RecipeFilter,
+    stats: Map<String, CookStats> = emptyMap(),
+    pantry: List<String> = emptyList(),
+    basics: List<String> = DEFAULT_PANTRY_BASICS,
+): List<RecipeSummary> {
     val words = normalize(f.query).split(' ').filter { it.isNotEmpty() }
     val wantedTags = f.tags.map(::normalize).toSet()
     val matching = filter { r ->
@@ -49,12 +58,20 @@ fun List<RecipeSummary>.applyFilter(f: RecipeFilter): List<RecipeSummary> {
             (f.maxMinutes == null || (r.totalMinutes != null && r.totalMinutes <= f.maxMinutes)) &&
             (f.moment == null || f.moment in r.moments) &&
             (f.difficulty == null || r.difficulty == f.difficulty) &&
-            (!f.favoritesOnly || r.favorite)
+            (!f.favoritesOnly || r.favorite) &&
+            (!f.pantryOnly || missingIngredients(r, pantry, basics)?.second?.isEmpty() == true)
     }
     return when (f.sort) {
         SortOrder.RECENT -> matching.sortedWith(
             compareByDescending<RecipeSummary> { it.updatedAt }.thenBy { normalize(it.title) },
         )
         SortOrder.ALPHABETIC -> matching.sortedWith(compareBy<RecipeSummary> { normalize(it.title) }.thenBy { it.id })
+        SortOrder.MOST_COOKED -> matching.sortedWith(
+            compareByDescending<RecipeSummary> { stats[it.id]?.count ?: 0 }.thenBy { normalize(it.title) }.thenBy { it.id },
+        )
+        SortOrder.BEST_RATED -> matching.sortedWith(
+            compareByDescending<RecipeSummary> { stats[it.id]?.averageRating ?: -1.0 }
+                .thenBy { normalize(it.title) }.thenBy { it.id },
+        )
     }
 }
