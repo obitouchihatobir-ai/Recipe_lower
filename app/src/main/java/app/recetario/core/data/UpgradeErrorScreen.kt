@@ -85,7 +85,7 @@ fun UpgradeErrorRoute(container: AppContainer, message: String, copyFileName: St
         snackbar = snackbar,
         onSaveOutside = {
             try {
-                launcher.launch(copyFileName)
+                if (copyFileName != null) launcher.launch(copyFileName)
             } catch (_: ActivityNotFoundException) {
                 say(BackupMessages.NO_PICKER)
             }
