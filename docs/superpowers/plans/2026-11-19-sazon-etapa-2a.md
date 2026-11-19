@@ -43,7 +43,7 @@
 
 ---
 
-### Tarea 0: Publicar la 0.1.0 oficial (con el usuario; la hace el controlador, no un implementador)
+### Task 0: Publicar la 0.1.0 oficial (con el usuario; la hace el controlador, no un implementador)
 
 - [ ] **Paso 1:** CI en verde en la punta de la rama.
 - [ ] **Paso 2:** abrir un pull request de `ccr-3fe56a79-p1q16y` a `main`, titulado «Etapa 1 de Sazón (0.1.0)». Pedir al usuario su confirmación y fusionarlo solo con ella. `main` es un antecesor directo de la rama, así que es un avance rápido.
@@ -58,7 +58,7 @@
   4. «Importar copia» con «Reemplazar todo».
 - [ ] **Paso 5:** anotar en el registro de avance la versión publicada.
 
-### Tarea 1: Lógica del diario y de la despensa (`logic/`)
+### Task 1: Lógica del diario y de la despensa (`logic/`)
 
 **Archivos:**
 - Crear:
@@ -125,7 +125,7 @@
 - [ ] **Paso 4:** `./gradlew -p logic test`: PASS, con todas las anteriores en verde.
 - [ ] **Paso 5:** commit «Lógica del diario y de la despensa».
 
-### Tarea 2: Room versión 2 y `MIGRATION_1_2`
+### Task 2: Room versión 2 y `MIGRATION_1_2`
 
 **Archivos:**
 - Crear: `app/src/main/java/app/recetario/core/data/Migrations.kt` y entidades y DAOs en `diary/data/`, `pantry/data/`, `plan/data/` y `pairing/data/`.
@@ -164,7 +164,7 @@
 - [ ] **Paso 4:** CI: PASS, con todas las pruebas anteriores en verde.
 - [ ] **Paso 5:** commit «Base de datos v2: tablas de la etapa 2 y migración 1→2».
 
-### Tarea 3: Copia previa a la migración
+### Task 3: Copia previa a la migración
 
 **Archivos:**
 - Crear:
@@ -218,7 +218,7 @@
 - [ ] **Paso 4:** PASS en local y en CI.
 - [ ] **Paso 5:** commit «Copia de la base de datos antes de actualizar».
 
-### Tarea 4: Diario en la app (repositorio, «¡Listo!», detalle y pantalla Diario)
+### Task 4: Diario en la app (repositorio, «¡Listo!», detalle y pantalla Diario)
 
 **Archivos:**
 - Crear:
@@ -277,7 +277,7 @@
 - [ ] **Paso 4:** CI: PASS, con todo en verde.
 - [ ] **Paso 5:** commit «Diario de cocina».
 
-### Tarea 5: Despensa en la app
+### Task 5: Despensa en la app
 
 **Archivos:**
 - Crear:
@@ -330,7 +330,7 @@
 - [ ] **Paso 4:** CI: PASS.
 - [ ] **Paso 5:** commit «Despensa».
 
-### Tarea 6: Copias de seguridad v2
+### Task 6: Copias de seguridad v2
 
 **Archivos:**
 - Modificar:
@@ -378,7 +378,7 @@
 - [ ] **Paso 4:** PASS en local y en CI.
 - [ ] **Paso 5:** commit «Copias de seguridad v2 con diario, despensa, menú y valoraciones».
 
-### Tarea 7: Cierre de la 2A (0.2.0)
+### Task 7: Cierre de la 2A (0.2.0)
 
 **Archivos:**
 - Modificar:
