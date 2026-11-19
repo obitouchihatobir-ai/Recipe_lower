@@ -17,10 +17,12 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.navigation.NavHostController
@@ -33,7 +35,10 @@ import java.io.ByteArrayInputStream
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
+import app.recetario.cooking.STRIKE_MS
 import app.recetario.core.data.DefaultCategories
+import app.recetario.core.ui.components.SERVINGS_ROLL_MS
+import app.recetario.core.ui.motion.SAVED_CHECK_MS
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.About
@@ -69,7 +74,7 @@ import java.io.File
 import java.time.Instant
 
 /**
- * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle, Ajustes, Acerca de, Apariencia, Categorías, Copias de seguridad (también con Google Drive) y el modo cocina en los tres temas, en `app/build/capturas/` (CI las sube como
+ * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle, Ajustes, Acerca de, Apariencia, Categorías, Copias de seguridad (también con Google Drive), el modo cocina, la compra y algunas animaciones a medias (porciones, tachado, confeti, «Receta guardada») en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -132,6 +137,7 @@ class CapturasTest {
         rule.waitFor(hasTestTag("detail-list"))
         rule.waitFor(hasText("Vegetariana"))
         save("detalle-$name")
+        captureServingsRoll(name)
         rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Sal y pimienta"))
         save("detalle-ingredientes-$name")
         rule.onNodeWithTag("detail-list").performScrollToNode(hasText("Mis notas"))
@@ -162,6 +168,51 @@ class CapturasTest {
         captureBackup(c, nav, name)
         captureCooking(c, nav, name)
         captureHomeNotice(c, nav, name)
+        captureSaved(c, nav, name)
+        captureShopping(c, name)
+    }
+
+    /** Porciones: el número rodando a mitad del cambio de 4 a 5 (después vuelve a 4 para las demás capturas). */
+    private fun captureServingsRoll(name: String) {
+        val plus = hasContentDescription("Añadir una porción")
+        rule.onNodeWithTag("detail-list").performScrollToNode(plus)
+        rule.mainClock.autoAdvance = false
+        rule.onNode(plus).performClick()
+        rule.mainClock.advanceTimeBy(SERVINGS_ROLL_MS / 2L)
+        save("detalle-porciones-rodando-$name", settleMs = 0)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithContentDescription("Quitar una porción").performClick()
+        rule.waitFor(hasText("4 porciones"))
+        rule.onNodeWithTag("detail-list").performScrollToIndex(0)
+    }
+
+    /** Guardar una receta: el aviso «✓ Receta guardada» y la tarjeta que rebota en Inicio. */
+    private fun captureSaved(c: AppContainer, nav: NavHostController, name: String) {
+        runBlocking { c.settingsRepository.updateBackupStatus { it.copy(localError = null, lastError = null, lastExternal = Instant.parse("2026-11-10T18:05:00Z")) } }
+        rule.waitForGone(hasTestTag("home-backup-card"))
+        rule.runOnIdle { nav.navigate(RecipeEditor(id = "limonada")) }
+        rule.waitFor(hasTestTag("editor-title"))
+        rule.waitFor(hasText("Limonada con hierbabuena"))
+        rule.onNodeWithText("Guardar").performClick()
+        rule.waitFor(hasTestTag("saved-toast"))
+        save("guardado-$name", settleMs = SAVED_CHECK_MS.toLong())
+    }
+
+    /** Compra con un artículo marcado: ya está debajo de «Comprado», con la casilla rellena. */
+    private fun captureShopping(c: AppContainer, name: String) {
+        runBlocking {
+            c.shoppingRepository.addManual("Calabaza", 800.0, MeasureUnit.GRAM)
+            c.shoppingRepository.addManual("Leche", 1.0, MeasureUnit.LITER)
+            c.shoppingRepository.addManual("Pan", null, MeasureUnit.PIECE)
+        }
+        rule.onNodeWithTag("tab-shopping").performClick()
+        rule.waitFor(hasText("Pan"))
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithText("Pan").performClick()
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.mainClock.autoAdvance = true
+        rule.waitFor(hasText("Comprado"))
+        save("compra-$name")
     }
 
     /** Inicio con el recordatorio de los 30 días y con los errores de la copia automática (teléfono y Drive). */
@@ -291,7 +342,7 @@ class CapturasTest {
         save("cocina-$name")
 
         rule.onNodeWithText("Ingredientes").performClick()
-        markDone(1)
+        markDone(1, midwayCapture = "cocina-tachando-$name", midwayMs = STRIKE_MS / 2L)
         rule.waitFor(hasContentDescription("Marcar el paso 2 como hecho"))
         rule.onNodeWithTag("cooking-list").performScrollToNode(hasText("⏱ Iniciar 10:00"))
         rule.onNodeWithText("⏱ Iniciar 10:00").performClick()
@@ -300,23 +351,33 @@ class CapturasTest {
 
         markDone(2)
         markDone(3)
-        markDone(4)
+        markDone(4, midwayCapture = "cocina-confeti-$name", midwayMs = 450)
         rule.waitFor(hasText("¡Listo!"))
         save("cocina-listo-$name")
         rule.runOnIdle { c.timerManager.cancel("p2") }
     }
 
-    private fun markDone(step: Int) {
+    /** Pulsa «Hecho ✓» del paso [step]; con [midwayCapture], captura la animación a los [midwayMs] ms. */
+    private fun markDone(step: Int, midwayCapture: String? = null, midwayMs: Long = 0) {
         val button = hasContentDescription("Marcar el paso $step como hecho")
         rule.waitFor(button)
         rule.onNodeWithTag("cooking-list").performScrollToNode(button)
+        if (midwayCapture == null) {
+            rule.onNode(button).performClick()
+            return
+        }
+        rule.mainClock.autoAdvance = false
         rule.onNode(button).performClick()
+        rule.mainClock.advanceTimeBy(midwayMs)
+        save(midwayCapture, settleMs = 0)
+        rule.mainClock.autoAdvance = true
     }
 
-    private fun save(name: String) {
+    /** Guarda una captura; antes adelanta el reloj [settleMs] ms (0: tal cual, a mitad de una animación). */
+    private fun save(name: String, settleMs: Long = 1_500) {
         // La entrada escalonada espera con delay(): se adelanta el reloj para capturar el estado final.
-        rule.mainClock.advanceTimeBy(1_500)
-        rule.waitForIdle()
+        if (settleMs > 0) rule.mainClock.advanceTimeBy(settleMs)
+        if (rule.mainClock.autoAdvance) rule.waitForIdle()
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
         val dir = File(System.getProperty("user.dir"), "build/capturas").apply { mkdirs() }
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
