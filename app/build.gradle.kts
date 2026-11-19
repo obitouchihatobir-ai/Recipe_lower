@@ -75,10 +75,11 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
-    // MigrationTestHelper lee los esquemas exportados como assets; el plugin de Room solo
-    // los copia a androidTest, así que las pruebas de Robolectric los toman de aquí.
+    // MigrationTestHelper lee los esquemas exportados como assets. El plugin de Room solo los
+    // copia a androidTest, y Robolectric solo ve los assets de la variante probada (no los del
+    // conjunto «test»), así que van en los de debug. El APK release no los lleva.
     sourceSets {
-        getByName("test").assets.srcDir("$projectDir/schemas")
+        getByName("debug").assets.srcDir("$projectDir/schemas")
     }
 }
 
