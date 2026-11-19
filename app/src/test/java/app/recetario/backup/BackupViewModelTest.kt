@@ -144,7 +144,8 @@ class BackupViewModelTest {
         val vm = viewModel(SavedStateHandle())
 
         vm.onDriveDocumentCreated(drive)
-        vm.awaitDrivePanel()
+        // Se dice el error de verdad, no «no es una copia de Sazón».
+        assertThat(vm.awaitDrivePanel()).isEqualTo(DrivePanel.Unusable(drive, BackupMessages.NEWER_BACKUP))
         // Aunque llegara un «Reemplazar» (no se ofrece), no se toca.
         vm.confirmDriveReplace()
 
@@ -159,7 +160,8 @@ class BackupViewModelTest {
         val vm = viewModel(SavedStateHandle())
 
         vm.onDriveDocumentCreated(drive)
-        vm.awaitDrivePanel()
+        // Se dice el error de verdad, no «no es una copia de Sazón».
+        assertThat(vm.awaitDrivePanel()).isEqualTo(DrivePanel.Unusable(drive, BackupMessages.OPEN_FAILED))
         vm.confirmDriveReplace()
 
         assertDriveFileUntouched(vm, null)
@@ -174,7 +176,8 @@ class BackupViewModelTest {
         val vm = viewModel(SavedStateHandle())
 
         vm.onDriveDocumentCreated(drive)
-        vm.awaitDrivePanel()
+        // Se dice el error de verdad, no «no es una copia de Sazón».
+        assertThat(vm.awaitDrivePanel()).isEqualTo(DrivePanel.Unusable(drive, BackupMessages.INCOMPLETE))
         vm.confirmDriveReplace()
 
         assertDriveFileUntouched(vm, incomplete)

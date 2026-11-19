@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import app.recetario.RecetarioApp
@@ -193,7 +194,8 @@ internal class AlarmRinger(private val context: Context) {
 
     fun start() {
         if (player != null || vibrating) return
-        player = loop(TimerNotifications.alarmSound()) ?: loop(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+        val fallback = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        player = loop(TimerNotifications.alarmSound(), fallback) ?: loop(fallback, null)
         val vibrator = vibrator()
         if (vibrator?.hasVibrator() == true) {
             runCatching {
@@ -204,14 +206,24 @@ internal class AlarmRinger(private val context: Context) {
         }
     }
 
-    /** Prepara y arranca [sound] en bucle; null si no se puede (sin sonido de alarma elegido, archivo ilegible…). */
-    private fun loop(sound: Uri): MediaPlayer? {
+    /**
+     * Prepara y arranca [sound] en bucle; null si no se puede (sin sonido de alarma elegido, archivo ilegible…). Si
+     * falla después, al prepararlo o sonando, se cambia una vez por [fallback] (el sonido de notificación): sin eso,
+     * quien no dio permiso para notificar solo tendría la vibración.
+     */
+    private fun loop(sound: Uri, fallback: Uri?): MediaPlayer? {
         val mediaPlayer = MediaPlayer()
         return try {
             mediaPlayer.setAudioAttributes(TimerNotifications.alarmAttributes)
             mediaPlayer.setDataSource(context, sound)
             mediaPlayer.isLooping = true
             mediaPlayer.setOnPreparedListener { it.start() }
+            mediaPlayer.setOnErrorListener { failed, what, extra ->
+                Log.w(TAG, "El sonido de la alarma falló ($what, $extra)")
+                failed.release()
+                if (player === failed) player = fallback?.let { loop(it, null) }
+                true
+            }
             mediaPlayer.prepareAsync()
             mediaPlayer
         } catch (_: Exception) {
@@ -236,5 +248,9 @@ internal class AlarmRinger(private val context: Context) {
     } else {
         @Suppress("DEPRECATION")
         context.getSystemService(Vibrator::class.java)
+    }
+
+    private companion object {
+        const val TAG = "AlarmRinger"
     }
 }

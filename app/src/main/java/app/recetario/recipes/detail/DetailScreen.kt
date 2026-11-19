@@ -286,11 +286,14 @@ fun DetailContent(
                         }
                     }
                 }
-                item(key = "flavor") {
-                    Column(Modifier.staggeredEntrance(1).padding(horizontal = 18.dp).padding(top = 18.dp)) {
-                        SectionTitle("Sabor")
-                        Spacer(Modifier.height(10.dp))
-                        FlavorCard(recipe.flavor)
+                // Sin ningún sabor apuntado, el pentágono vacío no diría nada: el bloque no sale (se rellena en el editor).
+                if (recipe.flavor.hasTastes()) {
+                    item(key = "flavor") {
+                        Column(Modifier.staggeredEntrance(1).padding(horizontal = 18.dp).padding(top = 18.dp)) {
+                            SectionTitle("Sabor")
+                            Spacer(Modifier.height(10.dp))
+                            FlavorCard(recipe.flavor)
+                        }
                     }
                 }
                 item(key = "ingredients-title") {

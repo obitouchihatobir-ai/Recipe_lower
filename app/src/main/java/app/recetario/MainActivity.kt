@@ -29,7 +29,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as RecetarioApp).container
-        // Abierta desde un aviso «⏱ ¡Tiempo!»: ese temporizador se apaga (solo la primera vez, no al girar).
+        // Abierta desde un aviso «⏱ ¡Tiempo!»: ese temporizador se apaga (solo la primera vez, no al girar; nunca
+        // si Android repite el intent al reabrir desde Recientes, ni si ese paso vuelve a estar en marcha).
         if (savedInstanceState == null) TimerNotifications.dismissFromIntent(intent, container.timerManager)
         setContent {
             // Primera vez: Automático con Cálido de día (§6.1). Hasta leer los ajustes no se pinta nada.

@@ -187,12 +187,17 @@ object TimerNotifications {
     private fun requestCodeFor(timerId: String): Int = timerId.hashCode().let { if (it == 0) 1 else it }
 
     /**
-     * Si [intent] viene de tocar un aviso de fin, apaga ese temporizador y quita el extra (para no repetirlo).
-     * Lo llama MainActivity al abrirse desde el aviso.
+     * Si [intent] viene de tocar (o descartar) un aviso de fin, apaga ese temporizador y quita el extra (para no
+     * repetirlo). Lo llaman MainActivity al abrirse desde el aviso y [TimerDismissReceiver].
+     * - Un intent repetido desde Recientes (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`: Android vuelve a abrir la tarea
+     *   con el intent que la creó) no apaga nada.
+     * - Solo se apaga si ese temporizador ya terminó: los ids son los de los pasos, y un aviso viejo no debe apagar
+     *   el mismo paso que se está cocinando otra vez.
      */
     fun dismissFromIntent(intent: Intent?, manager: TimerManager) {
         val id = intent?.getStringExtra(EXTRA_TIMER_ID) ?: return
         intent.removeExtra(EXTRA_TIMER_ID)
-        manager.cancel(id)
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        manager.dismissFinished(id)
     }
 }

@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -34,10 +36,12 @@ fun SettingsRoute(
     val theme by repo.themeSettings.collectAsStateWithLifecycle(initialValue = ThemeSettings())
     val cupMl by repo.cupMl.collectAsStateWithLifecycle(initialValue = 240)
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
     SettingsContent(
         appearanceSummary = if (theme.auto) "Automático · ${theme.dayTheme.label()} de día" else theme.choice.label(),
         cupMl = cupMl,
-        onCupMl = { scope.launch { repo.setCupMl(it) } },
+        onCupMl = { ml -> scope.launch { snackbar.reportFailure("No se pudo guardar la medida de la taza.") { repo.setCupMl(ml) } } },
+        snackbar = snackbar,
         onBack = onBack,
         onAppearance = onAppearance,
         onCategories = onCategories,
@@ -60,8 +64,9 @@ fun SettingsContent(
     onBackup: () -> Unit,
     onAbout: () -> Unit,
     modifier: Modifier = Modifier,
+    snackbar: SnackbarHostState? = null,
 ) {
-    SettingsPage("Ajustes", onBack, tag = "settings-screen", modifier = modifier) {
+    SettingsPage("Ajustes", onBack, tag = "settings-screen", modifier = modifier, snackbar = snackbar) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
             SettingsRow("Apariencia", appearanceSummary, Modifier.testTag("settings-appearance"), onClick = onAppearance)
             SettingsRow("Unidades", "Una taza equivale a:", Modifier.testTag("settings-units")) {

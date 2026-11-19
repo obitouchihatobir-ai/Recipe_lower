@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -201,16 +202,19 @@ fun IngredientRow(
         ) {
             AnimatedCheck(checked)
             Spacer(Modifier.width(10.dp))
+            // Marcado: tachado y en `muted`, opaco (como en el modo cocina): con transparencia no llegaría a 4,5:1.
             Text(
                 ingredient.name,
-                modifier = Modifier.weight(1f).graphicsLayer { alpha = if (checked) 0.5f else 1f },
-                color = c.ink,
+                modifier = Modifier.weight(1f),
+                color = if (checked) c.muted else c.ink,
                 style = MaterialTheme.typography.bodyMedium,
                 textDecoration = if (checked) TextDecoration.LineThrough else null,
             )
             if (quantity.isNotEmpty()) {
                 Box(
                     Modifier
+                        // Área táctil de 48 dp también con una cantidad corta («2 g»).
+                        .widthIn(min = 48.dp)
                         .heightIn(min = 48.dp)
                         // Solo las cantidades de masa o volumen abren la hoja de equivalencias.
                         .let { if (convertible) it.clickable(role = Role.Button, onClickLabel = "Ver equivalencias", onClick = onQuantityTap) else it }

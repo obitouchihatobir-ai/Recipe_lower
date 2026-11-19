@@ -11,6 +11,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -28,7 +29,7 @@ fun ServingsStepper(value: Int, onChange: (Int) -> Unit, range: IntRange = 1..99
                 onClick = { onChange((value - 1).coerceIn(range)) },
                 enabled = value > range.first,
                 modifier = Modifier.semantics { contentDescription = "Quitar una porción" },
-            ) { Text("−", style = MaterialTheme.typography.titleMedium) }
+            ) { Text("−", style = MaterialTheme.typography.titleMedium, modifier = Modifier.clearAndSetSemantics {}) }
             Text(
                 servingsText(value),
                 modifier = Modifier.widthIn(min = 72.dp),
@@ -40,7 +41,7 @@ fun ServingsStepper(value: Int, onChange: (Int) -> Unit, range: IntRange = 1..99
                 onClick = { onChange((value + 1).coerceIn(range)) },
                 enabled = value < range.last,
                 modifier = Modifier.semantics { contentDescription = "Añadir una porción" },
-            ) { Text("+", style = MaterialTheme.typography.titleMedium) }
+            ) { Text("+", style = MaterialTheme.typography.titleMedium, modifier = Modifier.clearAndSetSemantics {}) }
         }
     }
 }
