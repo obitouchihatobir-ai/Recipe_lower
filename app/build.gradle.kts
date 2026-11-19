@@ -82,6 +82,12 @@ kotlin {
     }
 }
 
+// TEMPORAL (diagnóstico de un cuelgue): qué prueba empieza y un límite de tiempo.
+tasks.withType<Test>().configureEach {
+    testLogging { events("started", "failed") }
+    timeout.set(java.time.Duration.ofMinutes(14))
+}
+
 room {
     schemaDirectory("$projectDir/schemas")
 }
