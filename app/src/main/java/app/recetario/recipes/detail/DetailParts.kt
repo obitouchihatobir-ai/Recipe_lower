@@ -31,7 +31,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -263,15 +262,18 @@ fun Toast(message: String?, modifier: Modifier = Modifier) {
         enter = if (reduced) EnterTransition.None else fadeIn(tween(350)) + slideInVertically(tween(350)) { it / 2 },
         exit = if (reduced) ExitTransition.None else fadeOut(tween(250)) + slideOutVertically(tween(250)) { it / 2 },
     ) {
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = c.ink,
-            contentColor = c.bg,
-            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+        // Un Box y no un Surface: el aviso no se queda con los toques, así «Lo que necesito» (que puede quedar
+        // debajo cuando la receta es corta) se puede volver a tocar mientras se ve.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(c.ink, RoundedCornerShape(14.dp))
+                .semantics { liveRegion = LiveRegionMode.Polite },
         ) {
             Text(
                 last,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                color = c.bg,
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.W600,
             )
