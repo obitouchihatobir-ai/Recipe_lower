@@ -315,7 +315,8 @@ internal fun CookingStep(
             Column(Modifier.weight(1f).padding(top = 4.dp)) {
                 StruckText(
                     step.text,
-                    progress = if (status == StepStatus.DONE) strike.value else 0f,
+                    // Sin animaciones, tachado ya en el primer fotograma (el efecto llegaría uno tarde).
+                    progress = if (status != StepStatus.DONE) 0f else if (reduced) 1f else strike.value,
                     color = c.muted,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
                 )

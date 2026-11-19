@@ -62,7 +62,8 @@ const val SAVED_BOUNCE_FROM = 0.92f
 
 /**
  * Lo que celebra que se ha guardado una receta: el aviso «✓ Receta guardada» (lo pinta [SavedToast]) y el rebote
- * de su tarjeta en Inicio o Recetas ([savedBounce]), una sola vez. Uno solo, en `AppNavHost`.
+ * de su tarjeta en Inicio o Recetas ([savedBounce]), una sola vez: la primera tarjeta que lo reclama. Uno solo, en
+ * `AppNavHost`. El rebote no caduca con el aviso, sino al reclamarlo o al ir a otra pantalla ([expireBounce]).
  */
 @Stable
 class SaveCelebration {
@@ -86,8 +87,12 @@ class SaveCelebration {
         return true
     }
 
-    /** Si la tarjeta no llegó a verse mientras estaba el aviso, ya no rebota más tarde. */
-    internal fun expireBounce() {
+    /**
+     * Olvida el rebote pendiente. `AppNavHost` lo llama al ir a una pantalla que no sea Inicio, Recetas, el detalle
+     * ni el editor: así una receta editada (se guarda y se vuelve al detalle) rebota al volver a la lista, pero no
+     * mucho después, tras pasar por otras pestañas.
+     */
+    fun expireBounce() {
         bounceId = null
     }
 }
@@ -96,7 +101,7 @@ val LocalSaveCelebration = compositionLocalOf<SaveCelebration?> { null }
 
 /**
  * La tarjeta de la receta recién guardada entra con un pequeño rebote (escala 0,92 → 1 con muelle), una sola
- * vez: la primera tarjeta que la reclama. No bloquea el toque ni retrasa nada. Sin animaciones, no se mueve.
+ * vez: la primera tarjeta que la reclama (también al volver del detalle tras editarla). No bloquea el toque ni retrasa nada. Sin animaciones, no se mueve.
  */
 fun Modifier.savedBounce(recipeId: String): Modifier = composed {
     val celebration = LocalSaveCelebration.current
@@ -133,7 +138,6 @@ fun SavedToast(celebration: SaveCelebration, modifier: Modifier = Modifier) {
         visible = true
         delay(SAVED_TOAST_MS)
         visible = false
-        celebration.expireBounce()
     }
     AnimatedVisibility(
         visible = visible,

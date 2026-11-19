@@ -24,4 +24,3 @@ fun rememberSystemReducedMotion(): Boolean {
 /** Lo mismo fuera de Compose (la pantalla de arranque de `MainActivity`). */
 fun systemReducedMotion(context: Context): Boolean =
     Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-

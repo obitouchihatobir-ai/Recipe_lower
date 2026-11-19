@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavBackStackEntry
@@ -77,6 +79,12 @@ fun AppNavHost(
     }
     val detailTracker = remember { DetailTransitionTracker() }
     val celebration = saveCelebration
+    // El rebote pendiente sigue mientras se esté en Inicio, Recetas, el detalle o el editor (al editar se vuelve al
+    // detalle y luego a la lista); en cualquier otra pantalla se olvida.
+    val destination = entry?.destination
+    LaunchedEffect(destination) {
+        if (destination != null && !keepsPendingBounce(destination)) celebration.expireBounce()
+    }
     val sharePhotos = detailTracker.involvesDetail(entry?.id, entry?.destination?.hasRoute(RecipeDetail::class) == true)
     Scaffold(
         modifier = modifier,
@@ -204,6 +212,10 @@ fun AppNavHost(
         }
     }
 }
+
+private fun keepsPendingBounce(destination: NavDestination): Boolean =
+    destination.hasRoute(Home::class) || destination.hasRoute(Recipes::class) ||
+        destination.hasRoute(RecipeDetail::class) || destination.hasRoute(RecipeEditor::class)
 
 /** Recuerda si el destino anterior era el detalle, para saber si la última navegación entra o sale de él. */
 private class DetailTransitionTracker {

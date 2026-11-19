@@ -34,10 +34,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.recetario.core.ui.motion.savedBounce
 import app.recetario.core.ui.components.PhotoOrPlaceholder
 import app.recetario.core.ui.components.sharedRecipePhoto
 import app.recetario.core.ui.motion.LocalReducedMotion
+import app.recetario.core.ui.motion.savedBounce
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.core.ui.theme.LocalRecetarioShapes
 import app.recetario.recipes.data.PhotoStore

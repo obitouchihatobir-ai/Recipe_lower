@@ -125,7 +125,8 @@ class NavigationTest {
         runBlocking { container.recipeRepository.save(sampleRecipe("r1", "Crema de calabaza")) }
         launchWithCelebration()
         rule.onNodeWithTag("tab-recipes").performClick()
-        rule.waitFor(card)
+        // La tarjeta es el nodo fusionado (texto + toque); waitFor mira el árbol sin fusionar.
+        rule.waitUntil(5_000) { cardWidth() != null }
         rule.mainClock.advanceTimeBy(1_500)
         val full = cardWidth()!!
 

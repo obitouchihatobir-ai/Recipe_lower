@@ -55,17 +55,18 @@ fun IngredientConfetti(onFinished: () -> Unit, modifier: Modifier = Modifier) {
             )
         }
     }
+    // Se miden una vez: dibujar cada fotograma no vuelve a medir los emojis.
+    val layouts = remember(measurer, pieces) { pieces.map { measurer.measure(it.emoji, TextStyle(fontSize = it.size.sp)) } }
     LaunchedEffect(Unit) {
         progress.animateTo(1f, tween(CONFETTI_MS, easing = LinearEasing))
         done()
     }
     Canvas(modifier) {
         val t = progress.value
-        for (p in pieces) {
+        for ((p, layout) in pieces.zip(layouts)) {
             // Cada pieza cae durante `fall` del total, a partir de su `delay`.
             val local = ((t - p.delay) / p.fall).coerceIn(0f, 1f)
             if (local <= 0f || local >= 1f) continue
-            val layout = measurer.measure(p.emoji, TextStyle(fontSize = p.size.sp))
             val fallen = local * (0.6f + 0.4f * local) // empieza despacio y cae algo más deprisa al final
             val y = -layout.size.height + (size.height + layout.size.height) * fallen
             val x = size.width * p.x - layout.size.width / 2f + sin(local * 2f * PI.toFloat()) * p.sway * density
