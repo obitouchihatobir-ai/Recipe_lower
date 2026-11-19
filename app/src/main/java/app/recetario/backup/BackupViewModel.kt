@@ -53,13 +53,17 @@ sealed interface ImportPanel {
 
 /**
  * El archivo elegido para Drive ya tiene algo: antes de sobrescribirlo se pregunta. [ExistingCopy] es una copia que
- * se puede importar (con sus recetas y las de ahora); [NotACopy], cualquier otra cosa.
+ * se puede importar (con sus recetas y las de ahora); [NotACopy], un archivo que no es una copia de Sazón (se puede
+ * reemplazar). [Unusable] es una copia que no se puede comprobar ([message]: de una versión más nueva, incompleta) o
+ * un archivo que ahora no se puede leer (Drive sin conexión): puede ser la única copia fuera del teléfono, así que
+ * no se ofrece reemplazarlo, solo elegir otro archivo o cancelar.
  */
 sealed interface DrivePanel {
     val uri: String
 
     data class ExistingCopy(override val uri: String, val backupRecipes: Int, val localRecipes: Int) : DrivePanel
     data class NotACopy(override val uri: String) : DrivePanel
+    data class Unusable(override val uri: String, val message: String) : DrivePanel
 }
 
 /** Trabajo en curso; [DRIVE] es la copia automática («Reintentar» o recién elegido el archivo de Drive). */
@@ -215,10 +219,21 @@ class BackupViewModel(
         }
     }
 
-    /** Abre el documento, escribe y lo cierra (cerrar también cuenta: algunos proveedores terminan ahí). Si falla, lo borra. */
+    /**
+     * Abre el documento, escribe y lo cierra (cerrar también cuenta: algunos proveedores terminan ahí). Como
+     * `exportToDocument`: si ni siquiera se pudo abrir, no se ha tocado y solo se borra si está vacío (el usuario
+     * pudo elegir un archivo que ya existía); si falla después de abrirlo, se borra (quedaría a medias).
+     */
     private suspend fun writeDocument(uri: String, write: suspend (OutputStream) -> ExportResult): Boolean = withContext(io) {
+        val out = try {
+            documents.openOutput(uri)
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo abrir el documento", e)
+            deleteDocumentIfEmpty(documents, uri)
+            return@withContext false
+        }
         val result = try {
-            documents.openOutput(uri).use { write(it) }
+            out.use { write(it) }
         } catch (e: Exception) {
             Log.w(TAG, "No se pudo escribir la copia", e)
             ExportResult.Error(BackupMessages.EXPORT_FAILED)
@@ -263,13 +278,17 @@ class BackupViewModel(
         }
         return when (preview) {
             is PreviewResult.Ok -> DrivePanel.ExistingCopy(uri, preview.backupRecipes, preview.localRecipes)
-            is PreviewResult.Error -> DrivePanel.NotACopy(uri)
+            // Solo lo que seguro no es una copia de Sazón se ofrece reemplazar; cualquier otro error (versión más
+            // nueva, copia incompleta, archivo que ahora no se puede leer) se muestra tal cual y el archivo no se toca.
+            is PreviewResult.Error ->
+                if (preview.message == BackupMessages.NOT_A_BACKUP) DrivePanel.NotACopy(uri) else DrivePanel.Unusable(uri, preview.message)
         }
     }
 
     /** «Reemplazar»: el archivo que ya tenía algo se usa para la copia automática (y se sobrescribe ya). */
     fun confirmDriveReplace() {
         val p = drivePanel.value ?: return
+        if (p is DrivePanel.Unusable) return // no se ofrece: podría ser la única copia fuera del teléfono
         drivePanel.value = null
         setUpDrive(p.uri)
     }

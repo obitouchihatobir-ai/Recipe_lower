@@ -1,5 +1,6 @@
 package app.recetario.core.ui.theme
 
+import android.util.Log
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
@@ -47,6 +48,9 @@ private class RevealState(displayed: ThemeChoice) {
     var origin by mutableStateOf(Offset.Zero)
     var progress by mutableFloatStateOf(1f)
     var animating by mutableStateOf(false)
+
+    /** Cuántos cambios han empezado: solo el último limpia la imagen al terminar (o al cancelarse). */
+    var runs = 0
 }
 
 /**
@@ -69,30 +73,40 @@ fun ThemeRevealHost(
     var hostOffset by remember { mutableStateOf(Offset.Zero) }
     val latestOrigin by rememberUpdatedState(origin)
     LaunchedEffect(choice) {
-        if (choice == state.displayed) return@LaunchedEffect
-        val tapped = latestOrigin
-        // La capa aún tiene lo grabado con el tema anterior: se convierte en imagen antes de cambiar.
-        // Si el dispositivo no puede hacerlo, el tema cambia de golpe en vez de fallar.
-        val snapshot = try {
-            layer.toImageBitmap()
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
+        val run = ++state.runs
+        // Pase lo que pase (terminar, cancelarse por otro cambio, volver al tema que ya se ve o no poder tomar la
+        // imagen), la imagen vieja nunca se queda encima. Solo limpia el último cambio: uno anterior que se cancela
+        // tarde no borra la imagen del siguiente.
+        try {
+            if (choice == state.displayed) return@LaunchedEffect
+            val tapped = latestOrigin
+            // La capa aún tiene lo grabado con el tema anterior: se convierte en imagen antes de cambiar.
+            // Si el dispositivo no puede hacerlo, el tema cambia de golpe en vez de fallar.
+            val snapshot = try {
+                layer.toImageBitmap()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("ThemeReveal", "No se pudo tomar la imagen del tema anterior: el tema cambia sin animación", e)
+                state.displayed = choice
+                if (tapped != null) onOriginConsumed()
+                return@LaunchedEffect
+            }
+            state.frozen = snapshot
+            state.circle = tapped != null && !reduced
+            state.origin = (tapped ?: Offset.Zero) - hostOffset
+            state.progress = 0f
+            state.animating = true
             state.displayed = choice
             if (tapped != null) onOriginConsumed()
-            return@LaunchedEffect
+            val spec = if (state.circle) tween<Float>(REVEAL_MS, easing = FastOutSlowInEasing) else tween<Float>(FADE_MS, easing = LinearEasing)
+            animate(0f, 1f, animationSpec = spec) { value, _ -> state.progress = value }
+        } finally {
+            if (state.runs == run) {
+                state.animating = false
+                state.frozen = null
+            }
         }
-        state.frozen = snapshot
-        state.circle = tapped != null && !reduced
-        state.origin = (tapped ?: Offset.Zero) - hostOffset
-        state.progress = 0f
-        state.animating = true
-        state.displayed = choice
-        if (tapped != null) onOriginConsumed()
-        val spec = if (state.circle) tween<Float>(REVEAL_MS, easing = FastOutSlowInEasing) else tween<Float>(FADE_MS, easing = LinearEasing)
-        animate(0f, 1f, animationSpec = spec) { value, _ -> state.progress = value }
-        state.animating = false
-        state.frozen = null
     }
     Box(
         Modifier

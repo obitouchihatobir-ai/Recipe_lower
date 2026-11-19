@@ -9,16 +9,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavBackStackEntry
@@ -36,6 +42,9 @@ import app.recetario.core.ui.components.LocalNavAnimatedVisibilityScope
 import app.recetario.core.ui.components.LocalSharePhotos
 import app.recetario.core.ui.components.LocalSharedTransitionScope
 import app.recetario.core.ui.motion.LocalReducedMotion
+import app.recetario.core.ui.motion.LocalSaveCelebration
+import app.recetario.core.ui.motion.SaveCelebration
+import app.recetario.core.ui.motion.SavedToast
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.home.HomeRoute
 import app.recetario.pairing.PairingPlaceholderScreen
@@ -60,6 +69,8 @@ fun AppNavHost(
     container: AppContainer,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
+    // Guardar una receta: aviso «✓ Receta guardada» y rebote de su tarjeta al volver (Inicio o Recetas).
+    saveCelebration: SaveCelebration = remember { SaveCelebration() },
 ) {
     val reduced = LocalReducedMotion.current
     val entry by navController.currentBackStackEntryAsState()
@@ -67,6 +78,13 @@ fun AppNavHost(
         entry?.destination?.hierarchy?.any { it.hasRoute(tab.routeClass) } == true
     }
     val detailTracker = remember { DetailTransitionTracker() }
+    val celebration = saveCelebration
+    // El rebote pendiente sigue mientras se esté en Inicio, Recetas, el detalle o el editor (al editar se vuelve al
+    // detalle y luego a la lista); en cualquier otra pantalla se olvida.
+    val destination = entry?.destination
+    LaunchedEffect(destination) {
+        if (destination != null && !keepsPendingBounce(destination)) celebration.expireBounce()
+    }
     val sharePhotos = detailTracker.involvesDetail(entry?.id, entry?.destination?.hasRoute(RecipeDetail::class) == true)
     Scaffold(
         modifier = modifier,
@@ -87,100 +105,117 @@ fun AppNavHost(
         },
     ) { padding ->
         SharedTransitionLayout(Modifier.padding(padding).consumeWindowInsets(padding)) {
-            CompositionLocalProvider(LocalSharedTransitionScope provides this, LocalSharePhotos provides sharePhotos) {
-                NavHost(
-                    navController = navController,
-                    startDestination = Home,
-                    enterTransition = { if (reduced) EnterTransition.None else fadeIn(tween(FADE_MS)) },
-                    exitTransition = { if (reduced) ExitTransition.None else fadeOut(tween(FADE_MS)) },
-                    popEnterTransition = { if (reduced) EnterTransition.None else fadeIn(tween(FADE_MS)) },
-                    popExitTransition = { if (reduced) ExitTransition.None else fadeOut(tween(FADE_MS)) },
-                ) {
-                    composable<Home> { from ->
-                        CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
-                            HomeRoute(
-                                container = container,
-                                onCategory = { id -> navController.from(from) { openRecipesFiltered(id) } },
-                                onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
-                                onAdd = { navController.from(from) { navigate(RecipeEditor()) } },
-                                onSettings = { navController.from(from) { navigate(Settings) } },
-                                onAppearance = { navController.from(from) { navigate(Appearance) } },
-                                onBackup = { navController.from(from) { navigate(Backup) } },
-                            )
+            CompositionLocalProvider(
+                LocalSharedTransitionScope provides this,
+                LocalSharePhotos provides sharePhotos,
+                LocalSaveCelebration provides celebration,
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = Home,
+                        enterTransition = { if (reduced) EnterTransition.None else fadeIn(tween(FADE_MS)) },
+                        exitTransition = { if (reduced) ExitTransition.None else fadeOut(tween(FADE_MS)) },
+                        popEnterTransition = { if (reduced) EnterTransition.None else fadeIn(tween(FADE_MS)) },
+                        popExitTransition = { if (reduced) ExitTransition.None else fadeOut(tween(FADE_MS)) },
+                    ) {
+                        composable<Home> { from ->
+                            CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
+                                HomeRoute(
+                                    container = container,
+                                    onCategory = { id -> navController.from(from) { openRecipesFiltered(id) } },
+                                    onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
+                                    onAdd = { navController.from(from) { navigate(RecipeEditor()) } },
+                                    onSettings = { navController.from(from) { navigate(Settings) } },
+                                    onAppearance = { navController.from(from) { navigate(Appearance) } },
+                                    onBackup = { navController.from(from) { navigate(Backup) } },
+                                )
+                            }
                         }
-                    }
-                    composable<Recipes> { from ->
-                        CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
-                            RecipesRoute(
-                                container = container,
-                                onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
-                                onAdd = { categoryId ->
-                                    navController.from(from) { navigate(RecipeEditor(categoryId = categoryId)) }
-                                },
-                                onConverter = { navController.from(from) { navigate(Converter) } },
-                            )
+                        composable<Recipes> { from ->
+                            CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
+                                RecipesRoute(
+                                    container = container,
+                                    onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
+                                    onAdd = { categoryId ->
+                                        navController.from(from) { navigate(RecipeEditor(categoryId = categoryId)) }
+                                    },
+                                    onConverter = { navController.from(from) { navigate(Converter) } },
+                                )
+                            }
                         }
-                    }
-                    composable<Shopping> { ShoppingRoute(container) }
-                    composable<Pairing> { PairingPlaceholderScreen() }
-                    composable<RecipeDetail> { from ->
-                        val route = from.toRoute<RecipeDetail>()
-                        CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
-                            DetailRoute(
+                        composable<Shopping> { ShoppingRoute(container) }
+                        composable<Pairing> { PairingPlaceholderScreen() }
+                        composable<RecipeDetail> { from ->
+                            val route = from.toRoute<RecipeDetail>()
+                            CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
+                                DetailRoute(
+                                    container = container,
+                                    recipeId = route.id,
+                                    onBack = { navController.from(from) { popBackStack() } },
+                                    onEdit = { navController.from(from) { navigate(RecipeEditor(id = route.id)) } },
+                                    onCooking = { servings -> navController.from(from) { navigate(Cooking(route.id, servings)) } },
+                                )
+                            }
+                        }
+                        composable<Cooking> { from ->
+                            CookingRoute(container, onClose = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<Converter> { from ->
+                            ConverterRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<Settings> { from ->
+                            SettingsRoute(
                                 container = container,
-                                recipeId = route.id,
                                 onBack = { navController.from(from) { popBackStack() } },
-                                onEdit = { navController.from(from) { navigate(RecipeEditor(id = route.id)) } },
-                                onCooking = { servings -> navController.from(from) { navigate(Cooking(route.id, servings)) } },
+                                onAppearance = { navController.from(from) { navigate(Appearance) } },
+                                onCategories = { navController.from(from) { navigate(Categories) } },
+                                onTags = { navController.from(from) { navigate(Tags) } },
+                                onBackup = { navController.from(from) { navigate(Backup) } },
+                                onAbout = { navController.from(from) { navigate(About) } },
+                            )
+                        }
+                        composable<Appearance> { from ->
+                            AppearanceRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<Categories> { from ->
+                            CategoriesRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<Tags> { from ->
+                            TagsRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<Backup> { from ->
+                            BackupRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<About> { from ->
+                            AboutRoute(onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<RecipeEditor> { from ->
+                            val route = from.toRoute<RecipeEditor>()
+                            EditorRoute(
+                                container = container,
+                                isNew = route.id == null,
+                                onBack = { navController.from(from) { popBackStack() } },
+                                onSaved = { id ->
+                                    navController.from(from) {
+                                        celebration.recipeSaved(id)
+                                        popBackStack()
+                                    }
+                                },
                             )
                         }
                     }
-                    composable<Cooking> { from ->
-                        CookingRoute(container, onClose = { navController.from(from) { popBackStack() } })
-                    }
-                    composable<Converter> { from ->
-                        ConverterRoute(container, onBack = { navController.from(from) { popBackStack() } })
-                    }
-                    composable<Settings> { from ->
-                        SettingsRoute(
-                            container = container,
-                            onBack = { navController.from(from) { popBackStack() } },
-                            onAppearance = { navController.from(from) { navigate(Appearance) } },
-                            onCategories = { navController.from(from) { navigate(Categories) } },
-                            onTags = { navController.from(from) { navigate(Tags) } },
-                            onBackup = { navController.from(from) { navigate(Backup) } },
-                            onAbout = { navController.from(from) { navigate(About) } },
-                        )
-                    }
-                    composable<Appearance> { from ->
-                        AppearanceRoute(container, onBack = { navController.from(from) { popBackStack() } })
-                    }
-                    composable<Categories> { from ->
-                        CategoriesRoute(container, onBack = { navController.from(from) { popBackStack() } })
-                    }
-                    composable<Tags> { from ->
-                        TagsRoute(container, onBack = { navController.from(from) { popBackStack() } })
-                    }
-                    composable<Backup> { from ->
-                        BackupRoute(container, onBack = { navController.from(from) { popBackStack() } })
-                    }
-                    composable<About> { from ->
-                        AboutRoute(onBack = { navController.from(from) { popBackStack() } })
-                    }
-                    composable<RecipeEditor> { from ->
-                        val route = from.toRoute<RecipeEditor>()
-                        EditorRoute(
-                            container = container,
-                            isNew = route.id == null,
-                            onBack = { navController.from(from) { popBackStack() } },
-                            onSaved = { navController.from(from) { popBackStack() } },
-                        )
-                    }
+                    // Por encima de todo, sin tocarse: los toques pasan a la pantalla de debajo.
+                    SavedToast(celebration, Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp))
                 }
             }
         }
     }
 }
+
+private fun keepsPendingBounce(destination: NavDestination): Boolean =
+    destination.hasRoute(Home::class) || destination.hasRoute(Recipes::class) ||
+        destination.hasRoute(RecipeDetail::class) || destination.hasRoute(RecipeEditor::class)
 
 /** Recuerda si el destino anterior era el detalle, para saber si la última navegación entra o sale de él. */
 private class DetailTransitionTracker {

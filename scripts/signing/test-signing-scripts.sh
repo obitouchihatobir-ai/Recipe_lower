@@ -101,14 +101,33 @@ check_e() {
     [ ! -e "$target" ]
 }
 
+# El resumen de PBKDF2 va fijado (-md sha256) en todas las llamadas a openssl enc: si
+# cambiara el valor por defecto de openssl, la llave guardada dejaría de descifrarse.
+# La llave creada se descifra con los parámetros escritos a mano, sin los scripts.
+check_f() {
+  local calls pinned
+  calls="$(grep -h 'openssl enc' "$here/create-keystore.sh" "$here/decrypt-keystore.sh" | grep -vc '^ *#')"
+  pinned="$(grep -h 'openssl enc' "$here/create-keystore.sh" "$here/decrypt-keystore.sh" | grep -v '^ *#' | grep -c -- '-md sha256')"
+  [ "$calls" -ge 3 ] &&
+    [ "$pinned" -eq "$calls" ] &&
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -pass env:SIGNING_PASSPHRASE \
+      -in "$enc" -out "$work/manual.p12" 2>"$log" &&
+    keytool -list -keystore "$work/manual.p12" -storepass "$SIGNING_PASSPHRASE" 2>/dev/null |
+    grep -q '^recetario,.*PrivateKeyEntry'
+  local status=$?
+  rm -f "$work/manual.p12"
+  return "$status"
+}
+
 check "(a) create-keystore.sh genera release.p12.enc cifrado, sin dejar ningún .p12 en claro" check_a
 check "(b) decrypt-keystore.sh lo descifra y keytool muestra el alias recetario" check_b
 check "(c) con una frase incorrecta, el descifrado falla y no deja archivo" check_c
 check "(d) create-keystore.sh se niega si release.p12.enc ya existe y no lo cambia" check_d
 check "(e) create-keystore.sh se niega con una frase vacía o de menos de 20 caracteres" check_e
+check "(f) las llamadas a openssl fijan -md sha256 y la llave se descifra con esos parámetros" check_f
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures comprobación(es) fallida(s)."
   exit 1
 fi
-echo "Las 5 comprobaciones pasan."
+echo "Las 6 comprobaciones pasan."

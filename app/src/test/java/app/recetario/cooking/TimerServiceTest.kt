@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
@@ -187,6 +188,85 @@ class TimerServiceTest {
         val receiver = Class.forName(intent.component!!.className).getDeclaredConstructor().newInstance() as BroadcastReceiver
         receiver.onReceive(app, intent)
         assertThat(container.timerManager.timers.value.map { it.id }).containsExactly("s3")
+    }
+
+    @Test
+    fun tappingAnOldFinishedNotification_neverTurnsOffTheSameStepRunningAgain() {
+        val (forS2) = finished("s2")
+        val open = shadowOf(forS2.contentIntent).savedIntent
+        // Se vuelve a cocinar la receta: el mismo paso (mismo id) está otra vez en marcha.
+        container.timerManager.start("Paso 2: Sofríe la cebolla…", 300, id = "s2")
+
+        ActivityScenario.launch<MainActivity>(open).use { idle() }
+
+        assertThat(container.timerManager.timers.value.single().isRunning).isTrue()
+    }
+
+    @Test
+    fun reopeningFromRecents_withTheNotificationThatOpenedTheApp_doesNotTurnAnythingOff() {
+        val (forS2) = finished("s2")
+        // Android repite el intent con el que se abrió la tarea, marcado como lanzado desde Recientes.
+        val replay = Intent(shadowOf(forS2.contentIntent).savedIntent).addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
+
+        ActivityScenario.launch<MainActivity>(replay).use { idle() }
+
+        assertThat(container.timerManager.timers.value.map { it.id }).containsExactly("s2")
+    }
+
+    @Test
+    fun aNotificationTapArrivingWhileTheAppIsOpen_turnsOffOnlyAFinishedTimer() {
+        val (forS2, forS3) = finished("s2", "s3")
+        container.timerManager.start("Paso 3: Cuece a fuego medio…", 1200, id = "s3")
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
+        try {
+            controller.newIntent(Intent(shadowOf(forS3.contentIntent).savedIntent))
+            controller.newIntent(Intent(shadowOf(forS2.contentIntent).savedIntent).addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY))
+            idle()
+            // s3 está otra vez en marcha y s2 solo se repitió desde Recientes: los dos siguen.
+            assertThat(container.timerManager.timers.value.map { it.id }).containsExactly("s2", "s3")
+
+            controller.newIntent(Intent(shadowOf(forS2.contentIntent).savedIntent))
+            idle()
+            assertThat(container.timerManager.timers.value.map { it.id }).containsExactly("s3")
+        } finally {
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
+    fun dismissingAnOldFinishedNotification_neverTurnsOffARunningTimer() {
+        val (forS2) = finished("s2")
+        container.timerManager.start("Paso 2: Sofríe la cebolla…", 300, id = "s2")
+        // El aviso de la vez anterior se descarta (o caduca a los 10 minutos) con el paso otra vez en marcha.
+        val intent = shadowOf(forS2.deleteIntent).savedIntent
+        val receiver = Class.forName(intent.component!!.className).getDeclaredConstructor().newInstance() as BroadcastReceiver
+
+        receiver.onReceive(app, intent)
+
+        assertThat(container.timerManager.timers.value.single().isRunning).isTrue()
+    }
+
+    @Test
+    fun alarmRinger_ifTheAlarmSoundFailsWhilePreparing_ringsTheNotificationSoundInstead() {
+        ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(30_000, 0) }
+        val players = mutableListOf<MediaPlayer>()
+        ShadowMediaPlayer.setCreateListener { player, _ -> players += player }
+        val ringer = AlarmRinger(app)
+        ringer.start()
+        idle()
+
+        // El sonido de alarma elegido no se puede reproducir (archivo borrado, formato raro…).
+        shadowOf(players.single()).invokeErrorListener(MediaPlayer.MEDIA_ERROR_UNKNOWN, 0)
+        idle()
+
+        assertThat(players).hasSize(2)
+        assertThat(shadowOf(players[0]).state).isEqualTo(ShadowMediaPlayer.State.END)
+        val fallback = players[1]
+        assertThat(fallback.isLooping).isTrue()
+        assertThat(shadowOf(fallback).state).isEqualTo(ShadowMediaPlayer.State.STARTED)
+        assertThat(shadowOf(fallback).audioAttributes.usage).isEqualTo(AudioAttributes.USAGE_ALARM)
+        ringer.stop()
+        assertThat(shadowOf(fallback).state).isEqualTo(ShadowMediaPlayer.State.END)
     }
 
     @Test

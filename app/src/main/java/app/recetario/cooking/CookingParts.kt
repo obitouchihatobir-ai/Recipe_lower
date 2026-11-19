@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -43,11 +44,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -55,17 +59,23 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -79,6 +89,7 @@ import app.recetario.core.ui.components.SectionTitle
 import app.recetario.core.ui.components.TagPill
 import app.recetario.core.ui.icons.AppIcons
 import app.recetario.core.ui.motion.LocalReducedMotion
+import app.recetario.core.ui.motion.animationProgress
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.core.ui.theme.LocalRecetarioShapes
 import app.recetario.recipes.data.PhotoStore
@@ -226,8 +237,19 @@ internal fun CookingStep(
 ) {
     val c = LocalRecetarioColors.current
     val radius = LocalRecetarioShapes.current.radius
+    val reduced = LocalReducedMotion.current
     val current = status == StepStatus.CURRENT
     val seconds = step.timerSeconds?.takeIf { it > 0 }
+    // El tachado vive aquí (no en el texto): el paso cambia de forma al hacerse, pero la línea sigue creciendo.
+    // Un paso que ya estaba hecho al abrir la pantalla se pinta tachado del todo.
+    val strike = remember { Animatable(if (status == StepStatus.DONE) 1f else 0f) }
+    LaunchedEffect(status == StepStatus.DONE, reduced) {
+        when {
+            status != StepStatus.DONE -> strike.snapTo(0f)
+            reduced -> strike.snapTo(1f)
+            else -> strike.animateTo(1f, tween(STRIKE_MS, easing = EaseOut))
+        }
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -291,8 +313,10 @@ internal fun CookingStep(
             }
         } else {
             Column(Modifier.weight(1f).padding(top = 4.dp)) {
-                Text(
+                StruckText(
                     step.text,
+                    // Sin animaciones, tachado ya en el primer fotograma (el efecto llegaría uno tarde).
+                    progress = if (status != StepStatus.DONE) 0f else if (reduced) 1f else strike.value,
                     color = c.muted,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
                 )
@@ -331,6 +355,43 @@ private fun StepNumber(number: Int, status: StepStatus) {
     ) {
         Text(if (status == StepStatus.DONE) "✓" else "$number", color = ink, fontSize = 12.5.sp, fontWeight = FontWeight.W700)
     }
+}
+
+/** Lo que tarda la línea del tachado en cruzar el paso al pulsar «Hecho ✓». */
+internal const val STRIKE_MS = 300
+
+/**
+ * Texto con un tachado que crece de izquierda a derecha según [progress] (0 a 1), renglón a renglón, del color
+ * del texto (sin transparencia: el contraste no cambia). Es decorativo: TalkBack lee el texto y el estado «Hecho».
+ */
+@Composable
+private fun StruckText(text: String, progress: Float, color: Color, style: TextStyle) {
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    Text(
+        text,
+        color = color,
+        style = style,
+        onTextLayout = { layout = it },
+        modifier = Modifier
+            .semantics { animationProgress = progress }
+            .drawWithContent {
+                drawContent()
+                val l = layout ?: return@drawWithContent
+                if (progress <= 0f) return@drawWithContent
+                val widths = (0 until l.lineCount).map { l.getLineRight(it) - l.getLineLeft(it) }
+                var left = widths.sum() * progress.coerceIn(0f, 1f)
+                val stroke = 1.5.dp.toPx()
+                val rise = style.fontSize.toPx() * 0.3f
+                for (line in 0 until l.lineCount) {
+                    if (left <= 0f) break
+                    val start = l.getLineLeft(line)
+                    val length = minOf(widths[line], left)
+                    val y = l.getLineBaseline(line) - rise
+                    drawLine(color, Offset(start, y), Offset(start + length, y), strokeWidth = stroke, cap = StrokeCap.Round)
+                    left -= widths[line]
+                }
+            },
+    )
 }
 
 /** Fotos del paso (carrusel si hay varias) o, sin fotos, un recuadro suave con el emoji de la categoría. */
@@ -428,6 +489,17 @@ internal fun StepTimerButton(
         }
     }
     val ink = if (running) c.onAccent else c.accent
+    // Terminado («✓ ¡Tiempo!»): el botón late (1 → 1,08 → 1) hasta que se apaga; quieto sin animaciones.
+    val beat = if (finished && !reduced) {
+        rememberInfiniteTransition(label = "timerBeat").animateFloat(
+            initialValue = 1f,
+            targetValue = TIMER_BEAT_SCALE,
+            animationSpec = infiniteRepeatable(tween(TIMER_BEAT_MS, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "timerBeatScale",
+        )
+    } else {
+        null
+    }
     // Late mientras corre: un halo que crece y vuelve (como en el boceto); nada si se quitaron las animaciones.
     val halo = if (running && !reduced) {
         rememberInfiniteTransition(label = "timerPulse").animateFloat(
@@ -441,6 +513,12 @@ internal fun StepTimerButton(
     }
     Box(
         modifier
+            .graphicsLayer {
+                val scale = beat?.value ?: 1f
+                scaleX = scale
+                scaleY = scale
+            }
+            .semantics { if (finished) timerBeating = beat != null }
             .drawBehind {
                 val spread = 6.dp.toPx() * (halo?.value ?: 0f)
                 if (spread > 0f) {
@@ -465,6 +543,10 @@ internal fun StepTimerButton(
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (timer != null && !finished) {
+                TimerRing(remainingFraction(timer, now()), ink, Modifier.testTag("timer-ring-$stepNumber"))
+                Spacer(Modifier.width(8.dp))
+            }
             if (icon != null) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = ink)
                 Spacer(Modifier.width(6.dp))
@@ -476,6 +558,34 @@ internal fun StepTimerButton(
                 maxLines = 1,
             )
         }
+    }
+}
+
+/** Escala máxima y medio latido del botón «✓ ¡Tiempo!». */
+internal const val TIMER_BEAT_SCALE = 1.08f
+internal const val TIMER_BEAT_MS = 450
+
+/** Solo para las pruebas: si el botón «✓ ¡Tiempo!» está latiendo. */
+internal val TimerBeating = SemanticsPropertyKey<Boolean>("TimerBeating")
+internal var SemanticsPropertyReceiver.timerBeating by TimerBeating
+
+/**
+ * Anillo de 18 dp con lo que le queda al temporizador ([fraction], de 1 a 0): se vacía en el sentido de las agujas
+ * del reloj desde arriba. Lo repinta la cuenta atrás que ya existe (cada 250 ms mientras corre), sin bucle propio
+ * ni interpolación: con las animaciones quitadas avanza a saltos como los números, y en pausa se queda quieto.
+ * Decorativo: el botón ya dice cuánto queda.
+ */
+@Composable
+private fun TimerRing(fraction: Float, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(18.dp).semantics { animationProgress = fraction }) {
+        val stroke = 2.5.dp.toPx()
+        val inset = stroke / 2
+        val arcSize = Size(size.width - stroke, size.height - stroke)
+        drawCircle(color.copy(alpha = 0.3f), radius = (size.minDimension - stroke) / 2, style = Stroke(stroke))
+        drawArc(
+            color, startAngle = -90f, sweepAngle = 360f * fraction, useCenter = false,
+            topLeft = Offset(inset, inset), size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round),
+        )
     }
 }
 

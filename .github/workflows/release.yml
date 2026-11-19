@@ -55,15 +55,20 @@ jobs:
       - name: Pruebas de la lógica pura
         run: ./gradlew -p logic test
 
-      # La llave descifrada solo existe durante este paso, fuera del repositorio.
-      - name: Pruebas de la app y APK release firmado
+      # Las pruebas van antes y sin la frase ni la llave a la vista.
+      - name: Pruebas de la app
+        run: ./gradlew testDebugUnitTest
+
+      # La llave descifrada solo existe durante este paso, fuera del repositorio,
+      # y en él solo se compila el APK release.
+      - name: APK release firmado
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
         run: |
           export RECETARIO_KEYSTORE="$RUNNER_TEMP/release.p12"
           trap 'rm -f "$RECETARIO_KEYSTORE"' EXIT
           scripts/signing/decrypt-keystore.sh signing/release.p12.enc "$RECETARIO_KEYSTORE"
-          ./gradlew testDebugUnitTest assembleRelease
+          ./gradlew assembleRelease
 
       # app-release.apk solo existe si el APK está firmado (sin firma sería
       # app-release-unsigned.apk), así que este paso falla si algo no firmó.

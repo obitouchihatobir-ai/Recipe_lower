@@ -41,11 +41,11 @@ keytool -genkeypair -storetype PKCS12 -keyalg RSA -keysize 4096 -validity 36500 
   -keystore "$tmp/release.p12" \
   -storepass:env SIGNING_PASSPHRASE -keypass:env SIGNING_PASSPHRASE
 
-openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -pass env:SIGNING_PASSPHRASE \
+openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -salt -pass env:SIGNING_PASSPHRASE \
   -in "$tmp/release.p12" -out "$tmp/release.p12.enc"
 
 # Antes de darla por buena, comprueba que la copia cifrada se descifra igual.
-if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass env:SIGNING_PASSPHRASE \
+if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -pass env:SIGNING_PASSPHRASE \
   -in "$tmp/release.p12.enc" | cmp -s - "$tmp/release.p12"; then
   echo "Error: la llave cifrada no se descifra igual que la original." >&2
   exit 1

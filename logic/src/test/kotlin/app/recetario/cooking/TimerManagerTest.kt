@@ -168,4 +168,32 @@ class TimerManagerTest {
         clock = 42_000
         assertThat(manager.now()).isEqualTo(42_000)
     }
+
+    @Test
+    fun dismissFinished_removesAFinishedTimer() {
+        val id = manager.start("Paso 2", 300, id = "s2")
+        clock += 300_000
+        manager.tick(clock)
+        assertThat(timer(id).finished).isTrue()
+
+        manager.dismissFinished(id)
+
+        assertThat(manager.timers.value).isEmpty()
+    }
+
+    @Test
+    fun dismissFinished_neverTouchesARunningOrPausedTimerWithThatId() {
+        // El mismo paso cocinado otra vez: un aviso viejo («⏱ ¡Tiempo!» de la vez anterior) no lo apaga.
+        manager.start("Paso 2", 300, id = "s2")
+        manager.start("Paso 3", 300, id = "s3")
+        manager.pause("s3")
+
+        manager.dismissFinished("s2")
+        manager.dismissFinished("s3")
+        manager.dismissFinished("nada")
+
+        assertThat(manager.timers.value.map { it.id }).containsExactly("s2", "s3").inOrder()
+        assertThat(timer("s2").isRunning).isTrue()
+        assertThat(timer("s3").isPaused).isTrue()
+    }
 }

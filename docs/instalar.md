@@ -34,6 +34,8 @@ Los pasos 1 y 2 se hacen **una sola vez**, mejor desde un ordenador. Después, p
 Si termina con una cruz roja, ábrela y lee el mensaje:
 - «Falta el secreto SIGNING_PASSPHRASE» o «debe tener 20 caracteres o más»: repite el paso 1. Si el secreto ya existe, cámbialo con el lápiz que hay a su lado.
 - «La llave de firma ya existe»: ya la creaste antes. No hace falta repetir este paso.
+- «Ejecuta este flujo en la rama main.»: en el punto 4 había otra rama elegida. Repite el paso 2 con **Branch: main**.
+- Si el flujo terminó bien pero, pasados 15 minutos, **Releases** sigue vacío, lanza **Publicar APK** a mano (apartado 5, punto 2).
 
 ## 3. Descarga la app en el móvil
 
@@ -53,11 +55,16 @@ Cuando termines, puedes volver a desactivar el permiso del punto 2. Solo lo nece
 ## 5. Actualizaciones
 
 1. Cada vez que el código nuevo llega a `main`, el flujo **Publicar APK** deja el APK nuevo en **Releases**.
-2. Para actualizar, repite los pasos 3 y 4. La versión nueva se instala **encima** de la anterior y conservas tus recetas.
-3. Esto funciona porque todas las versiones van firmadas con la misma llave. Por eso:
+2. Si un día no aparece (el flujo terminó con una cruz roja o no llegó a lanzarse), lánzalo a mano:
+   1. Entra en la pestaña **Actions** y, en la lista de la izquierda, elige **Publicar APK**.
+   2. Pulsa **Run workflow**, comprueba que pone **Branch: main** y pulsa el botón verde **Run workflow**.
+   3. Si termina con el aviso «Ejecuta «Publicar APK» en la rama main.», se lanzó desde otra rama: repítelo eligiendo **main**. Así nunca se publica código que aún no está en `main`.
+   4. Si termina con «Falta la llave: ejecuta primero el flujo «Crear llave de firma»», haz antes el paso 2.
+3. Para actualizar, repite los pasos 3 y 4. La versión nueva se instala **encima** de la anterior y conservas tus recetas.
+4. Esto funciona porque todas las versiones van firmadas con la misma llave. Por eso:
    - no pierdas la frase del paso 1;
    - no borres el archivo `signing/release.p12.enc` del repositorio.
-4. Si un día Android dice que la app no se ha instalado porque «entra en conflicto con un paquete existente», no desinstales nada todavía. Antes, haz una copia de seguridad desde la app.
+5. Si un día Android dice que la app no se ha instalado porque «entra en conflicto con un paquete existente», no desinstales nada todavía. Antes, haz una copia de seguridad desde la app.
 
 ## 6. Espacio que ocupan las copias
 
@@ -72,4 +79,5 @@ Ese APK va firmado con una **llave provisional**, distinta en cada ejecución, y
 1. En la app, entra en **Ajustes › Copias de seguridad** y toca **Exportar copia**. Guarda el archivo `Sazon-AAAA-MM-DD.zip` fuera de la app: en **Descargas** o en Google Drive.
 2. Desinstala Sazón: mantén pulsado su icono y elige **Desinstalar**. Al desinstalar se borran las recetas del móvil; por eso has hecho antes la copia.
 3. Instala la versión nueva (pasos 3 y 4).
-4. Abre **Ajustes › Copias de seguridad**, toca **Importar copia** y elige el archivo del punto 1.
+4. Abre **Ajustes › Copias de seguridad**, toca **Importar copia** y elige el archivo del punto 1. Elige **Reemplazar todo**: en la app recién instalada no hay nada que perder y así vuelven también el tema y el tamaño de la taza (con «Combinar» solo vuelven las recetas, las fotos, las categorías y la compra).
+5. Si usabas la copia automática en Google Drive, vuelve a tocar **Guardar también en Google Drive** en esa misma pantalla: la app nueva no conserva el permiso para escribir en el archivo. Si eliges el archivo de antes, la app te pregunta antes de sobrescribirlo.

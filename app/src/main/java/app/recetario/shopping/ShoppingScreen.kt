@@ -187,15 +187,16 @@ fun ShoppingContent(
                     contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 96.dp),
                 ) {
                     var index = 1
-                    for ((section, list) in state.groups) {
+                    for ((section, list) in shoppingGroups(state.groups)) {
                         val headerIndex = index++
-                        item(key = "header-${section.name}") {
+                        val headerKey = "header-${section?.name ?: BOUGHT_KEY}"
+                        item(key = headerKey) {
                             SectionTitle(
-                                section.label,
+                                section?.label ?: BOUGHT_LABEL,
                                 Modifier
                                     .animateItem(fadeInSpec = null, placementSpec = placement(reduced), fadeOutSpec = null)
                                     .padding(top = 14.dp, bottom = 4.dp)
-                                    .staggeredEntrance(headerIndex, "header-${section.name}", tracker),
+                                    .staggeredEntrance(headerIndex, headerKey, tracker),
                             )
                         }
                         val firstIndex = index
@@ -252,6 +253,19 @@ fun ShoppingContent(
             )
         }
     }
+}
+
+private const val BOUGHT_KEY = "BOUGHT"
+private const val BOUGHT_LABEL = "Comprado"
+
+/**
+ * Lo que falta, por sección del súper, y al final «Comprado» (sección null) con todo lo marcado. Al marcar un
+ * artículo, su fila (misma clave) se desliza hasta «Comprado» con `animateItem`; al desmarcarlo, vuelve.
+ */
+internal fun shoppingGroups(groups: List<Pair<ShopSection, List<ShoppingItem>>>): List<Pair<ShopSection?, List<ShoppingItem>>> {
+    val pending = groups.mapNotNull { (section, list) -> list.filter { !it.checked }.takeIf { it.isNotEmpty() }?.let { section to it } }
+    val bought = groups.flatMap { (_, list) -> list.filter { it.checked } }
+    return pending + if (bought.isEmpty()) emptyList() else listOf(null to bought)
 }
 
 private fun placement(reduced: Boolean) =

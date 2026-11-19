@@ -132,7 +132,8 @@ class SwitchableDataStore(private val delegate: DataStore<Preferences>) : DataSt
  * - [wKeepsOldTail]: con «w» no vacía el archivo (quedan los bytes viejos del final);
  * - [dropLastByte]: el proveedor pierde el último byte (la copia queda corta);
  * - [grantPersistable] = false: el proveedor no da permiso persistente;
- * - [inputGates]: abrir ese documento para leer espera a que se abra la barrera.
+ * - [inputGates]: abrir ese documento para leer espera a que se abra la barrera;
+ * - [unreadable]: esos documentos no se pueden abrir para leer (Drive sin conexión, por ejemplo).
  */
 class FakeDocuments(@Volatile var input: ByteArray = ByteArray(0), @Volatile var failOutput: Boolean = false) : BackupDocuments {
     val files: MutableMap<String, ByteArray> = java.util.concurrent.ConcurrentHashMap()
@@ -143,6 +144,7 @@ class FakeDocuments(@Volatile var input: ByteArray = ByteArray(0), @Volatile var
     val persisted: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     val released: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     val inputGates: MutableMap<String, java.util.concurrent.CountDownLatch> = java.util.concurrent.ConcurrentHashMap()
+    val unreadable: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     @Volatile
     var grantPersistable = true
@@ -168,6 +170,7 @@ class FakeDocuments(@Volatile var input: ByteArray = ByteArray(0), @Volatile var
     override fun openInput(uri: String): java.io.InputStream {
         inputGates[uri]?.await(10, java.util.concurrent.TimeUnit.SECONDS)
         opened += uri
+        if (uri in unreadable) throw java.io.IOException("No se puede leer $uri sin conexión")
         return java.io.ByteArrayInputStream(files[uri] ?: input)
     }
 

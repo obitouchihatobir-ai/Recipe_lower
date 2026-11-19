@@ -32,7 +32,7 @@ trap 'exit 1' INT TERM HUP
 
 # Con una frase incorrecta, openssl casi siempre falla; keytool lo confirma en
 # los raros casos en que el relleno sale válido por casualidad.
-if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass env:SIGNING_PASSPHRASE \
+if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -pass env:SIGNING_PASSPHRASE \
   -in "$in" -out "$tmp/release.p12" 2>/dev/null ||
   ! keytool -list -storetype PKCS12 -keystore "$tmp/release.p12" -alias recetario \
     -storepass:env SIGNING_PASSPHRASE >/dev/null 2>&1; then

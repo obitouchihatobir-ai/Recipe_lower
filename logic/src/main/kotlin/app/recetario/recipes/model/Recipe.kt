@@ -30,7 +30,10 @@ data class FlavorProfile(
     val spicy: Int = 0,
     val intensity: Intensity = Intensity.MEDIUM,
     val rich: Boolean = false,
-)
+) {
+    /** Si se apuntó algún sabor (intensidad y «rica/cremosa» tienen valor por defecto: no cuentan). */
+    fun hasTastes(): Boolean = sweet > 0 || salty > 0 || sour > 0 || bitter > 0 || spicy > 0
+}
 
 data class Ingredient(
     val id: String,

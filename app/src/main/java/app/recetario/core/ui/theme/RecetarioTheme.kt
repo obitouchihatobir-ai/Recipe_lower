@@ -38,8 +38,9 @@ fun RecetarioTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
 }
 
 // Los roles de Material3 se enlazan a los tokens del tema para que NavigationBar, Card,
-// AlertDialog y ModalBottomSheet no usen los colores por defecto.
-private fun colorSchemeFor(choice: ThemeChoice, c: RecetarioColors): ColorScheme =
+// AlertDialog, ModalBottomSheet y Snackbar (roles «inverse», como el aviso propio del detalle) no usen los
+// colores por defecto.
+internal fun colorSchemeFor(choice: ThemeChoice, c: RecetarioColors): ColorScheme =
     if (choice == ThemeChoice.NOCTURNO) {
         darkColorScheme(
             primary = c.accent, onPrimary = c.onAccent,
@@ -55,6 +56,7 @@ private fun colorSchemeFor(choice: ThemeChoice, c: RecetarioColors): ColorScheme
             surfaceContainerHigh = lerp(c.surface, c.soft, 0.5f),
             surfaceContainerHighest = c.soft,
             outline = c.line, outlineVariant = c.line,
+            inverseSurface = c.ink, inverseOnSurface = c.bg, inversePrimary = c.bg,
         )
     } else {
         lightColorScheme(
@@ -71,5 +73,6 @@ private fun colorSchemeFor(choice: ThemeChoice, c: RecetarioColors): ColorScheme
             surfaceContainerHigh = lerp(c.surface, c.soft, 0.5f),
             surfaceContainerHighest = c.soft,
             outline = c.line, outlineVariant = c.line,
+            inverseSurface = c.ink, inverseOnSurface = c.bg, inversePrimary = c.bg,
         )
     }

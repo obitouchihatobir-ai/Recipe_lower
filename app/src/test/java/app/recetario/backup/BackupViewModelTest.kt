@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -116,5 +117,122 @@ class BackupViewModelTest {
         assertThat(env.documents.persisted).isEmpty()
         assertThat(env.documents.openedForWriting).isEmpty()
         assertThat(runBlocking { env.settings.backupStatus.first().driveUri }).isNull()
+    }
+
+    private val drive = "content://drive/Sazon-copia-automatica.zip"
+
+    private fun BackupViewModel.awaitDrivePanel(): DrivePanel =
+        runBlocking { withTimeout(10_000) { state.first { it.drivePanel != null }.drivePanel!! } }
+
+    /** El archivo de Drive sigue como estaba ([bytes], o sin contenido propio si es null) y no se usa para nada. */
+    private fun assertDriveFileUntouched(vm: BackupViewModel, bytes: ByteArray?) {
+        // Ningún aviso: ni «Copia guardada en Google Drive.» ni un error de escritura.
+        assertThat(runBlocking { withTimeoutOrNull(1_500) { vm.messages.first() } }).isNull()
+        if (bytes == null) assertThat(env.documents.files).doesNotContainKey(drive)
+        else assertThat(env.documents.files.getValue(drive).toList()).isEqualTo(bytes.toList())
+        assertThat(env.documents.openedForWriting).isEmpty()
+        assertThat(env.documents.deleted).isEmpty()
+        assertThat(env.documents.persisted).isEmpty()
+        assertThat(runBlocking { env.settings.backupStatus.first().driveUri }).isNull()
+    }
+
+    @Test
+    fun driveFile_withACopyFromANewerVersion_isNeverOfferedForReplacing_andStaysAsItWas() {
+        runBlocking { env.saveAt(sampleRecipe("local", "Tortilla"), backupClock.instant()) }
+        val newer = zipOf(BACKUP_JSON_ENTRY to """{"schemaVersion":99,"appVersion":"9.0.0"}""".toByteArray())
+        env.documents.files[drive] = newer
+        val vm = viewModel(SavedStateHandle())
+
+        vm.onDriveDocumentCreated(drive)
+        // Se dice el error de verdad, no «no es una copia de Sazón».
+        assertThat(vm.awaitDrivePanel()).isEqualTo(DrivePanel.Unusable(drive, BackupMessages.NEWER_BACKUP))
+        // Aunque llegara un «Reemplazar» (no se ofrece), no se toca.
+        vm.confirmDriveReplace()
+
+        assertDriveFileUntouched(vm, newer)
+    }
+
+    @Test
+    fun driveFile_thatCannotBeRead_isNeverOfferedForReplacing_andStaysAsItWas() {
+        runBlocking { env.saveAt(sampleRecipe("local", "Tortilla"), backupClock.instant()) }
+        // Drive sin conexión: el archivo existe, pero no se puede leer ahora.
+        env.documents.unreadable += drive
+        val vm = viewModel(SavedStateHandle())
+
+        vm.onDriveDocumentCreated(drive)
+        // Se dice el error de verdad, no «no es una copia de Sazón».
+        assertThat(vm.awaitDrivePanel()).isEqualTo(DrivePanel.Unusable(drive, BackupMessages.OPEN_FAILED))
+        vm.confirmDriveReplace()
+
+        assertDriveFileUntouched(vm, null)
+    }
+
+    @Test
+    fun driveFile_withAnIncompleteCopy_isNeverOfferedForReplacing_andStaysAsItWas() {
+        runBlocking { env.saveAt(sampleRecipe("local", "Tortilla"), backupClock.instant()) }
+        // El manifiesto nombra una foto que no está en el zip.
+        val incomplete = backupZip(backupOf(sampleRecipe("copia", "Paella").copy(coverPhoto = "a.jpg")).copy(images = listOf("a.jpg")))
+        env.documents.files[drive] = incomplete
+        val vm = viewModel(SavedStateHandle())
+
+        vm.onDriveDocumentCreated(drive)
+        // Se dice el error de verdad, no «no es una copia de Sazón».
+        assertThat(vm.awaitDrivePanel()).isEqualTo(DrivePanel.Unusable(drive, BackupMessages.INCOMPLETE))
+        vm.confirmDriveReplace()
+
+        assertDriveFileUntouched(vm, incomplete)
+    }
+
+    /** Deja en el teléfono una copia previa a importar y devuelve su nombre. */
+    private fun localCopy(): String {
+        runBlocking {
+            env.saveAt(sampleRecipe("local", "Tortilla"), backupClock.instant())
+            env.import(backupZip(backupOf(sampleRecipe("copia", "Paella", updatedAt = 900))), ImportMode.REPLACE_ALL)
+        }
+        return "antes-de-importar-2026-11-13-2140.zip"
+    }
+
+    @Test
+    fun saveOutside_whenAnExistingFileCannotBeOpened_leavesItAsItWas() {
+        val name = localCopy()
+        val vm = viewModel(SavedStateHandle())
+        // El usuario eligió un archivo que ya existía y el proveedor no deja abrirlo para escribir.
+        val old = "una copia anterior".toByteArray()
+        env.documents.files[created] = old
+        env.documents.failOpenOutput = true
+        vm.prepareSaveOutside(name)
+
+        vm.saveOutside(created)
+
+        assertThat(vm.nextMessage()).isEqualTo("No se pudo guardar la copia.")
+        assertThat(env.documents.deleted).isEmpty()
+        assertThat(env.documents.files.getValue(created).toList()).isEqualTo(old.toList())
+    }
+
+    @Test
+    fun saveOutside_whenTheNewEmptyDocumentCannotBeOpened_deletesIt() {
+        val name = localCopy()
+        val vm = viewModel(SavedStateHandle())
+        env.documents.files[created] = ByteArray(0)
+        env.documents.failOpenOutput = true
+        vm.prepareSaveOutside(name)
+
+        vm.saveOutside(created)
+
+        assertThat(vm.nextMessage()).isEqualTo("No se pudo guardar la copia.")
+        assertThat(env.documents.deleted).containsExactly(created)
+    }
+
+    @Test
+    fun saveOutside_whenWritingFailsAfterOpening_deletesTheHalfWrittenDocument() {
+        val name = localCopy()
+        val vm = viewModel(SavedStateHandle())
+        env.documents.failOutput = true
+        vm.prepareSaveOutside(name)
+
+        vm.saveOutside(created)
+
+        assertThat(vm.nextMessage()).isEqualTo("No se pudo guardar la copia.")
+        assertThat(env.documents.deleted).containsExactly(created)
     }
 }

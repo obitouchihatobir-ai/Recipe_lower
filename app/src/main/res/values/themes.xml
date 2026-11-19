@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pantalla de arranque (core-splashscreen, Android 8 o superior): el primer plano del icono adaptativo
+         sobre el crema del tema Cálido. Se queda mientras MainActivity lee los ajustes; al irse, el icono sube un
+         poco y se desvanece (MainActivity, splashExitAnimator). Después, el tema de siempre. -->
+    <style name="Theme.Sazon.Arranque" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/arranque_fondo</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@android:style/Theme.Material.Light.NoActionBar</item>
+    </style>
+</resources>

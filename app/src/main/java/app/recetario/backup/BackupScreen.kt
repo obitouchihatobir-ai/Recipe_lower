@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -173,7 +174,16 @@ fun BackupContent(
         snackbar = snackbar,
         overlay = {
             state.drivePanel?.let { drive ->
-                DriveReplacePanel(drive, onReplace = onConfirmDriveReplace, onImportFirst = onImportDriveFileFirst, onDismiss = onDismissDrivePanel)
+                DriveReplacePanel(
+                    drive,
+                    onReplace = onConfirmDriveReplace,
+                    onImportFirst = onImportDriveFileFirst,
+                    onChooseOther = {
+                        onDismissDrivePanel()
+                        onChooseDriveFile()
+                    },
+                    onDismiss = onDismissDrivePanel,
+                )
             }
             if (state.drivePanel == null) when (val panel = state.panel) {
                 is ImportPanel.ChooseMode -> ImportModePanel(
@@ -324,15 +334,23 @@ private fun LocalBackupRow(backup: LocalBackup, enabled: Boolean, onRestore: (St
         } else {
             MutedText(recipeCountText(backup.recipes), fontSizeSp = 14)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Con TalkBack, cada botón dice de qué copia es (si no, todas las filas sonarían igual).
+                val title = localBackupTitle(name)
                 TextButton(
                     onClick = { onRestore(name) },
                     enabled = enabled,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("local-restore-$name"),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .semantics { contentDescription = "Restaurar la copia: $title" }
+                        .testTag("local-restore-$name"),
                 ) { Text("Restaurar", color = if (enabled) c.accent else c.muted, fontWeight = FontWeight.W700) }
                 TextButton(
                     onClick = { onSaveOutside(name) },
                     enabled = enabled,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("local-save-$name"),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .semantics { contentDescription = "Guardar fuera la copia: $title" }
+                        .testTag("local-save-$name"),
                 ) { Text("Guardar fuera", color = if (enabled) c.accent else c.muted, fontWeight = FontWeight.W700) }
             }
         }
@@ -382,11 +400,19 @@ private fun WorkingRow(work: BackupWork) {
 
 /**
  * El archivo elegido para Drive ya tiene algo. Si es una copia: cuántas recetas tiene frente a las de ahora, con
- * «Importar primero»; si no, se pregunta si se reemplaza. «Reemplazar» va en rojo: sobrescribe el archivo.
+ * «Importar primero»; si no es una copia de Sazón, se pregunta si se reemplaza. «Reemplazar» va en rojo: sobrescribe
+ * el archivo. Si es una copia que no se puede comprobar (más nueva, incompleta) o no se puede leer, se dice por qué y
+ * solo se ofrece elegir otro archivo o cancelar.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BoxScope.DriveReplacePanel(panel: DrivePanel, onReplace: () -> Unit, onImportFirst: () -> Unit, onDismiss: () -> Unit) {
+private fun BoxScope.DriveReplacePanel(
+    panel: DrivePanel,
+    onReplace: () -> Unit,
+    onImportFirst: () -> Unit,
+    onChooseOther: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val c = LocalRecetarioColors.current
     BottomPanel(onDismiss, "drive-replace-panel") {
         SectionTitle("Copia automática en Google Drive")
@@ -411,6 +437,20 @@ private fun BoxScope.DriveReplacePanel(panel: DrivePanel, onReplace: () -> Unit,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.W700,
             )
+            is DrivePanel.Unusable -> {
+                Text(
+                    panel.message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.W700,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("drive-unusable"),
+                )
+                Text(
+                    "Ese archivo no se va a usar ni a cambiar. Elige otro para las copias automáticas.",
+                    color = c.ink,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
         FlowRow(
             Modifier.fillMaxWidth(),
@@ -429,15 +469,24 @@ private fun BoxScope.DriveReplacePanel(panel: DrivePanel, onReplace: () -> Unit,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = c.accent),
                 ) { Text("Importar primero", fontWeight = FontWeight.W700) }
             }
-            Button(
-                onClick = onReplace,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("drive-replace"),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError,
-                ),
-            ) { Text("Reemplazar", fontWeight = FontWeight.W700) }
+            if (panel is DrivePanel.Unusable) {
+                Button(
+                    onClick = onChooseOther,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("drive-choose-other"),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
+                ) { Text("Elegir otro archivo", fontWeight = FontWeight.W700) }
+            } else {
+                Button(
+                    onClick = onReplace,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("drive-replace"),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text("Reemplazar", fontWeight = FontWeight.W700) }
+            }
         }
     }
 }

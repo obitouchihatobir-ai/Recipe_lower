@@ -21,6 +21,7 @@ import app.recetario.testing.installTestContainer
 import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import kotlinx.coroutines.runBlocking
+import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -65,6 +66,30 @@ class ShoppingScreenTest {
         rule.onNodeWithText("Frutas y verduras").assertIsDisplayed()
         rule.onNodeWithText("Lácteos").assertIsDisplayed()
         rule.onNodeWithText("800 g").assertIsDisplayed()
+    }
+
+    @Test
+    fun checkingAnItem_movesItUnderComprado_andBackWhenUnchecked() {
+        runBlocking {
+            container.shoppingRepository.addManual("Pan", null, MeasureUnit.PIECE)
+            container.shoppingRepository.addManual("Leche", 1.0, MeasureUnit.LITER)
+        }
+        launch()
+        rule.waitFor(hasText("Pan"))
+        rule.onNodeWithText("Comprado").assertDoesNotExist()
+        rule.onNodeWithText("Pan").performClick()
+        rule.waitFor(hasText("Comprado"))
+        // «Pan» está ahora debajo de «Comprado», y su sección («Despensa») ya no sale: no queda nada por comprar ahí.
+        rule.waitForGone(hasText("Despensa"))
+        rule.mainClock.advanceTimeBy(1_000)
+        val header = rule.onNodeWithText("Comprado").fetchSemanticsNode().boundsInRoot
+        val pan = rule.onNodeWithText("Pan").fetchSemanticsNode().boundsInRoot
+        assertThat(pan.top).isGreaterThan(header.top)
+        rule.onNodeWithText("Lácteos").assertIsDisplayed()
+
+        rule.onNodeWithText("Pan").performClick()
+        rule.waitFor(hasText("Despensa"))
+        rule.waitForGone(hasText("Comprado"))
     }
 
     @Test

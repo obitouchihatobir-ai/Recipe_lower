@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -418,6 +420,66 @@ class BackupScreenTest {
         assertThat(documents.persisted).isEmpty()
         assertThat(status().driveUri).isNull()
         rule.onNodeWithTag("drive-setup").assertExists()
+    }
+
+    @Test
+    fun drive_existingCopyFromANewerVersion_showsThatError_andOnlyOffersAnotherFileOrCancel() {
+        saveRecipe()
+        val newer = zipOf(BACKUP_JSON_ENTRY to """{"schemaVersion":99,"appVersion":"9.0.0"}""".toByteArray())
+        documents.files[driveUri] = newer
+        val picker = launch(FakePicker(Uri.parse(driveUri)))
+
+        tap("drive-setup")
+
+        rule.waitFor(hasText(BackupMessages.NEWER_BACKUP))
+        rule.onNodeWithText(BackupMessages.DRIVE_NOT_A_COPY).assertDoesNotExist()
+        rule.onNodeWithTag("drive-replace").assertDoesNotExist()
+        rule.onNodeWithTag("drive-import-first").assertDoesNotExist()
+        // «Elegir otro archivo» vuelve a abrir el selector.
+        rule.onNodeWithTag("drive-choose-other").performClick()
+        rule.waitUntil(5_000) { picker.inputs.size == 2 }
+        rule.waitFor(hasText(BackupMessages.NEWER_BACKUP))
+        rule.onNodeWithTag("drive-cancel").performClick()
+        rule.waitForGone(hasTestTag("drive-replace-panel"))
+
+        assertThat(documents.files.getValue(driveUri).toList()).isEqualTo(newer.toList())
+        assertThat(documents.deleted).isEmpty()
+        assertThat(documents.openedForWriting).isEmpty()
+        assertThat(documents.persisted).isEmpty()
+        assertThat(status().driveUri).isNull()
+    }
+
+    @Test
+    fun drive_fileThatCannotBeRead_showsThatError_andIsNeverReplaced() {
+        saveRecipe()
+        documents.unreadable += driveUri
+        launch(FakePicker(Uri.parse(driveUri)))
+
+        tap("drive-setup")
+
+        rule.waitFor(hasText(BackupMessages.OPEN_FAILED))
+        rule.onNodeWithTag("drive-replace").assertDoesNotExist()
+        rule.onNodeWithTag("drive-choose-other").assertExists()
+        rule.onNodeWithTag("drive-cancel").performClick()
+        rule.waitForGone(hasTestTag("drive-replace-panel"))
+
+        assertThat(documents.deleted).isEmpty()
+        assertThat(documents.openedForWriting).isEmpty()
+        assertThat(documents.persisted).isEmpty()
+        assertThat(status().driveUri).isNull()
+    }
+
+    @Test
+    fun localCopies_buttonsSayWhichCopyTheyActOn() {
+        val name = importOverLocalRecipe()
+        launch()
+        rule.waitFor(hasTestTag("local-restore-$name"))
+
+        // Con TalkBack, cada «Restaurar» y «Guardar fuera» dice de qué copia es.
+        rule.onNodeWithTag("local-restore-$name")
+            .assert(hasContentDescription("Restaurar la copia: Antes de importar · 13 de noviembre de 2026, 21:40"))
+        rule.onNodeWithTag("local-save-$name")
+            .assert(hasContentDescription("Guardar fuera la copia: Antes de importar · 13 de noviembre de 2026, 21:40"))
     }
 
     @Test

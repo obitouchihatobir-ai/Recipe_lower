@@ -251,20 +251,38 @@ class WeeklyBackupTest {
     }
 
     @Test
-    fun copyToExternal_withW_thatLeavesOldBytes_isAFailure() = runBlocking<Unit> {
+    fun copyToExternal_withoutWt_overALongerOldCopy_doesNotTryW_andLeavesTheOldCopyWhole() = runBlocking<Unit> {
         seed()
         env.settings.updateBackupStatus { it.copy(driveUri = drive) }
         val file = env.manager.writeLocalBackup()!!
-        // La copia de la semana pasada era más larga y este proveedor no vacía el archivo con «w».
-        env.documents.files[drive] = ByteArray(file.length().toInt() + 5_000) { 7 }
+        // La copia de la semana pasada era más larga: con «w», algunos proveedores dejarían su final detrás de la
+        // nueva (un zip que otras herramientas no abren). Mejor no tocarla y avisar.
+        val old = ByteArray(file.length().toInt() + 5_000) { 7 }
+        env.documents.files[drive] = old
         env.documents.rejectedModes = setOf("wt")
         env.documents.wKeepsOldTail = true
 
         assertThat(env.manager.copyToExternal(file, drive)).isFalse()
 
-        assertThat(env.documents.modes).containsExactly("wt", "w").inOrder()
+        assertThat(env.documents.modes).containsExactly("wt")
+        assertThat(env.documents.files.getValue(drive).toList()).isEqualTo(old.toList())
         assertThat(status().lastError).isEqualTo(BackupMessages.DRIVE_FAILED)
         assertThat(status().lastExternal).isNull()
+    }
+
+    @Test
+    fun copyToExternal_withoutWt_overAShorterOldCopy_usesW() = runBlocking<Unit> {
+        seed()
+        env.settings.updateBackupStatus { it.copy(driveUri = drive) }
+        val file = env.manager.writeLocalBackup()!!
+        env.documents.files[drive] = ByteArray(100) { 7 }
+        env.documents.rejectedModes = setOf("wt")
+        env.documents.wKeepsOldTail = true
+
+        assertThat(env.manager.copyToExternal(file, drive)).isTrue()
+
+        assertThat(env.documents.modes).containsExactly("wt", "w").inOrder()
+        assertThat(env.documents.files.getValue(drive).toList()).isEqualTo(file.readBytes().toList())
     }
 
     @Test

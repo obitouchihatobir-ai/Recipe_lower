@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -74,6 +75,7 @@ internal fun ThemeChoice.label() = when (this) {
 
 private val hourFormat = DateTimeFormatter.ofPattern("HH:mm")
 private const val NIGHT_STEP_MINUTES = 30L
+private const val THEME_SAVE_FAILED = "No se pudo guardar el tema."
 
 /**
  * Tocar una muestra: con Automático y un tema claro, ese pasa a ser el de día; si no (Nocturno, o Automático
@@ -98,24 +100,30 @@ fun AppearanceRoute(container: AppContainer, onBack: () -> Unit) {
     val systemDark = isSystemInDarkTheme()
     val reveal = LocalThemeRevealOrigin.current
     val scope = rememberCoroutineScope()
-    SettingsPage("Apariencia", onBack, tag = "appearance-screen") {
+    // Si no se puede guardar (disco lleno…), la app no se cierra: lo dice un aviso y todo sigue como estaba.
+    val snackbar = remember { SnackbarHostState() }
+    SettingsPage("Apariencia", onBack, tag = "appearance-screen", snackbar = snackbar) {
         if (current != null) {
             AppearanceContent(
                 settings = current,
                 effective = resolveTheme(current, now, systemDark),
                 onTheme = { choice, origin ->
                     reveal(origin)
-                    scope.launch { repo.pickTheme(current, choice) }
+                    scope.launch { snackbar.reportFailure(THEME_SAVE_FAILED) { repo.pickTheme(current, choice) } }
                 },
                 onAuto = { enabled, origin ->
                     reveal(origin)
                     scope.launch {
-                        // Al apagarlo se queda lo que se ve ahora, sin cambio de tema.
-                        if (!enabled) repo.setTheme(resolveTheme(current, now, systemDark))
-                        repo.setAuto(enabled)
+                        snackbar.reportFailure(THEME_SAVE_FAILED) {
+                            // Al apagarlo se queda lo que se ve ahora, sin cambio de tema.
+                            if (!enabled) repo.setTheme(resolveTheme(current, now, systemDark))
+                            repo.setAuto(enabled)
+                        }
                     }
                 },
-                onNightWindow = { start, end -> scope.launch { repo.setNightWindow(start, end) } },
+                onNightWindow = { start, end ->
+                    scope.launch { snackbar.reportFailure("No se pudo guardar el horario de noche.") { repo.setNightWindow(start, end) } }
+                },
             )
         }
     }

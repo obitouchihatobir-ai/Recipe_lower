@@ -404,13 +404,21 @@ class BackupManager(
     }
 
     /**
-     * Copia [local] en el documento de Drive: con «wt» y, si el proveedor no lo admite, una vez más con «w». Después
-     * lee el documento y comprueba que mide lo mismo que la copia (con «w» algunos proveedores dejan al final bytes
-     * de la copia anterior).
+     * Copia [local] en el documento de Drive: con «wt» y, si el proveedor no lo admite, una vez más con «w». Con «w»
+     * algunos proveedores no vacían el archivo y dejan al final bytes de la copia anterior: si lo que ya hay es más
+     * largo que la copia nueva, no se usa «w» (la copia anterior se queda entera y se anota el fallo). Después lee el
+     * documento y comprueba que mide lo mismo que la copia.
      */
     private fun copyToDrive(local: File, uri: String): Boolean {
         var result = copyToDocument(local, uri, "wt")
-        if (result == CopyResult.OPEN_FAILED) result = copyToDocument(local, uri, "w")
+        if (result == CopyResult.OPEN_FAILED) {
+            val old = documentLength(uri)
+            if (old != null && old > local.length()) {
+                Log.w(TAG, "Sin «wt» y con una copia anterior más larga ($old bytes): no se usa «w»")
+                return false
+            }
+            result = copyToDocument(local, uri, "w")
+        }
         if (result != CopyResult.OK) return false
         val length = documentLength(uri)
         if (length != local.length()) {

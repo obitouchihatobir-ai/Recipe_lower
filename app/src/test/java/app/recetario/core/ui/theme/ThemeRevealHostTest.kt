@@ -74,4 +74,38 @@ class ThemeRevealHostTest {
         rule.mainClock.advanceTimeBy(700)
         assertTrue("al terminar todo es el tema nuevo", isColor(pixel(700, 1500), new))
     }
+
+    @Test
+    fun quickChangesBackAndForth_neverLeaveTheOldFrameOverTheScreen() {
+        val final = paletteFor(ThemeChoice.NOCTURNO).bg
+        launch()
+        rule.waitForIdle()
+
+        rule.mainClock.autoAdvance = false
+        // Cálido → Nocturno, con círculo desde la esquina.
+        rule.runOnIdle {
+            origin.value = Offset(0f, 0f)
+            theme.value = ThemeChoice.NOCTURNO
+        }
+        var elapsed = 0
+        while (!isColor(pixel(5, 5), final) && elapsed < 400) {
+            rule.mainClock.advanceTimeBy(16)
+            Thread.sleep(20)
+            elapsed += 16
+        }
+        rule.mainClock.advanceTimeBy(48) // a mitad del círculo
+        // → Fresco y, mientras se toma la imagen para ese cambio, otra vez → Nocturno (toques rápidos en
+        // Apariencia, o un toque que coincide con el cambio automático de la noche).
+        rule.runOnIdle { theme.value = ThemeChoice.FRESCO }
+        rule.mainClock.advanceTimeBy(16)
+        rule.runOnIdle { theme.value = ThemeChoice.NOCTURNO }
+        repeat(60) {
+            rule.mainClock.advanceTimeBy(16)
+            Thread.sleep(10)
+        }
+
+        assertTrue("queda la imagen vieja encima", isColor(pixel(700, 1500), final))
+        assertTrue("queda la imagen vieja encima", isColor(pixel(5, 5), final))
+        assertTrue("queda la imagen vieja encima", isColor(pixel(360, 780), final))
+    }
 }

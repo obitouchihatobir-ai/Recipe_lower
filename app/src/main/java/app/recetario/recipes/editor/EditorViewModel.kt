@@ -96,7 +96,7 @@ sealed interface EditorEvent {
  * de la receta guardada, así se recupera tanto al salir sin guardar como si Android cierra la app.
  */
 class EditorViewModel(
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle,
     private val repo: RecipeRepository,
     private val photoStore: PhotoStore,
     private val draftStore: DraftStore,
@@ -296,6 +296,8 @@ class EditorViewModel(
         }
         importedPhotos.clear()
         draftKey = recipe.id // las siguientes ediciones ya son de una receta existente
+        // Si Android cierra la app, el editor vuelve con esta receta (y su borrador `<id>.json`), no en blanco.
+        savedStateHandle[RECIPE_ID_ARG] = recipe.id
         return recipe.id
     }
 
