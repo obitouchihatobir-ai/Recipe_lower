@@ -1,6 +1,6 @@
 # Sazón — Etapa 2 «La app te ayuda» — Diseño
 
-Fecha: 2026-11-19 · Estado: borrador para aprobación
+Fecha: 2026-11-19 · Estado: aprobado por el usuario (2026-11-19)
 
 Este documento **amplía** el diseño general `2026-11-13-recetario-design.md` (lo llamaremos «el diseño general»). Lo que allí ya está decidido para la etapa 2 (§5, §6, §7, §8.1, §8.3, §8.6, §8.7 y §8.8) sigue valiendo y no se repite aquí: este texto solo añade lo nuevo, concreta lo que estaba abierto y anota los cambios. Si algo choca, manda este documento.
 
