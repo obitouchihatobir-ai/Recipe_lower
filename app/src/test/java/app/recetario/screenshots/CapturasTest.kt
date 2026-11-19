@@ -331,7 +331,10 @@ class CapturasTest {
 
         rule.runOnIdle { nav.navigate(RecipeDetail("crema")) }
         rule.waitFor(hasTestTag("detail-list"))
-        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("1½ tazas"))
+        // La lista existe antes de que lleguen los ingredientes (la cabecera se compone mientras carga): reintenta.
+        rule.waitUntil(10_000) {
+            runCatching { rule.onNodeWithTag("detail-list").performScrollToNode(hasText("1½ tazas")) }.isSuccess
+        }
         rule.onNodeWithText("1½ tazas").performClick()
         rule.waitFor(hasTestTag("conversions-panel"))
         save("detalle-equivalencias-$name")
