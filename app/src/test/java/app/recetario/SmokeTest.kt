@@ -19,6 +19,7 @@ class SmokeTest {
 
     @Test
     fun launchShowsHomeAndBottomBar() {
+        app.recetario.testing.startWatchdog("smoke", 90)
         // Los ajustes se leen del DataStore en otro hilo: hasta entonces no se pinta nada.
         composeRule.waitFor(hasText("¿Qué cocinamos hoy?"))
         composeRule.onNodeWithText("¿Qué cocinamos hoy?").assertIsDisplayed()
