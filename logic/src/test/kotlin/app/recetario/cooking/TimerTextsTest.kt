@@ -68,4 +68,27 @@ class TimerTextsTest {
     fun finishedTimerTitle() {
         assertThat(finishedTimerTitle("Paso 2: Sofríe la cebolla…")).isEqualTo("⏱ ¡Tiempo! — Paso 2: Sofríe la cebolla…")
     }
+
+    @Test
+    fun remainingFraction_followsTheClock_andCountsAddedMinutes() {
+        val running = CookingTimer("p1", "Paso 1", 300, endsAtElapsedMs = 1_000_000, remainingMsWhenPaused = null, finished = false)
+        assertThat(remainingFraction(running, now = 700_000)).isEqualTo(1f)
+        assertThat(remainingFraction(running, now = 850_000)).isEqualTo(0.5f)
+        assertThat(remainingFraction(running, now = 2_000_000)).isEqualTo(0f)
+        val paused = running.copy(endsAtElapsedMs = null, remainingMsWhenPaused = 75_000)
+        assertThat(remainingFraction(paused, now = 0)).isEqualTo(0.25f)
+        // Con «+1 min» el total crece: 6 minutos en total y quedan 3.
+        val longer = running.copy(totalSeconds = 360, endsAtElapsedMs = 1_180_000)
+        assertThat(remainingFraction(longer, now = 1_000_000)).isEqualTo(0.5f)
+    }
+
+    @Test
+    fun remainingFraction_finishedOrBroken_isEmptyAndNeverOutOfRange() {
+        val finished = CookingTimer("p1", "Paso 1", 300, endsAtElapsedMs = null, remainingMsWhenPaused = null, finished = true)
+        assertThat(remainingFraction(finished, now = 0)).isEqualTo(0f)
+        val zero = finished.copy(totalSeconds = 0, finished = false, remainingMsWhenPaused = 5_000)
+        assertThat(remainingFraction(zero, now = 0)).isEqualTo(0f)
+        val tooMuch = finished.copy(finished = false, remainingMsWhenPaused = 999_000)
+        assertThat(remainingFraction(tooMuch, now = 0)).isEqualTo(1f)
+    }
 }

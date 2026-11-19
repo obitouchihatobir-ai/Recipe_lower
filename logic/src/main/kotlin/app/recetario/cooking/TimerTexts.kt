@@ -46,3 +46,12 @@ fun ongoingTimerLines(timers: List<CookingTimer>, now: Long): List<String> {
 
 /** Título del aviso de fin: «⏱ ¡Tiempo! — Paso 2: Sofríe la cebolla…». */
 fun finishedTimerTitle(label: String): String = "⏱ ¡Tiempo! — $label"
+
+/**
+ * Lo que le queda a [timer] en [now], de 0 a 1 (1 = recién empezado): el anillo del botón del modo cocina.
+ * Cuenta los minutos añadidos con «+1 min» (están en `totalSeconds`). Terminado o sin duración: 0.
+ */
+fun remainingFraction(timer: CookingTimer, now: Long): Float {
+    if (timer.finished || timer.totalSeconds <= 0) return 0f
+    return (timer.remainingMs(now).toFloat() / (timer.totalSeconds * 1000L)).coerceIn(0f, 1f)
+}
