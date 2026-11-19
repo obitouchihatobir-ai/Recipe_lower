@@ -23,7 +23,8 @@ import kotlin.random.Random
 /** Lo que dura el confeti de «¡Listo!» (más que las demás animaciones: es la celebración del final). */
 const val CONFETTI_MS = 1_200
 
-private val INGREDIENTS = listOf("🌿", "🍋", "🧄", "🌶️", "🧀", "🍅", "🥕", "🫒", "🍄", "🥑")
+// Sin emojis muy nuevos (🫒 sale como un recuadro en Android 8 a 10).
+private val INGREDIENTS = listOf("🌿", "🍋", "🧄", "🌶️", "🧀", "🍅", "🥕", "🌽", "🍄", "🥑")
 
 /** Una pieza del confeti: dónde cae (fracción del ancho), cuándo empieza y cuánto se mece y gira. */
 private class Piece(val emoji: String, val x: Float, val delay: Float, val fall: Float, val sway: Float, val spin: Float, val size: Float)
