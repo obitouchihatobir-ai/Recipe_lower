@@ -1,6 +1,7 @@
 package app.recetario.core.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteCantOpenDatabaseException
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -109,6 +110,29 @@ class DatabaseUpgradeGuardTest {
         // El manejador de serie de Android la habría borrado: sigue ahí, intacta.
         assertThat(dbFile.readText()).isEqualTo(garbage)
         assertThat(backupsDir.list().orEmpty().toList()).isEmpty()
+    }
+
+    @Test
+    fun guard_readOnlyOpenFails_fallsBackToReadWrite() {
+        // Como en Android 8.0 y 8.1 (SQLite < 3.22): una base de datos en WAL sin -shm no se abre en solo lectura.
+        var readOnlyTries = 0
+        val noReadOnly = { _: File ->
+            readOnlyTries++
+            throw SQLiteCantOpenDatabaseException("unable to open database file (sin -shm)")
+        }
+        fun guardWithoutReadOnly() = DatabaseUpgradeGuard(dbFile, backupsDir, testClock, openReadOnly = noReadOnly)
+
+        // v1: la copia se hace igual.
+        createV1Database(helper, dbName)
+        assertThat(guardWithoutReadOnly().prepare()).isEqualTo(GuardResult.Copied(expectedCopy))
+        assertThat(readOnlyTries).isEqualTo(1)
+
+        // v2 (Room la migra): lista, sin otra copia.
+        AppDatabase.create(context, dbName).apply { openHelper.writableDatabase }.close()
+        assertThat(guardWithoutReadOnly().prepare()).isEqualTo(GuardResult.Ready)
+        assertThat(readOnlyTries).isEqualTo(2)
+        assertThat(backupsDir.list()!!.toList()).containsExactly(expectedCopy)
+        assertThat(readDatabaseFile(dbFile, live = true)).isEqualTo(AppDatabase.VERSION to listOf("Sopa de tortilla"))
     }
 
     @Test

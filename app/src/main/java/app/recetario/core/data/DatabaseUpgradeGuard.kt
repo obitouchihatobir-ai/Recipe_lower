@@ -43,7 +43,8 @@ sealed interface GuardResult {
  * `RecetarioApp.onCreate`, así vale también para WorkManager): si [dbFile] existe y su `user_version` es menor que
  * [targetVersion], la copia tal cual en [backupsDir] como `antes-de-actualizar-v<vieja>-<AAAA-MM-DD-HHmm>[-N].db`.
  *
- * 0. Lee `user_version` abriéndola en solo lectura (lo único que se hace en un arranque normal).
+ * 0. Lee `user_version` abriéndola en solo lectura (lo único que se hace en un arranque normal; si eso falla sin
+ *    estar dañada, como en Android 8 sin `-shm`, la lee en lectura y escritura).
  * 1. Solo si hay que migrar, la abre en lectura y escritura, en WAL como la abre Room, y pasa el WAL al archivo
  *    principal (`PRAGMA wal_checkpoint(TRUNCATE)`); así el archivo principal lo tiene todo.
  * 2. La copia a un `.tmp` con fsync. La copia se pasa a diario clásico (`journal_mode=DELETE`): así se puede leer
@@ -63,6 +64,10 @@ class DatabaseUpgradeGuard(
     private val clock: Clock,
     private val targetVersion: Int = AppDatabase.VERSION,
     private val beforeRename: (File) -> Unit = {},
+    /** Apertura en solo lectura para leer `user_version`; las pruebas la hacen fallar. */
+    private val openReadOnly: (File) -> SQLiteDatabase = {
+        SQLiteDatabase.openDatabase(it.path, null, SQLiteDatabase.OPEN_READONLY, KEEP_ON_CORRUPTION)
+    },
 ) {
     /** La base de datos (o su copia, idéntica) está dañada. */
     private class UnreadableDatabaseException(message: String) : Exception(message)
@@ -121,9 +126,24 @@ class DatabaseUpgradeGuard(
 
     private fun unreadable() = GuardResult.Failed(BackupMessages.DATABASE_UNREADABLE, databaseUnreadable = true)
 
-    /** `user_version`, en solo lectura y sin tocar el modo de diario: es lo único que se hace en un arranque normal. */
+    /**
+     * `user_version`, en solo lectura y sin tocar el modo de diario: es lo único que se hace en un arranque normal.
+     * Con SQLite anterior a 3.22 (Android 8.0 y 8.1) una base de datos en WAL no se abre en solo lectura si no
+     * existe su `-shm`, que es lo normal tras cerrarla bien: si falla por algo que no es un daño claro, se lee una
+     * vez más abriéndola en lectura y escritura (en WAL, como Room). Solo si también falla no se puede leer.
+     */
     private fun readVersion(): Int {
-        val db = SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY, KEEP_ON_CORRUPTION)
+        try {
+            return versionOf(openReadOnly(dbFile))
+        } catch (e: SQLiteDatabaseCorruptException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo leer la versión en solo lectura; se intenta en lectura y escritura", e)
+        }
+        return versionOf(openReadWrite())
+    }
+
+    private fun versionOf(db: SQLiteDatabase): Int {
         try {
             return db.version
         } finally {
@@ -131,16 +151,18 @@ class DatabaseUpgradeGuard(
         }
     }
 
+    // Con ENABLE_WRITE_AHEAD_LOGGING Android la deja en WAL (o la pone), como la abre Room después; sin él la pasaría
+    // a su modo de diario por defecto.
+    private fun openReadWrite(): SQLiteDatabase = SQLiteDatabase.openDatabase(
+        dbFile.path,
+        null,
+        SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING,
+        KEEP_ON_CORRUPTION,
+    )
+
     /** Pasa el WAL al archivo principal, para copiar solo ese archivo. */
     private fun checkpoint() {
-        val db = SQLiteDatabase.openDatabase(
-            dbFile.path,
-            null,
-            // Con ENABLE_WRITE_AHEAD_LOGGING Android la deja en WAL (o la pone), como la abre Room después; sin él la
-            // pasaría a su modo de diario por defecto.
-            SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING,
-            KEEP_ON_CORRUPTION,
-        )
+        val db = openReadWrite()
         try {
             db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c ->
                 // La primera columna es 1 si no se pudo completar (otra conexión la tenía ocupada).
