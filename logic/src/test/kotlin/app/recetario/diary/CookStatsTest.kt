@@ -98,6 +98,10 @@ class CookStatsTest {
         assertThat(result.first()).isEqualTo("old7")
         assertThat(result).doesNotContain("fresh")
         assertThat(result).doesNotContain("never")
-        assertThat(longTimeNoCook(stats, today, limit = 20)).contains("edge")
+        val all = longTimeNoCook(stats, today, limit = 20)
+        assertThat(all).contains("edge")
+        assertThat(all).doesNotContain("fresh")
+        assertThat(all).doesNotContain("never")
+        assertThat(all).hasSize(8)
     }
 }

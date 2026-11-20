@@ -134,6 +134,13 @@ class RecipeFilterPantryAndSortTest {
     }
 
     @Test
+    fun pantryOnly_recipeWithOnlyBasics_excluded() {
+        val list = listOf(r("basics", "A", "Sal", "Agua"), r("empty", "B"), r("ok", "C", "Tomate"))
+        val out = list.applyFilter(RecipeFilter(pantryOnly = true), pantry = listOf("tomate"))
+        assertThat(ids(out)).containsExactly("ok")
+    }
+
+    @Test
     fun sort_mostCooked_tiesByTitle() {
         val list = listOf(r("1", "Zeta"), r("2", "Beta"), r("3", "Alfa"), r("4", "Gamma"))
         val stats = mapOf(

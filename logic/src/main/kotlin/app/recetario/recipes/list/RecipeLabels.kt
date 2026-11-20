@@ -56,7 +56,8 @@ fun resultsLabel(n: Int): String = if (n == 1) "1 receta" else "$n recetas"
 fun RecipeFilter.sheetFilterCount(): Int =
     (if (tags.isNotEmpty()) 1 else 0) +
         listOf(taste, alcoholic, serveTemp, maxMinutes, moment, difficulty).count { it != null } +
-        (if (favoritesOnly) 1 else 0)
+        (if (favoritesOnly) 1 else 0) +
+        (if (pantryOnly) 1 else 0)
 
 /** Quita los filtros de la hoja y conserva la búsqueda, las categorías y el orden. */
 fun RecipeFilter.withoutSheetFilters(): RecipeFilter =

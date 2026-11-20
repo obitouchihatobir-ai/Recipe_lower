@@ -2,6 +2,7 @@ package app.recetario.shopping
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTouchInput
@@ -12,6 +13,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
+import kotlinx.coroutines.flow.first
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
 import app.recetario.core.ui.theme.RecetarioTheme
@@ -44,6 +48,9 @@ class ShoppingScreenTest {
 
     @After
     fun tearDown() = container.database.close()
+
+    /** La cabecera de una sección de la lista (la pestaña «Despensa» se llama igual que la sección). */
+    private fun section(name: String) = hasText(name).and(hasAnyAncestor(hasTestTag("shopping-list")))
 
     private fun launch() = rule.setContent {
         RecetarioTheme(ThemeChoice.CALIDO) { ShoppingRoute(container) }
@@ -80,7 +87,7 @@ class ShoppingScreenTest {
         rule.onNodeWithText("Pan").performClick()
         rule.waitFor(hasText("Comprado"))
         // «Pan» está ahora debajo de «Comprado», y su sección («Despensa») ya no sale: no queda nada por comprar ahí.
-        rule.waitForGone(hasText("Despensa"))
+        rule.waitForGone(section("Despensa"))
         rule.mainClock.advanceTimeBy(1_000)
         val header = rule.onNodeWithText("Comprado").fetchSemanticsNode().boundsInRoot
         val pan = rule.onNodeWithText("Pan").fetchSemanticsNode().boundsInRoot
@@ -88,7 +95,7 @@ class ShoppingScreenTest {
         rule.onNodeWithText("Lácteos").assertIsDisplayed()
 
         rule.onNodeWithText("Pan").performClick()
-        rule.waitFor(hasText("Despensa"))
+        rule.waitFor(section("Despensa"))
         rule.waitForGone(hasText("Comprado"))
     }
 
@@ -125,12 +132,12 @@ class ShoppingScreenTest {
         runBlocking { container.shoppingRepository.addManual("Pan", null, MeasureUnit.PIECE) }
         launch()
         rule.waitFor(hasText("Pan"))
-        rule.onNodeWithText("Despensa").assertIsDisplayed()
+        rule.onNode(section("Despensa")).assertIsDisplayed()
         rule.onNodeWithText("Pan").performTouchInput { longClick() }
         rule.waitFor(hasText("Bebidas"))
         rule.onNodeWithTag("section-option-DRINKS").performClick()
         rule.waitFor(hasText("Bebidas"))
-        rule.waitForGone(hasText("Despensa"))
+        rule.waitForGone(section("Despensa"))
     }
 
     @Test
@@ -166,5 +173,48 @@ class ShoppingScreenTest {
         rule.waitForGone(hasTestTag("shopping-add-panel"))
         rule.onNodeWithTag("shopping-add").performClick()
         rule.onNodeWithText("Tomates").assertIsDisplayed()
+    }
+
+    @Test
+    fun listIsTheDefaultTab() {
+        launch()
+        rule.waitFor(hasTestTag("shopping-tab-list"))
+        rule.onNodeWithTag("shopping-tab-list").assertIsSelected()
+        rule.onNodeWithTag("shopping-tab-pantry").assertIsNotSelected()
+    }
+
+    @Test
+    fun itemInPantry_showsYaLoTienes() {
+        runBlocking {
+            container.pantryRepository.add("tomate")
+            container.shoppingRepository.addManual("Tomates, maduros", 3.0, MeasureUnit.PIECE)
+            container.shoppingRepository.addManual("Leche", 1.0, MeasureUnit.LITER)
+        }
+        launch()
+        rule.waitFor(hasText("Leche"))
+        rule.waitFor(hasText("ya lo tienes"))
+        // Solo los tomates: la leche no está en la despensa.
+        assertThat(rule.onAllNodes(hasText("ya lo tienes"), useUnmergedTree = true).fetchSemanticsNodes()).hasSize(1)
+        rule.onNode(hasText("Tomates, maduros").and(hasClickAction())).assert(hasText("ya lo tienes"))
+    }
+
+    @Test
+    fun check_offersToPantry_addsIt() {
+        runBlocking { container.shoppingRepository.addManual("Arroz", 1.0, MeasureUnit.KILOGRAM) }
+        launch()
+        rule.waitFor(hasText("Arroz"))
+
+        rule.onNodeWithText("Arroz").performClick()
+        rule.waitFor(hasText("A la despensa"))
+        rule.onNodeWithText("A la despensa").performClick()
+
+        rule.waitUntil(5_000) {
+            runBlocking { container.pantryRepository.observe().first().map { it.name } } == listOf("Arroz")
+        }
+        // Desmarcar no ofrece nada.
+        rule.waitForGone(hasText("A la despensa"))
+        rule.onNodeWithText("Arroz").performClick()
+        rule.mainClock.advanceTimeBy(500)
+        rule.onNodeWithText("A la despensa").assertDoesNotExist()
     }
 }

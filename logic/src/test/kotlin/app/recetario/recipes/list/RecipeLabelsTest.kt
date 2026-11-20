@@ -68,13 +68,14 @@ class RecipeLabelsTest {
         val all = RecipeFilter(
             tags = setOf("a", "b"), taste = Taste.SWEET, alcoholic = false, serveTemp = ServeTemp.COLD,
             maxMinutes = 30, moment = Moment.DINNER, difficulty = Difficulty.EASY, favoritesOnly = true,
+            pantryOnly = true,
         )
-        assertThat(all.sheetFilterCount()).isEqualTo(8)
+        assertThat(all.sheetFilterCount()).isEqualTo(9)
     }
 
     @Test
     fun clearedSheetFilters_keepQueryAndCategories() {
-        val f = RecipeFilter(query = "té", categoryIds = setOf("c"), taste = Taste.SALTY, favoritesOnly = true, sort = SortOrder.ALPHABETIC)
+        val f = RecipeFilter(query = "té", categoryIds = setOf("c"), taste = Taste.SALTY, favoritesOnly = true, pantryOnly = true, sort = SortOrder.ALPHABETIC)
         assertThat(f.withoutSheetFilters()).isEqualTo(RecipeFilter(query = "té", categoryIds = setOf("c"), sort = SortOrder.ALPHABETIC))
     }
 }

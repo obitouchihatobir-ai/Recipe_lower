@@ -30,6 +30,20 @@ class PantryMatchTest {
     }
 
     @Test
+    fun pantryMatch_ignoresPunctuation() {
+        assertThat(pantryCovers("cebolla", "cebolla, picada")).isTrue()
+        assertThat(pantryCovers("tomate", "tomate (maduro)")).isTrue()
+        assertThat(pantryCovers("chile", "chile-guajillo")).isTrue()
+        assertThat(pantryCovers("sal", "salsa, de tomate")).isFalse()
+    }
+
+    @Test
+    fun pantryItem_holdsFields() {
+        val item = PantryItem("1", "Limón", "limon", Instant.EPOCH)
+        assertThat(item.normalized).isEqualTo("limon")
+    }
+
+    @Test
     fun pantryMatch_accents() {
         assertThat(pantryCovers("limón", "limon")).isTrue()
     }

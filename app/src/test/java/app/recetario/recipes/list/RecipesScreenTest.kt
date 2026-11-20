@@ -4,6 +4,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performScrollTo
+import app.recetario.recipes.quantity.MeasureUnit
+import app.recetario.testing.ingredient
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -121,6 +127,38 @@ class RecipesScreenTest {
 
         // En la cuadrícula, el orden de lectura: de arriba abajo y de izquierda a derecha.
         rule.waitUntil(5_000) { readingOrder() == listOf(limonada, crema, bloody) }
+    }
+
+    @Test
+    fun filter_conMiDespensa() {
+        runBlocking {
+            container.pantryRepository.add("limones")
+            container.pantryRepository.add("hierbabuena")
+        }
+        openRecipes(
+            sampleRecipe(
+                "limonada", limonada, DefaultCategories.DRINK_ID,
+                ingredients = listOf(
+                    ingredient("l1", "Limón", 4.0, MeasureUnit.PIECE),
+                    ingredient("l2", "Hierbabuena", null, MeasureUnit.PINCH),
+                    ingredient("l3", "Agua", 1.0, MeasureUnit.LITER),
+                    ingredient("l4", "Azúcar", 100.0, MeasureUnit.GRAM),
+                ),
+            ),
+            sampleRecipe(
+                "crema", crema, DefaultCategories.FOOD_ID,
+                ingredients = listOf(ingredient("c1", "Calabaza", 800.0, MeasureUnit.GRAM), ingredient("c2", "Sal", null, MeasureUnit.PINCH)),
+            ),
+        )
+        rule.waitFor(hasText(crema))
+
+        rule.onNodeWithContentDescription("Filtros").performClick()
+        rule.waitFor(hasTestTag("filter-pantry"))
+        rule.onNodeWithTag("filter-pantry").performScrollTo().performClick()
+
+        rule.waitForGone(hasText(crema))
+        rule.onNodeWithText(limonada).assertExists()
+        rule.onNodeWithTag("filter-pantry").assertIsOn()
     }
 
     private fun readingOrder(): List<String> = listOf(limonada, bloody, crema)
