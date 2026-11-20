@@ -67,6 +67,10 @@ import app.recetario.core.ui.components.staggeredEntrance
 import app.recetario.core.ui.icons.AppIcons
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.core.ui.theme.LocalRecetarioShapes
+import app.recetario.diary.LogDraft
+import app.recetario.diary.LogEntryPanel
+import app.recetario.diary.LogFormActions
+import app.recetario.diary.rememberLogFormActions
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.list.formatDurationSeconds
 import app.recetario.recipes.list.formatMinutes
@@ -124,6 +128,10 @@ fun DetailRoute(
         }
     }
 
+    val editor = vm.logEditor
+    val logDraft = editor?.draft?.collectAsStateWithLifecycle()?.value
+    val logActions = editor?.let { rememberLogFormActions(it) }
+
     DetailContent(
         state = state,
         recipeId = recipeId,
@@ -152,6 +160,9 @@ fun DetailRoute(
         },
         snackbar = snackbar,
         onCooking = { onCooking(state.servings) },
+        logDraft = logDraft,
+        logActions = logActions,
+        onLog = vm::startLog,
     )
 }
 
@@ -191,6 +202,10 @@ fun DetailContent(
     cupMl: Int,
     onNeed: () -> Unit,
     onCooking: () -> Unit,
+    logDraft: LogDraft? = null,
+    logActions: LogFormActions? = null,
+    /** «Lo hice» (null: sin diario). */
+    onLog: (() -> Unit)? = null,
 ) {
     val c = LocalRecetarioColors.current
     val radius = LocalRecetarioShapes.current.radius
@@ -199,6 +214,7 @@ fun DetailContent(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     // Ingrediente cuya hoja de equivalencias está abierta.
     var conversionsFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var historyOpen by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(c.bg)) {
         LazyColumn(
@@ -283,6 +299,9 @@ fun DetailContent(
                             if (state.categoryName.isNotBlank()) TagPill(state.categoryName)
                             recipe.tags.forEach { TagPill(it, accent = true) }
                             recipe.serveTemp?.let { TagPill(serveTempText(it), accent = true) }
+                        }
+                        if (onLog != null) {
+                            CookStatsRow(state.stats, state.today, onHistory = { historyOpen = true }, onLog = onLog)
                         }
                     }
                 }
@@ -422,6 +441,20 @@ fun DetailContent(
         val openQuantity = if (recipe != null && open != null) scaleQuantity(open.quantity, recipe.servings, state.servings) else null
         if (open != null && openQuantity != null) {
             ConversionsPanel(open, openQuantity, state.quantities[open.id].orEmpty(), cupMl, onDismiss = { conversionsFor = null })
+        }
+        if (historyOpen && recipe != null && logDraft == null) {
+            HistoryPanel(
+                stats = state.stats,
+                history = state.history,
+                today = state.today,
+                photoStore = photoStore,
+                emoji = state.categoryEmoji,
+                onLog = onLog?.let { log -> { historyOpen = false; log() } },
+                onDismiss = { historyOpen = false },
+            )
+        }
+        if (logDraft != null && logActions != null) {
+            LogEntryPanel("Lo hice", logDraft, state.today, photoStore, logActions)
         }
     }
 

@@ -8,11 +8,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.recetario.AppContainer
+import app.recetario.diary.LogDraft
+import app.recetario.diary.LogEntryEditor
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.list.DEFAULT_EMOJI
 import app.recetario.recipes.model.Recipe
 import app.recetario.recipes.quantity.formatQuantity
 import app.recetario.recipes.quantity.scaleQuantity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -40,6 +44,13 @@ data class CookingUiState(
     val finished: Boolean get() = stepCount > 0 && currentIndex >= stepCount
 }
 
+/** La tarjeta «Guardar en el diario» bajo «¡Listo!». */
+sealed interface DiaryCardUi {
+    data object Hidden : DiaryCardUi
+    data class Form(val draft: LogDraft) : DiaryCardUi
+    data object Saved : DiaryCardUi
+}
+
 /**
  * Modo cocina. Lee `recipeId` y `servings` de la ruta [app.recetario.navigation.Cooking]. El paso actual, los
  * pasos hechos y los ingredientes tachados viven en [savedStateHandle] (sobreviven al giro y a que Android
@@ -49,7 +60,12 @@ class CookingViewModel(
     private val savedStateHandle: SavedStateHandle,
     repo: RecipeRepository,
     private val timerManager: TimerManager,
+    /** Crea el editor de la entrada del diario de «¡Listo!» (null: sin diario, en algunas pruebas). */
+    newLogEditor: ((CoroutineScope) -> LogEntryEditor)? = null,
 ) : ViewModel() {
+    /** La entrada del diario que se apunta al terminar. */
+    val logEditor: LogEntryEditor? = newLogEditor?.invoke(viewModelScope)
+
     private val recipeId: String = savedStateHandle[RECIPE_ID_ARG] ?: ""
     private val servingsArg: Int = savedStateHandle[SERVINGS_ARG] ?: 0
 
@@ -90,6 +106,52 @@ class CookingViewModel(
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CookingUiState())
+
+    /** La tarjeta del diario: el formulario mientras hay borrador, «✓ Guardado» tras guardar, nada con «Ahora no». */
+    val diaryCard: StateFlow<DiaryCardUi> = run {
+        val editor = logEditor ?: return@run MutableStateFlow<DiaryCardUi>(DiaryCardUi.Hidden)
+        combine(savedStateHandle.getStateFlow<String?>(DIARY_CARD_KEY, null), editor.draft) { card, draft ->
+            when {
+                card == DIARY_DISMISSED -> DiaryCardUi.Hidden
+                draft != null -> DiaryCardUi.Form(draft)
+                card == DIARY_SAVED -> DiaryCardUi.Saved
+                else -> DiaryCardUi.Hidden
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DiaryCardUi.Hidden)
+    }
+
+    /**
+     * Al terminar, la tarjeta del diario se abre ya rellena (hoy, sin valoración ni nota). También vuelve tras recrear
+     * el proceso si no se había guardado ni descartado.
+     */
+    fun openDiaryCard() {
+        val editor = logEditor ?: return
+        val r = recipe ?: return
+        if (!finished) return
+        val card = savedStateHandle.get<String>(DIARY_CARD_KEY)
+        if (card == DIARY_DISMISSED || card == DIARY_SAVED) return
+        if (editor.draft.value == null) editor.startNew(r.id, r.title)
+        savedStateHandle[DIARY_CARD_KEY] = DIARY_OPEN
+    }
+
+    /** «Guardar»: se guarda aunque se salga enseguida del modo cocina. */
+    fun saveDiary() {
+        val editor = logEditor ?: return
+        if (editor.draft.value == null) return
+        savedStateHandle[DIARY_CARD_KEY] = DIARY_SAVED
+        editor.save()
+    }
+
+    /** «Ahora no». */
+    fun dismissDiary() {
+        logEditor?.cancel()
+        savedStateHandle[DIARY_CARD_KEY] = DIARY_DISMISSED
+    }
+
+    override fun onCleared() {
+        // Sin guardar: las fotos que se eligieron sobran.
+        logEditor?.cancel()
+    }
 
     private val recipe: Recipe? get() = loaded.value?.recipe
 
@@ -162,6 +224,10 @@ class CookingViewModel(
         private const val CURRENT_KEY = "currentIndex"
         private const val DONE_KEY = "doneSteps"
         private const val CHECKED_KEY = "checkedIngredients"
+        private const val DIARY_CARD_KEY = "diaryCard"
+        private const val DIARY_OPEN = "open"
+        private const val DIARY_SAVED = "saved"
+        private const val DIARY_DISMISSED = "dismissed"
 
         fun factory(container: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -169,6 +235,7 @@ class CookingViewModel(
                     savedStateHandle = createSavedStateHandle(),
                     repo = container.recipeRepository,
                     timerManager = container.timerManager,
+                    newLogEditor = container::newLogEditor,
                 )
             }
         }

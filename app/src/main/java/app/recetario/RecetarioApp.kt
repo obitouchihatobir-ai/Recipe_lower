@@ -15,6 +15,9 @@ import app.recetario.cooking.launchTimerTicker
 import app.recetario.core.data.AppDatabase
 import app.recetario.core.data.DatabaseUpgradeGuard
 import app.recetario.core.data.GuardResult
+import app.recetario.diary.DiaryRepository
+import app.recetario.diary.LogEntryEditor
+import app.recetario.diary.RoomDiaryRepository
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.data.RoomRecipeRepository
@@ -82,6 +85,18 @@ class AppContainer(
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")
     val recipeRepository: RecipeRepository = RoomRecipeRepository(database, photoStore, clock)
+
+    /**
+     * Trabajo que no debe cortarse al cerrar una pantalla (guardar en el diario desde «¡Listo!» y salir enseguida,
+     * borrar las fotos de una entrada cuando caduca «Deshacer»).
+     */
+    val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    val diaryRepository: DiaryRepository = RoomDiaryRepository(database, photoStore, clock)
+
+    /** Editor de una entrada del diario para una pantalla ([scope]: el de su ViewModel). */
+    fun newLogEditor(scope: CoroutineScope): LogEntryEditor =
+        LogEntryEditor(diaryRepository, photoStore, clock, scope, applicationScope)
 
     val settingsRepository = SettingsRepository(settingsDataStore, localStateDataStore)
 

@@ -41,4 +41,10 @@ interface PairingRatingDao {
 
     @Query("DELETE FROM pairing_ratings")
     suspend fun deleteAll()
+
+    /** Las valoraciones en las que aparece la receta [recipeId] (por cualquiera de los dos lados). */
+    @Query(
+        "DELETE FROM pairing_ratings WHERE (aKind = 'RECIPE' AND aId = :recipeId) OR (bKind = 'RECIPE' AND bId = :recipeId)",
+    )
+    suspend fun deleteForRecipe(recipeId: String)
 }

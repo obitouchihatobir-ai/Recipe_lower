@@ -22,7 +22,10 @@ interface RecipeRepository {
     /** Inserta o actualiza el agregado completo en una transacción; `updatedAt` se fija con el reloj. */
     suspend fun save(recipe: Recipe)
 
-    /** Borra la receta, sus datos hijos y los archivos de foto. */
+    /**
+     * Borra la receta, sus datos hijos, sus valoraciones de maridaje y los archivos de foto que nadie más usa. Sus
+     * entradas del diario se quedan (sin receta y con el título guardado), con sus fotos.
+     */
     suspend fun delete(id: String)
     suspend fun setFavorite(id: String, favorite: Boolean)
 
@@ -36,7 +39,7 @@ interface RecipeRepository {
     suspend fun renameTag(old: String, new: String)
     suspend fun deleteTag(name: String)
 
-    /** True si alguna receta (portada o paso) usa ese archivo de foto. */
+    /** True si alguna receta (portada o paso) o alguna entrada del diario usa ese archivo de foto. */
     suspend fun isPhotoReferenced(name: String): Boolean
 
     /** Cuándo se apuntó la receta más antigua (para el recordatorio de copias), o null si no hay recetas. */
@@ -80,9 +83,11 @@ class RoomRecipeRepository(
             recipes.coverPhoto(id)?.let(files::add)
             files += recipes.stepPhotos(id)
             recipes.delete(id)
+            db.pairingRatingDao().deleteForRecipe(id)
             tags.deleteOrphans()
         }
-        files.forEach(photos::delete)
+        // Tras confirmar: una foto que también usa el diario (u otra receta) se queda.
+        files.filterNot { recipes.isPhotoReferenced(it) }.forEach(photos::delete)
     }
 
     override suspend fun setFavorite(id: String, favorite: Boolean) = recipes.setFavorite(id, favorite)

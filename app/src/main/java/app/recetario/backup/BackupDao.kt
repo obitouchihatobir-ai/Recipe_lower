@@ -35,8 +35,11 @@ interface BackupDao {
     @Query("SELECT updatedAt FROM recipes WHERE id = :id")
     suspend fun recipeUpdatedAt(id: String): Long?
 
-    /** Fotos que usa alguna receta (portadas y pasos). */
-    @Query("SELECT coverPhoto FROM recipes WHERE coverPhoto IS NOT NULL UNION SELECT fileName FROM step_photos")
+    /** Fotos en uso: portadas, fotos de paso y fotos del diario. */
+    @Query(
+        "SELECT coverPhoto FROM recipes WHERE coverPhoto IS NOT NULL UNION SELECT fileName FROM step_photos " +
+            "UNION SELECT fileName FROM cook_log_photos",
+    )
     suspend fun photoNames(): List<String>
 
     @Insert

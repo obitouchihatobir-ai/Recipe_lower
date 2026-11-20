@@ -92,11 +92,14 @@ import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.motion.animationProgress
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.core.ui.theme.LocalRecetarioShapes
+import app.recetario.diary.LogEntryForm
+import app.recetario.diary.LogFormActions
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.detail.RoundButton
 import app.recetario.recipes.list.formatDurationSeconds
 import app.recetario.recipes.model.Ingredient
 import app.recetario.recipes.model.Step
+import java.time.LocalDate
 
 internal enum class StepStatus { DONE, CURRENT, PENDING }
 
@@ -675,5 +678,47 @@ private fun Modifier.fadeUpOnAppear(): Modifier {
     return graphicsLayer {
         alpha = progress.value
         translationY = (1f - progress.value) * 8.dp.toPx()
+    }
+}
+
+/**
+ * «Guardar en el diario», bajo «¡Listo!»: estrellas opcionales, nota y fotos, con «Guardar» y «Ahora no». Va aparte
+ * de la tarjeta final: ninguna de sus acciones tapa ni retrasa «Volver a la receta».
+ */
+@Composable
+internal fun DiaryCard(card: DiaryCardUi, today: LocalDate, photoStore: PhotoStore, actions: LogFormActions) {
+    val c = LocalRecetarioColors.current
+    val shape = RoundedCornerShape(LocalRecetarioShapes.current.radius)
+    when (card) {
+        DiaryCardUi.Hidden -> Unit
+        DiaryCardUi.Saved -> Text(
+            "✓ Guardado en el diario",
+            color = c.ink,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .testTag("diary-saved")
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        is DiaryCardUi.Form -> Column(
+            Modifier
+                .fillMaxWidth()
+                .fadeUpOnAppear()
+                .background(c.surface, shape)
+                .border(1.dp, c.line, shape)
+                .padding(16.dp)
+                .testTag("diary-card"),
+        ) {
+            Text(
+                "Guardar en el diario",
+                color = c.ink,
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 17.sp),
+                modifier = Modifier.semantics { heading() },
+            )
+            MutedText("Hoy · ${card.draft.recipeTitle}", Modifier.padding(top = 2.dp, bottom = 8.dp))
+            LogEntryForm(card.draft, today, photoStore, actions, dateEditable = false, cancelLabel = "Ahora no")
+        }
     }
 }

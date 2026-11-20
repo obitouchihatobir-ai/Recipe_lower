@@ -44,6 +44,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.recetario.AppContainer
 import app.recetario.core.ui.components.MutedText
+import app.recetario.diary.LogFormActions
+import app.recetario.diary.rememberLogFormActions
 import app.recetario.core.ui.motion.IngredientConfetti
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
@@ -52,6 +54,7 @@ import app.recetario.recipes.model.Recipe
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
+import java.time.LocalDate
 
 /** Cada cuánto se repinta la cuenta atrás de la pantalla mientras corre algún temporizador. */
 private const val COUNTDOWN_REFRESH_MS = 250L
@@ -92,6 +95,22 @@ fun CookingRoute(container: AppContainer, onClose: () -> Unit) {
 
     val now = rememberTimerNow(running = state.timers.values.any { it.isRunning }, now = vm::now)
 
+    // «¡Listo!»: la tarjeta del diario se abre ya rellena.
+    val diaryCard by vm.diaryCard.collectAsStateWithLifecycle()
+    LaunchedEffect(state.loading, state.finished) {
+        if (!state.loading && state.finished) vm.openDiaryCard()
+    }
+    val diaryActions = vm.logEditor?.let { editor ->
+        val actions = rememberLogFormActions(editor)
+        remember(actions) {
+            LogFormActions(
+                onRate = actions.onRate, onNote = actions.onNote, onShiftDate = actions.onShiftDate,
+                onRemovePhoto = actions.onRemovePhoto, onPickPhoto = actions.onPickPhoto,
+                onSave = vm::saveDiary, onCancel = vm::dismissDiary,
+            )
+        }
+    }
+
     CookingContent(
         state = state,
         photoStore = container.photoStore,
@@ -117,6 +136,9 @@ fun CookingRoute(container: AppContainer, onClose: () -> Unit) {
             vm.dismissTimer(stepId)
             TimerNotifications.cancelFinished(context, stepId)
         },
+        diaryCard = diaryCard,
+        diaryActions = diaryActions,
+        today = vm.logEditor?.today(),
     )
 }
 
@@ -158,6 +180,9 @@ fun CookingContent(
     onAddMinute: (String) -> Unit,
     onDismissTimer: (String) -> Unit,
     listState: LazyListState = rememberLazyListState(),
+    diaryCard: DiaryCardUi = DiaryCardUi.Hidden,
+    diaryActions: LogFormActions? = null,
+    today: LocalDate? = null,
 ) {
     val c = LocalRecetarioColors.current
     val reduced = LocalReducedMotion.current
@@ -281,6 +306,9 @@ fun CookingContent(
                     }
                     if (state.finished) {
                         item(key = "finish") { FinishCard(onBack = onClose, focus = stepFocus) }
+                        if (diaryActions != null && today != null && diaryCard != DiaryCardUi.Hidden) {
+                            item(key = "diary") { DiaryCard(diaryCard, today, photoStore, diaryActions) }
+                        }
                     }
                 }
             }

@@ -30,6 +30,7 @@ object AppIcons {
     val Camera = stroke("Cámara", "M4 8h3l2-3h6l2 3h3v11H4z", circle(12f, 13f, 3.5f))
     val Gallery = stroke("Galería", "M4 5h16v14H4z", "M4 16l5-5 4 4 2-2 5 5", circle(15.5f, 9f, 1.5f))
     val ChevronDown = stroke("Desplegar", "M6 9l6 6 6-6")
+    val Diary = stroke("Diario", "M6 3h12v18H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M4 17a2 2 0 0 1 2-2h12", "M9 3v7l2-1.5L13 10V3")
     val Note = stroke("Nota", "M6 4h9l3 3v13H6z", "M9 11h6", "M9 15h4")
     val Share = stroke("Compartir", "M12 15V4", "M8 8l4-4 4 4", "M5 13v6h14v-6")
     val Settings = stroke(

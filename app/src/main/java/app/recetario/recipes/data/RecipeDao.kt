@@ -86,9 +86,11 @@ interface RecipeDao {
     @Query("SELECT p.fileName FROM step_photos p JOIN steps s ON s.id = p.stepId WHERE s.recipeId = :id")
     suspend fun stepPhotos(id: String): List<String>
 
+    /** True si una receta (portada o paso) o una entrada del diario usa ese archivo de foto. */
     @Query(
         "SELECT EXISTS(SELECT 1 FROM recipes WHERE coverPhoto = :name) OR " +
-            "EXISTS(SELECT 1 FROM step_photos WHERE fileName = :name)",
+            "EXISTS(SELECT 1 FROM step_photos WHERE fileName = :name) OR " +
+            "EXISTS(SELECT 1 FROM cook_log_photos WHERE fileName = :name)",
     )
     suspend fun isPhotoReferenced(name: String): Boolean
 

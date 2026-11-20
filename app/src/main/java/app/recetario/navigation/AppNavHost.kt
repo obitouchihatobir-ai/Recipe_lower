@@ -46,6 +46,7 @@ import app.recetario.core.ui.motion.LocalSaveCelebration
 import app.recetario.core.ui.motion.SaveCelebration
 import app.recetario.core.ui.motion.SavedToast
 import app.recetario.core.ui.theme.LocalRecetarioColors
+import app.recetario.diary.DiaryRoute
 import app.recetario.home.HomeRoute
 import app.recetario.pairing.PairingPlaceholderScreen
 import app.recetario.recipes.detail.DetailRoute
@@ -129,6 +130,7 @@ fun AppNavHost(
                                     onSettings = { navController.from(from) { navigate(Settings) } },
                                     onAppearance = { navController.from(from) { navigate(Appearance) } },
                                     onBackup = { navController.from(from) { navigate(Backup) } },
+                                    onDiary = { navController.from(from) { navigate(Diary) } },
                                 )
                             }
                         }
@@ -186,6 +188,13 @@ fun AppNavHost(
                         }
                         composable<Backup> { from ->
                             BackupRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<Diary> { from ->
+                            DiaryRoute(
+                                container = container,
+                                onBack = { navController.from(from) { popBackStack() } },
+                                onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
+                            )
                         }
                         composable<About> { from ->
                             AboutRoute(onBack = { navController.from(from) { popBackStack() } })

@@ -16,7 +16,7 @@ El diseño aprobado está en `docs/superpowers/specs/2026-11-13-recetario-design
 app/                      Módulo Android :app (Compose, Room, DataStore…), paquete app.recetario
   src/main/java/app/recetario/   RecetarioApp (con AppContainer) y MainActivity; paquetes por función:
                                  navigation/ (Routes, AppNavHost, BottomBar), home/, recipes/{list,editor,detail,data},
-                                 cooking/, shopping/, settings/, backup/, converter/, pairing/, core/data/,
+                                 cooking/, shopping/, settings/, backup/, converter/, pairing/, diary/, core/data/,
                                  core/ui/{theme,components,icons,motion}
   src/test/                      Pruebas en la JVM con Robolectric (sdk 35, robolectric.properties)
 logic/                    Build incluido, Kotlin/JVM sin Android: lógica pura y sus pruebas
@@ -85,6 +85,14 @@ Todas respetan `LocalReducedMotion` (estado final al instante, sin esperar ni un
 - **Compra:** `AnimatedCheck` rellena el círculo desde el centro (200 ms) y la marca entra con muelle; lo marcado pasa a la sección «Comprado», al final (`shoppingGroups` en `ShoppingScreen.kt`), y la fila se desliza con `animateItem` (misma clave).
 - **Porciones:** `ServingsStepper` hace rodar el número con `AnimatedContent` (`SERVINGS_ROLL_MS` 250 ms, sube al aumentar y baja al disminuir); el contenedor usa `clearAndSetSemantics { text = … }`, así TalkBack solo tiene «5 porciones» también a mitad del giro.
 - `CapturasTest` guarda algunas a medias (`detalle-porciones-rodando`, `cocina-tachando`, `cocina-confeti`, `guardado`) y la compra con «Comprado» (`compra`).
+
+## Diario de cocina (etapa 2A, diseño de la etapa 2 §7.1)
+- Lógica pura en `logic/.../diary/`: `CookLogEntry`, `statsByRecipe`, `cookStatsLine` («La hiciste 3 veces · última hace 2 semanas · ★★★★☆»), `longTimeNoCook` y, en `DiaryTexts.kt`, `groupByMonth`, `monthTitle` («noviembre de 2026»), `logDateLabel`/`entryDateLabel` y los textos para TalkBack (`ratingDescription` «4 de 5 estrellas», `cookStatsDescription` con la media en palabras: las estrellas nunca se leen como símbolos).
+- `diary/` en `:app`: `DiaryRepository` (`RoomDiaryRepository`, `AppContainer.diaryRepository`). `save` fija `updatedAt`, guarda sin receta si ya no existe y borra las fotos que la entrada deja de usar; `delete` devuelve la entrada y **no** borra archivos (hay «Deshacer»): eso lo hace `deletePhotosIfUnused` cuando caduca (4 s, `SnackbarDuration.Short`) o al salir de Diario (`DiaryViewModel.onCleared`).
+- `LogEntryEditor` (uno por ViewModel, `AppContainer.newLogEditor(scope)`): borrador `LogDraft`, estrellas opcionales (tocar la misma la quita), fecha nunca futura, nota y hasta 4 fotos (cámara o galería con `rememberPhotoRequester` del editor, destino `PhotoTarget.Cover`); guardar y borrar fotos corre en `AppContainer.applicationScope`, así salir de la pantalla no lo corta. `LogEntryForm`/`LogEntryPanel` (panel inferior) en `LogEntryPanel.kt`.
+- «¡Listo!» del modo cocina: `DiaryCard` (`CookingParts.kt`) en otro elemento de la lista, bajo `FinishCard`; su estado (abierta, guardada, «Ahora no») va en el `SavedStateHandle`. Detalle: `CookStatsRow` (línea, toca → `HistoryPanel`) y «✓ Lo hice» (`DetailDiary.kt`). Pantalla `Diary` (icono de la cabecera de Inicio): meses del más reciente al más antiguo; tocar una entrada la edita o la borra; «Ver receta» solo si tiene receta.
+- Fotos del diario en uso: `RecipeDao.isPhotoReferenced` (lo usan `RoomRecipeRepository.save/delete`, el editor y el diario) y `BackupDao.photoNames` (limpieza tras importar) miran también `cook_log_photos`. Borrar una receta deja sus entradas (sin receta, con el título guardado) y borra sus `pairing_ratings` (`PairingRatingDao.deleteForRecipe`, solo lados `RECIPE`).
+- Inicio: «Hace tiempo que no la haces» (solo si hay alguna). Recetas: «Más cocinadas» y «Mejor valoradas» reciben las estadísticas en `applyFilter`.
 
 ## Editor de recetas
 El borrador se guarda en `filesDir/drafts/` (`new.json` o `<idReceta>.json`) con 500 ms de espera y se borra al guardar o descartar (`EditorViewModel`, `DraftStore`). Tras el primer guardado de una receta nueva, su id queda en el `SavedStateHandle` (`id`): si Android cierra la app, el editor vuelve con esa receta.

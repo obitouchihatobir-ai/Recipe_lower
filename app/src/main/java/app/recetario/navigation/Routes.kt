@@ -48,3 +48,7 @@ data object Backup
 
 @Serializable
 data object About
+
+/** El diario de cocina (desde la cabecera de Inicio). */
+@Serializable
+data object Diary

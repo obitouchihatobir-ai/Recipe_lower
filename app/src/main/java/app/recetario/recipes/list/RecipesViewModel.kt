@@ -7,16 +7,20 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.recetario.diary.CookStats
+import app.recetario.diary.DiaryRepository
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.model.Category
 import app.recetario.recipes.search.RecipeFilter
 import app.recetario.recipes.search.applyFilter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -35,6 +39,8 @@ data class RecipesState(
 class RecipesViewModel(
     private val savedStateHandle: SavedStateHandle,
     repo: RecipeRepository,
+    /** Estadísticas del diario, para «Más cocinadas» y «Mejor valoradas». */
+    diaryStats: Flow<Map<String, CookStats>> = flowOf(emptyMap()),
 ) : ViewModel() {
 
     private val _filter = MutableStateFlow(
@@ -50,13 +56,14 @@ class RecipesViewModel(
     private val grid = MutableStateFlow(savedStateHandle.get<Boolean>(GRID_KEY) ?: true)
 
     val state: StateFlow<RecipesState> = combine(
-        repo.observeSummaries(), repo.observeCategories(), repo.observeTags(), _filter, grid,
-    ) { summaries, categories, tags, filter, grid ->
+        combine(repo.observeSummaries(), diaryStats) { recipes, stats -> recipes to stats },
+        repo.observeCategories(), repo.observeTags(), _filter, grid,
+    ) { (summaries, stats), categories, tags, filter, grid ->
         val byId = categories.associateBy { it.id }
         RecipesState(
             loaded = true,
             totalCount = summaries.size,
-            results = summaries.applyFilter(filter).map { it.toCardData(byId) },
+            results = summaries.applyFilter(filter, stats = stats).map { it.toCardData(byId) },
             categories = categories,
             tags = tags,
             filter = filter,
@@ -89,8 +96,8 @@ class RecipesViewModel(
         private const val GRID_KEY = "grid"
         private const val QUERY_KEY = "query"
 
-        fun factory(repo: RecipeRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { RecipesViewModel(createSavedStateHandle(), repo) }
+        fun factory(repo: RecipeRepository, diary: DiaryRepository): ViewModelProvider.Factory = viewModelFactory {
+            initializer { RecipesViewModel(createSavedStateHandle(), repo, diary.observeStats()) }
         }
     }
 }

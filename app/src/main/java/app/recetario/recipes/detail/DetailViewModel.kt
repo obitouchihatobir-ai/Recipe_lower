@@ -8,6 +8,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.recetario.AppContainer
+import app.recetario.diary.CookLogEntry
+import app.recetario.diary.CookStats
+import app.recetario.diary.DiaryRepository
+import app.recetario.diary.LogEntryEditor
+import app.recetario.diary.statsByRecipe
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.list.DEFAULT_EMOJI
@@ -16,6 +21,7 @@ import app.recetario.recipes.quantity.formatQuantity
 import app.recetario.recipes.quantity.scaleQuantity
 import app.recetario.shopping.ShoppingRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -23,8 +29,12 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Clock
+import java.time.LocalDate
 
 enum class DetailEvent { Deleted, DeleteFailed }
 
@@ -39,6 +49,11 @@ data class DetailUiState(
     val checkedIngredientIds: Set<String> = emptySet(),
     /** Cantidad ya escalada y formateada de cada ingrediente, por id. */
     val quantities: Map<String, String> = emptyMap(),
+    /** Lo que dice el diario de esta receta (null si nunca se hizo). */
+    val stats: CookStats? = null,
+    /** Sus entradas del diario, la más reciente primero. */
+    val history: List<CookLogEntry> = emptyList(),
+    val today: LocalDate = LocalDate.MIN,
 )
 
 /** Estado del detalle. Porciones y casillas se guardan en [savedStateHandle] (sobreviven al giro), no en disco. */
@@ -48,14 +63,23 @@ class DetailViewModel(
     private val shopping: ShoppingRepository,
     val photoStore: PhotoStore,
     private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
+    diary: DiaryRepository? = null,
+    /** Crea el editor de «Lo hice» (null: sin diario, en algunas pruebas). */
+    newLogEditor: ((CoroutineScope) -> LogEntryEditor)? = null,
+    private val clock: Clock = Clock.systemDefaultZone(),
 ) : ViewModel() {
+
+    /** «Lo hice»: la entrada del diario que se está apuntando a mano. */
+    val logEditor: LogEntryEditor? = newLogEditor?.invoke(viewModelScope)
+
+    private val history = diary?.observeEntries()?.map { all -> all.filter { it.recipeId == id } } ?: flowOf(emptyList<CookLogEntry>())
 
     private val servingsOverride = savedStateHandle.getStateFlow(SERVINGS_KEY, 0)
     private val checked = savedStateHandle.getStateFlow(CHECKED_KEY, arrayListOf<String>())
 
     val state: StateFlow<DetailUiState> = combine(
-        repo.observeRecipe(id), repo.observeCategories(), servingsOverride, checked,
-    ) { recipe, categories, override, checkedIds ->
+        repo.observeRecipe(id), repo.observeCategories(), servingsOverride, checked, history,
+    ) { recipe, categories, override, checkedIds, entries ->
         if (recipe == null) {
             DetailUiState(loading = false)
         } else {
@@ -71,6 +95,9 @@ class DetailViewModel(
                 quantities = recipe.ingredients.associate {
                     it.id to formatQuantity(scaleQuantity(it.quantity, recipe.servings, servings), it.unit, it.customUnit)
                 },
+                stats = statsByRecipe(entries)[id],
+                history = entries,
+                today = LocalDate.now(clock),
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailUiState())
@@ -90,6 +117,16 @@ class DetailViewModel(
         val s = state.value
         val recipe = s.recipe ?: return 0
         return shopping.addFromRecipe(recipe, s.servings, s.checkedIngredientIds)
+    }
+
+    /** «Lo hice»: abre el panel con hoy (la fecha se puede cambiar, nunca a un día futuro). */
+    fun startLog() {
+        val recipe = state.value.recipe ?: return
+        logEditor?.startNew(recipe.id, recipe.title)
+    }
+
+    override fun onCleared() {
+        logEditor?.cancel()
     }
 
     fun toggleFavorite() {
@@ -141,6 +178,9 @@ class DetailViewModel(
                     shopping = container.shoppingRepository,
                     photoStore = container.photoStore,
                     savedStateHandle = createSavedStateHandle(),
+                    diary = container.diaryRepository,
+                    newLogEditor = container::newLogEditor,
+                    clock = container.clock,
                 )
             }
         }

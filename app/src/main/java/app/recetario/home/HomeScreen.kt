@@ -70,12 +70,18 @@ fun HomeRoute(
     onSettings: () -> Unit = {},
     onAppearance: () -> Unit = {},
     onBackup: () -> Unit = {},
+    onDiary: () -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel(
-        factory = HomeViewModel.factory(container.recipeRepository, container.settingsRepository, container.clock),
+        factory = HomeViewModel.factory(
+            container.recipeRepository, container.settingsRepository, container.clock, container.diaryRepository,
+        ),
     )
     val state by vm.state.collectAsStateWithLifecycle()
-    HomeContent(state, container.photoStore, onCategory, onRecipe, onAdd, onSettings, onAppearance, onBackup, vm::dismissBackupNotice)
+    HomeContent(
+        state, container.photoStore, onCategory, onRecipe, onAdd, onSettings, onAppearance, onBackup,
+        vm::dismissBackupNotice, onDiary = onDiary,
+    )
 }
 
 /** Inicio de la etapa 1: saludo, chips de categorías, recientes y favoritas (§6.3). */
@@ -91,6 +97,7 @@ fun HomeContent(
     onBackup: () -> Unit = {},
     onDismissNotice: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onDiary: () -> Unit = {},
 ) {
     val c = LocalRecetarioColors.current
     val tracker = rememberEntranceTracker()
@@ -98,13 +105,13 @@ fun HomeContent(
     Box(modifier.fillMaxSize().background(c.bg)) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize().statusBarsPadding(),
+            modifier = Modifier.fillMaxSize().statusBarsPadding().testTag("home-grid"),
             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 96.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             fullWidth("header") {
-                Header(state.greeting, onSettings, onAppearance, Modifier.staggeredEntrance(0, "header", tracker))
+                Header(state.greeting, onSettings, onAppearance, onDiary, Modifier.staggeredEntrance(0, "header", tracker))
             }
             if (notice != null) {
                 fullWidth("backup-notice") {
@@ -145,6 +152,13 @@ fun HomeContent(
                             sharePhotos = false, sharePhotoOf = { it.id !in recentIds },
                         )
                     }
+                    // Solo si hay alguna; sus fotos no viajan al detalle (la receta puede estar también arriba).
+                    if (state.longTimeNoCook.isNotEmpty()) {
+                        section(
+                            "longtime", "Hace tiempo que no la haces", state.longTimeNoCook, 6, tracker, photoStore, onRecipe,
+                            sharePhotos = false,
+                        )
+                    }
                 }
             }
         }
@@ -173,14 +187,20 @@ private fun LazyGridScope.section(
     itemsIndexed(cards, key = { _, card -> "$key-${card.id}" }) { i, card ->
         RecipeGridCard(
             card, photoStore, onClick = { onRecipe(card.id) },
-            modifier = Modifier.staggeredEntrance(firstIndex + 1 + i, "$key-${card.id}", tracker),
+            modifier = Modifier.staggeredEntrance(firstIndex + 1 + i, "$key-${card.id}", tracker).testTag("$key-${card.id}"),
             sharePhoto = sharePhotoOf(card),
         )
     }
 }
 
 @Composable
-private fun Header(greeting: String, onSettings: () -> Unit, onAppearance: () -> Unit, modifier: Modifier = Modifier) {
+private fun Header(
+    greeting: String,
+    onSettings: () -> Unit,
+    onAppearance: () -> Unit,
+    onDiary: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val c = LocalRecetarioColors.current
     Row(modifier, verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
@@ -189,6 +209,9 @@ private fun Header(greeting: String, onSettings: () -> Unit, onAppearance: () ->
             ScreenTitle("¿Qué cocinamos hoy?")
         }
         // Zonas táctiles de 48 dp; el margen negativo del final alinea los iconos con el borde de la cuadrícula.
+        IconButton(onClick = onDiary, modifier = Modifier.testTag("home-diary")) {
+            Icon(AppIcons.Diary, contentDescription = "Diario", tint = c.ink)
+        }
         IconButton(onClick = onAppearance, modifier = Modifier.testTag("home-appearance")) {
             Icon(AppIcons.Palette, contentDescription = "Apariencia", tint = c.ink)
         }
