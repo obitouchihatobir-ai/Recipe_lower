@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -82,6 +84,7 @@ internal fun CookStatsRow(stats: CookStats?, today: LocalDate, onHistory: () -> 
 }
 
 /** Historial de la receta en el diario: cada vez, con su fecha, estrellas, nota y foto. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun BoxScope.HistoryPanel(
     stats: CookStats?,
@@ -117,9 +120,9 @@ internal fun BoxScope.HistoryPanel(
                         )
                     }
                     Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Si no caben juntas, las estrellas bajan (no se recortan).
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                             Text(logDateLabel(entry.date, today), color = c.ink, style = MaterialTheme.typography.bodyLarge)
-                            Spacer(Modifier.width(8.dp))
                             RatingStars(entry.rating)
                         }
                         if (entry.note.isNotBlank()) MutedText(entry.note)

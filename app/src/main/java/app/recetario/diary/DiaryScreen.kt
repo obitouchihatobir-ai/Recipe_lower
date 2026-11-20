@@ -3,6 +3,8 @@ package app.recetario.diary
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -154,6 +155,7 @@ fun DiaryContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DiaryEntryRow(
     row: DiaryRow,
@@ -190,12 +192,13 @@ private fun DiaryEntryRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.testTag("diary-title-${entry.id}"),
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // FlowRow: si la fecha y las estrellas no caben juntas, las estrellas bajan (no se recortan).
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 MutedText(entryDateLabel(entry.date))
-                if (entry.rating != null) {
-                    Spacer(Modifier.width(8.dp))
-                    RatingStars(entry.rating)
-                }
+                if (entry.rating != null) RatingStars(entry.rating)
             }
             if (row.orphan) MutedText("La receta ya no está en el recetario")
             if (entry.note.isNotBlank()) {

@@ -72,6 +72,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
+import com.google.common.truth.Truth.assertThat
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.platform.app.InstrumentationRegistry
 import app.recetario.core.data.AppDatabase
@@ -239,6 +243,10 @@ class CapturasTest {
         rule.waitFor(hasTestTag("diary-list"))
         rule.waitFor(hasText("Pan de muerto"))
         save("diario-$name")
+        // Las 5 estrellas (14 dp cada una) caben enteras junto a la fecha o debajo: no se recortan.
+        for (stars in listOf("5 de 5 estrellas", "4 de 5 estrellas", "3 de 5 estrellas")) {
+            assertThat(rule.onNode(hasContentDescription(stars), useUnmergedTree = true).getBoundsInRoot().width).isAtLeast(70.dp)
+        }
         rule.onNodeWithTag("diary-entry-d1").performClick()
         rule.waitFor(hasTestTag("log-panel"))
         save("diario-entrada-$name")

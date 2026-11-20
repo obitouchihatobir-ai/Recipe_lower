@@ -130,8 +130,8 @@ fun UpgradeErrorContent(
             Text(
                 "No se puede abrir Sazón",
                 color = c.ink,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.W700,
+                // El título de cada tema (con serifa en Cálido y Nocturno), como «¡Listo!».
+                style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.semantics { heading() },
             )
@@ -149,7 +149,7 @@ fun UpgradeErrorContent(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(save.tag),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
-                ) { Text(save.label, fontSize = 15.sp, fontWeight = FontWeight.W700) }
+                ) { Text(save.label, fontSize = 15.sp, fontWeight = FontWeight.W700, textAlign = TextAlign.Center) }
             }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
