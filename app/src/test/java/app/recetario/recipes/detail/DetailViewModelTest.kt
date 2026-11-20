@@ -113,6 +113,8 @@ class DetailViewModelTest {
         val vm = vm()
         vm.loaded()
         vm.toggleIngredient("i1")
+        // El cambio llega al estado por otro hilo: se espera antes de enviar (si no, a veces se enviaban los 8).
+        vm.await { "i1" in it.checkedIngredientIds }
         val added = runBlocking { vm.sendMissingToShopping() }
         assertThat(added).isEqualTo(7)
         val items = runBlocking { container.shoppingRepository.observe().first() }.values.flatten()

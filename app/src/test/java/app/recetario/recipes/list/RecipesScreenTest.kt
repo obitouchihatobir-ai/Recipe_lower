@@ -2,6 +2,7 @@ package app.recetario.recipes.list
 
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -14,6 +15,7 @@ import app.recetario.AppContainer
 import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
+import app.recetario.diary.CookLogEntry
 import app.recetario.navigation.AppNavHost
 import app.recetario.recipes.model.FlavorProfile
 import app.recetario.recipes.model.Recipe
@@ -29,6 +31,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import java.time.Instant
+import java.time.LocalDate
 
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
@@ -91,6 +95,38 @@ class RecipesScreenTest {
         rule.onNodeWithText("Todas").performClick()
         rule.waitFor(hasText(crema))
     }
+
+    @Test
+    fun sort_mostCooked() {
+        // La limonada 3 veces, la crema 1 y el Bloody Mary ninguna (las recetas, antes: sin receta no cuentan).
+        runBlocking {
+            container.recipeRepository.save(sampleRecipe("limonada", limonada, DefaultCategories.DRINK_ID))
+            container.recipeRepository.save(sampleRecipe("bloody", bloody, DefaultCategories.DRINK_ID))
+            container.recipeRepository.save(sampleRecipe("crema", crema, DefaultCategories.FOOD_ID))
+            listOf("limonada" to limonada, "limonada" to limonada, "limonada" to limonada, "crema" to crema)
+                .forEachIndexed { i, (id, title) ->
+                    container.diaryRepository.save(
+                        CookLogEntry("log-$i", id, title, LocalDate.of(2026, 11, 1 + i), null, "", emptyList(), Instant.EPOCH, Instant.EPOCH),
+                    )
+                }
+        }
+        openRecipes()
+        rule.waitFor(hasText(crema))
+        // «Recientes»: las tres se guardaron a la vez (mismo reloj), así que van por título.
+        rule.waitUntil(5_000) { readingOrder() == listOf(bloody, crema, limonada) }
+
+        rule.onNodeWithText("Recientes").performClick()
+        rule.waitFor(hasText("Más cocinadas"))
+        rule.onNodeWithText("Más cocinadas").performClick()
+
+        // En la cuadrícula, el orden de lectura: de arriba abajo y de izquierda a derecha.
+        rule.waitUntil(5_000) { readingOrder() == listOf(limonada, crema, bloody) }
+    }
+
+    private fun readingOrder(): List<String> = listOf(limonada, bloody, crema)
+        .map { title -> title to rule.onNodeWithText(title, useUnmergedTree = true).getBoundsInRoot() }
+        .sortedWith(compareBy({ it.second.top.value }, { it.second.left.value }))
+        .map { it.first }
 
     @Test
     fun longTitle_isEllipsizedInCard() {
