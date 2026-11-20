@@ -37,7 +37,7 @@ class PantryRepositoryTest {
     fun tearDown() = db.close()
 
     @Test
-    fun add_dedupByNormalized() = runBlocking {
+    fun add_dedupByNormalized() = runBlocking<Unit> {
         assertThat(repo.add("Limón")).isTrue()
         // Mismo nombre salvo tildes, mayúsculas, espacios o plural: ya estaba (Room @Upsert lo habría ignorado en silencio).
         assertThat(repo.add("  limon ")).isFalse()
@@ -52,7 +52,7 @@ class PantryRepositoryTest {
     }
 
     @Test
-    fun observe_isAlphabetical() = runBlocking {
+    fun observe_isAlphabetical() = runBlocking<Unit> {
         repo.add("Zanahoria")
         repo.add("arroz")
         repo.add("Ébano")
@@ -60,7 +60,7 @@ class PantryRepositoryTest {
     }
 
     @Test
-    fun delete_thenRestore_bringsBackTheSameItem() = runBlocking {
+    fun delete_thenRestore_bringsBackTheSameItem() = runBlocking<Unit> {
         repo.add("Arroz")
         val item = repo.observe().first().single()
         val removed = repo.delete(item.id)
@@ -73,7 +73,7 @@ class PantryRepositoryTest {
     }
 
     @Test
-    fun restore_whenTheSameNameWasAddedMeanwhile_doesNotDuplicateNorFail() = runBlocking {
+    fun restore_whenTheSameNameWasAddedMeanwhile_doesNotDuplicateNorFail() = runBlocking<Unit> {
         repo.add("Arroz")
         val item = repo.observe().first().single()
         repo.delete(item.id)

@@ -24,7 +24,7 @@ import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
+import org.junit.rules.ExternalResource
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -34,7 +34,16 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class PantryScreenTest {
-    @get:Rule
+    /**
+     * Cierra la base de datos después de que la regla de Compose deseche la composición: con un `@After`, una consulta
+     * tardía de un `Flow` falla con «connection pool has been closed» (CLAUDE.md, problemas conocidos).
+     */
+    @get:Rule(order = 0)
+    val closeDatabase = object : ExternalResource() {
+        override fun after() = container.database.close()
+    }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -43,9 +52,6 @@ class PantryScreenTest {
     fun setUp() {
         container = installTestContainer()
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     private fun openPantry() {
         rule.setContent { RecetarioTheme(ThemeChoice.CALIDO) { ShoppingRoute(container) } }
