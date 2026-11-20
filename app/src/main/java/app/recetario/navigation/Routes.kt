@@ -52,3 +52,11 @@ data object About
 /** El diario de cocina (desde la cabecera de Inicio). */
 @Serializable
 data object Diary
+
+/** «¿Qué puedo hacer?» (desde la pestaña Despensa de Compra). */
+@Serializable
+data object WhatCanIMake
+
+/** Ajustes › Despensa › Básicos. */
+@Serializable
+data object PantryBasics

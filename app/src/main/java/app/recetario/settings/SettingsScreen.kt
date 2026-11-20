@@ -31,8 +31,10 @@ fun SettingsRoute(
     onTags: () -> Unit,
     onBackup: () -> Unit,
     onAbout: () -> Unit,
+    onPantryBasics: () -> Unit = {},
 ) {
     val repo = container.settingsRepository
+    val basics by repo.pantryBasics.collectAsStateWithLifecycle(initialValue = null)
     val theme by repo.themeSettings.collectAsStateWithLifecycle(initialValue = ThemeSettings())
     val cupMl by repo.cupMl.collectAsStateWithLifecycle(initialValue = 240)
     val scope = rememberCoroutineScope()
@@ -48,10 +50,19 @@ fun SettingsRoute(
         onTags = onTags,
         onBackup = onBackup,
         onAbout = onAbout,
+        pantryBasicsSummary = basics?.let(::basicsSummary).orEmpty(),
+        onPantryBasics = onPantryBasics,
     )
 }
 
-/** Ajustes de la etapa 1 (§6.3): apariencia, unidades, categorías, etiquetas, copias de seguridad y «Acerca de». */
+/** «sal, agua, aceite, pimienta…» (los 4 primeros), o «Ninguno: cuentan todos los ingredientes». */
+private fun basicsSummary(basics: List<String>): String = when {
+    basics.isEmpty() -> "Ninguno: cuentan todos los ingredientes"
+    basics.size <= 4 -> basics.joinToString(", ")
+    else -> basics.take(4).joinToString(", ") + "…"
+}
+
+/** Ajustes (§6.3): apariencia, unidades, básicos de la despensa, categorías, etiquetas, copias de seguridad y «Acerca de». */
 @Composable
 fun SettingsContent(
     appearanceSummary: String,
@@ -65,6 +76,8 @@ fun SettingsContent(
     onAbout: () -> Unit,
     modifier: Modifier = Modifier,
     snackbar: SnackbarHostState? = null,
+    pantryBasicsSummary: String = "",
+    onPantryBasics: () -> Unit = {},
 ) {
     SettingsPage("Ajustes", onBack, tag = "settings-screen", modifier = modifier, snackbar = snackbar) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
@@ -82,6 +95,12 @@ fun SettingsContent(
                     }
                 }
             }
+            SettingsRow(
+                "Despensa › Básicos",
+                pantryBasicsSummary.ifEmpty { null },
+                Modifier.testTag("settings-pantry-basics"),
+                onClick = onPantryBasics,
+            )
             SettingsRow("Categorías", "Tus tipos de receta, con su emoji y su color", Modifier.testTag("settings-categories"), onClick = onCategories)
             SettingsRow("Etiquetas", "Renombra o borra las etiquetas de tus recetas", Modifier.testTag("settings-tags"), onClick = onTags)
             SettingsRow("Copias de seguridad", "Guarda o recupera tus recetas y sus fotos", Modifier.testTag("settings-backup"), onClick = onBackup)

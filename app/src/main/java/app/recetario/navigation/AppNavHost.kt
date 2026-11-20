@@ -58,6 +58,8 @@ import app.recetario.settings.CategoriesRoute
 import app.recetario.settings.SettingsRoute
 import app.recetario.settings.TagsRoute
 import app.recetario.shopping.ShoppingRoute
+import app.recetario.pantry.WhatCanIMakeRoute
+import app.recetario.settings.PantryBasicsRoute
 
 private const val FADE_MS = 250
 
@@ -146,7 +148,19 @@ fun AppNavHost(
                                 )
                             }
                         }
-                        composable<Shopping> { ShoppingRoute(container) }
+                        composable<Shopping> { from ->
+                            ShoppingRoute(container, onWhatCanIMake = { navController.from(from) { navigate(WhatCanIMake) } })
+                        }
+                        composable<WhatCanIMake> { from ->
+                            WhatCanIMakeRoute(
+                                container = container,
+                                onBack = { navController.from(from) { popBackStack() } },
+                                onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
+                            )
+                        }
+                        composable<PantryBasics> { from ->
+                            PantryBasicsRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
                         composable<Pairing> { PairingPlaceholderScreen() }
                         composable<RecipeDetail> { from ->
                             val route = from.toRoute<RecipeDetail>()
@@ -175,6 +189,7 @@ fun AppNavHost(
                                 onTags = { navController.from(from) { navigate(Tags) } },
                                 onBackup = { navController.from(from) { navigate(Backup) } },
                                 onAbout = { navController.from(from) { navigate(About) } },
+                                onPantryBasics = { navController.from(from) { navigate(PantryBasics) } },
                             )
                         }
                         composable<Appearance> { from ->

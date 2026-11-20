@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.recetario.core.ui.theme.ThemeChoice
+import app.recetario.pantry.DEFAULT_PANTRY_BASICS
 import app.recetario.core.ui.theme.ThemeSettings
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -113,6 +114,19 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>, private 
         }
     }
 
+    /**
+     * Básicos de la despensa (no cuentan en «¿Qué puedo hacer?» ni en «Con mi despensa»); sin guardar, los de serie.
+     * Se guardan en `ajustes`, un nombre por línea.
+     */
+    val pantryBasics: Flow<List<String>> = data.map { p ->
+        p[PANTRY_BASICS]?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct() ?: DEFAULT_PANTRY_BASICS
+    }.distinctUntilChanged()
+
+    suspend fun setPantryBasics(list: List<String>) {
+        val clean = list.map { it.replace('\n', ' ').trim() }.filter { it.isNotEmpty() }.distinct()
+        dataStore.edit { it[PANTRY_BASICS] = clean.joinToString("\n") }
+    }
+
     /** Si ya se pidió el permiso de notificaciones (se pide una sola vez, al iniciar el primer temporizador). */
     val notificationPermissionAsked: Flow<Boolean> =
         local.map { it[NOTIFICATIONS_ASKED] ?: false }.distinctUntilChanged()
@@ -171,6 +185,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>, private 
         val NIGHT_START = intPreferencesKey("night_start_minute")
         val NIGHT_END = intPreferencesKey("night_end_minute")
         val CUP_ML = intPreferencesKey("cup_ml")
+        val PANTRY_BASICS = stringPreferencesKey("pantry_basics")
         val LAST_LOCAL = longPreferencesKey("backup_last_local")
         val LAST_EXTERNAL = longPreferencesKey("backup_last_external")
         val DRIVE_URI = stringPreferencesKey("backup_drive_uri")

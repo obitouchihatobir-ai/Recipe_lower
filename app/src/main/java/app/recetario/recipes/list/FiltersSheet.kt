@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.recetario.core.ui.components.ChoiceChip
@@ -119,6 +120,28 @@ fun FiltersSheet(
                 Text("Solo favoritas", Modifier.weight(1f), color = c.ink, style = MaterialTheme.typography.bodyLarge)
                 Switch(
                     checked = filter.favoritesOnly,
+                    onCheckedChange = null,
+                    colors = appSwitchColors(),
+                )
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .toggleable(
+                        value = filter.pantryOnly,
+                        role = Role.Switch,
+                        onValueChange = { on -> onChange { it.copy(pantryOnly = on) } },
+                    )
+                    .testTag("filter-pantry"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Con mi despensa", color = c.ink, style = MaterialTheme.typography.bodyLarge)
+                    Text("Tienes todo lo que no es básico", color = c.muted, style = MaterialTheme.typography.bodyMedium)
+                }
+                Switch(
+                    checked = filter.pantryOnly,
                     onCheckedChange = null,
                     colors = appSwitchColors(),
                 )

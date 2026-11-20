@@ -77,7 +77,9 @@ fun RecipesRoute(
     onAdd: (categoryId: String?) -> Unit,
     onConverter: () -> Unit,
 ) {
-    val vm: RecipesViewModel = viewModel(factory = RecipesViewModel.factory(container.recipeRepository, container.diaryRepository))
+    val vm: RecipesViewModel = viewModel(factory = RecipesViewModel.factory(
+            container.recipeRepository, container.diaryRepository, container.pantryRepository, container.settingsRepository.pantryBasics,
+        ))
     val state by vm.state.collectAsStateWithLifecycle()
     val filter by vm.filter.collectAsStateWithLifecycle()
     var showFilters by rememberSaveable { mutableStateOf(false) }

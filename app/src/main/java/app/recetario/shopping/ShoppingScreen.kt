@@ -9,6 +9,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -83,14 +87,98 @@ import app.recetario.core.ui.icons.AppIcons
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.core.ui.theme.LocalRecetarioShapes
+import app.recetario.pantry.PantryRoute
 import app.recetario.recipes.quantity.MeasureUnit
 import app.recetario.recipes.quantity.formatQuantity
 import app.recetario.recipes.quantity.parseQuantity
 import kotlinx.coroutines.launch
 
+/** Pestañas internas de Compra (diseño general §6.3); se abre siempre en Lista. */
+enum class ShoppingTab(val label: String, val tag: String) {
+    LIST("Lista", "shopping-tab-list"),
+    PANTRY("Despensa", "shopping-tab-pantry"),
+    WEEK("Semana", "shopping-tab-week"),
+}
+
+/** Compra: Lista · Despensa · Semana. [onWhatCanIMake] abre «¿Qué puedo hacer?» desde la Despensa. */
 @Composable
-fun ShoppingRoute(container: AppContainer) {
-    val vm: ShoppingViewModel = viewModel(factory = ShoppingViewModel.factory(container.shoppingRepository))
+fun ShoppingRoute(container: AppContainer, onWhatCanIMake: () -> Unit = {}) {
+    var tab by rememberSaveable { mutableStateOf(ShoppingTab.LIST) }
+    val tabs: @Composable () -> Unit = { ShoppingTabs(tab, onSelect = { tab = it }) }
+    when (tab) {
+        ShoppingTab.LIST -> ShoppingListRoute(container, tabs)
+        ShoppingTab.PANTRY -> PantryRoute(container, tabs, onWhatCanIMake)
+        ShoppingTab.WEEK -> WeekPlaceholder(tabs)
+    }
+}
+
+/** Las pestañas internas: la elegida, en el acento y subrayada (sin transparencias). */
+@Composable
+fun ShoppingTabs(selected: ShoppingTab, onSelect: (ShoppingTab) -> Unit, modifier: Modifier = Modifier) {
+    val c = LocalRecetarioColors.current
+    Row(modifier.fillMaxWidth().padding(horizontal = 12.dp).selectableGroup()) {
+        for (tab in ShoppingTab.entries) {
+            val on = tab == selected
+            Column(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .selectable(selected = on, role = Role.Tab, onClick = { onSelect(tab) })
+                    .testTag(tab.tag),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom,
+            ) {
+                Text(
+                    tab.label,
+                    color = if (on) c.accent else c.muted,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(vertical = 10.dp),
+                )
+                Box(Modifier.fillMaxWidth().height(2.dp).background(if (on) c.accent else c.line))
+            }
+        }
+    }
+}
+
+/** Página de una pestaña de Compra que no es la Lista: título, pestañas, contenido y avisos. */
+@Composable
+fun ShoppingTabPage(
+    tabs: @Composable () -> Unit,
+    tag: String,
+    modifier: Modifier = Modifier,
+    snackbar: SnackbarHostState? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val c = LocalRecetarioColors.current
+    Box(modifier.fillMaxSize().background(c.bg).testTag(tag)) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            Row(Modifier.heightIn(min = 48.dp).padding(start = 18.dp, end = 6.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                ScreenTitle("Compra", Modifier.weight(1f))
+            }
+            tabs()
+            content()
+        }
+        if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(12.dp))
+    }
+}
+
+@Composable
+private fun WeekPlaceholder(tabs: @Composable () -> Unit) {
+    ShoppingTabPage(tabs, tag = "shopping-week") {
+        Box(Modifier.fillMaxSize().padding(horizontal = 32.dp), contentAlignment = Alignment.Center) {
+            Text(
+                "Llega pronto: el menú de la semana",
+                color = LocalRecetarioColors.current.muted,
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShoppingListRoute(container: AppContainer, tabs: @Composable () -> Unit) {
+    val vm: ShoppingViewModel = viewModel(factory = ShoppingViewModel.factory(container.shoppingRepository, container.pantryRepository))
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -105,10 +193,29 @@ fun ShoppingRoute(container: AppContainer) {
         }
     }
 
+    /** Al marcar como comprado: aviso de 4 s con «A la despensa». */
+    fun offerPantry(name: String) {
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val result = snackbar.showSnackbar("«$name» comprado", actionLabel = PANTRY_ACTION, duration = SnackbarDuration.Short)
+            if (result == SnackbarResult.ActionPerformed && !vm.addToPantry(name)) snackbar.showSnackbar("Ya está en la despensa")
+        }
+    }
+
     ShoppingContent(
         state = state,
         snackbar = snackbar,
-        onToggle = vm::toggle,
+        tabs = tabs,
+        onToggle = { id ->
+            val item = state.groups.firstNotNullOfOrNull { (_, list) -> list.firstOrNull { it.id == id } }
+            vm.toggle(id)
+            when {
+                item == null -> Unit
+                !item.checked -> offerPantry(item.name)
+                // Al desmarcar, el aviso de «A la despensa» ya no viene a cuento.
+                else -> snackbar.currentSnackbarData?.takeIf { it.visuals.actionLabel == PANTRY_ACTION }?.dismiss()
+            }
+        },
         onDelete = { id ->
             scope.launch {
                 vm.delete(id)?.let { removed -> offerUndo("Se eliminó «${removed.name}»", listOf(removed)) }
@@ -152,6 +259,7 @@ fun ShoppingContent(
     onShare: () -> Unit,
     onAdd: (name: String, quantity: Double?, unit: MeasureUnit) -> Unit,
     modifier: Modifier = Modifier,
+    tabs: @Composable () -> Unit = {},
 ) {
     val c = LocalRecetarioColors.current
     val reduced = LocalReducedMotion.current
@@ -164,7 +272,7 @@ fun ShoppingContent(
     Box(modifier.fillMaxSize().background(c.bg).testTag("shopping-screen")) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(
-                Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp).staggeredEntrance(0, "header", tracker),
+                Modifier.heightIn(min = 48.dp).padding(start = 18.dp, end = 6.dp, top = 6.dp).staggeredEntrance(0, "header", tracker),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ScreenTitle("Compra", Modifier.weight(1f))
@@ -179,11 +287,12 @@ fun ShoppingContent(
                     }
                 }
             }
+            tabs()
             if (state.loaded && state.isEmpty) {
                 EmptyShopping()
             } else {
                 LazyColumn(
-                    Modifier.fillMaxSize(),
+                    Modifier.fillMaxSize().testTag("shopping-list"),
                     contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 96.dp),
                 ) {
                     var index = 1
@@ -204,6 +313,7 @@ fun ShoppingContent(
                         itemsIndexed(list, key = { _, it -> it.id }) { i, item ->
                             ShoppingRow(
                                 item = item,
+                                inPantry = item.id in state.inPantry,
                                 onToggle = { onToggle(item.id) },
                                 onDelete = { onDelete(item.id) },
                                 onSetSection = { onSetSection(item.id, it) },
@@ -255,6 +365,7 @@ fun ShoppingContent(
     }
 }
 
+private const val PANTRY_ACTION = "A la despensa"
 private const val BOUGHT_KEY = "BOUGHT"
 private const val BOUGHT_LABEL = "Comprado"
 
@@ -293,6 +404,7 @@ private fun EmptyShopping() {
 @Composable
 private fun ShoppingRow(
     item: ShoppingItem,
+    inPantry: Boolean,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     onSetSection: (ShopSection) -> Unit,
@@ -351,14 +463,17 @@ private fun ShoppingRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 AnimatedCheck(item.checked)
-                Text(
-                    item.name,
-                    modifier = Modifier.weight(1f),
-                    color = if (item.checked) c.muted else c.ink,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
-                    ),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        item.name,
+                        color = if (item.checked) c.muted else c.ink,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            textDecoration = if (item.checked) TextDecoration.LineThrough else TextDecoration.None,
+                        ),
+                    )
+                    // Ya en la despensa: en `muted`, opaco (contraste ≥ 4,5:1).
+                    if (inPantry) MutedText("ya lo tienes", Modifier.testTag("in-pantry-${item.id}"))
+                }
                 if (quantity.isNotEmpty()) MutedText(quantity, fontSizeSp = 14)
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
