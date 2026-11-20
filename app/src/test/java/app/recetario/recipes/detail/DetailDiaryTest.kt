@@ -1,6 +1,8 @@
 package app.recetario.recipes.detail
 
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasContentDescription
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
+import app.recetario.core.ui.components.StarFillsKey
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.diary.CookLogEntry
@@ -76,8 +79,13 @@ class DetailDiaryTest {
         log("a", daysAgo = 20, rating = 5, note = "Para la cena de los viernes")
         log("b", daysAgo = 14, rating = 4)
 
-        val line = "La hiciste 2 veces · última hace 2 semanas · ★★★★⯪"
+        val line = "La hiciste 2 veces · última hace 2 semanas"
         rule.waitFor(hasText(line))
+        // La media (4,5) va en estrellas dibujadas, sin glifos que puedan faltar en la fuente («⯪»).
+        rule.onNodeWithTag("detail-stars", useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(StarFillsKey, listOf(1f, 1f, 1f, 1f, 0.5f)))
+        rule.onAllNodes(hasText("★", substring = true) or hasText("⯪", substring = true), useUnmergedTree = true)
+            .assertCountEquals(0)
         // TalkBack no lee «estrella negra»: lee la media en palabras.
         rule.onNode(hasText(line), useUnmergedTree = true)
             .assert(hasContentDescription("La hiciste 2 veces · última hace 2 semanas · valoración media: 4,5 de 5 estrellas"))

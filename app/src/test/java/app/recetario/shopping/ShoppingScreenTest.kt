@@ -224,4 +224,45 @@ class ShoppingScreenTest {
         rule.mainClock.advanceTimeBy(500)
         rule.onNodeWithText("A la despensa").assertDoesNotExist()
     }
+
+    @Test
+    fun check_whileUndoIsShowing_keepsTheUndo() {
+        runBlocking {
+            container.shoppingRepository.addManual("Pan", 1.0, MeasureUnit.PIECE)
+            container.shoppingRepository.addManual("Leche", 1.0, MeasureUnit.LITER)
+        }
+        launch()
+        rule.waitFor(hasText("Pan"))
+        rule.waitFor(hasText("Leche"))
+        val node = rule.onNode(hasText("Pan").and(hasClickAction()))
+        val action = node.fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == "Borrar" }
+        rule.runOnUiThread { action.action() }
+        rule.waitForGone(hasText("Pan"))
+        rule.waitFor(hasText("Deshacer"))
+
+        // Marcar otro mientras se ve «Deshacer»: no se ofrece «A la despensa» y «Deshacer» sigue.
+        rule.onNodeWithText("Leche").performClick()
+        rule.waitFor(hasText("Vaciar marcados"))
+        rule.onNodeWithText("A la despensa").assertDoesNotExist()
+        rule.onNodeWithText("Deshacer").performClick()
+        rule.waitFor(hasText("Pan"))
+    }
+
+    @Test
+    fun uncheck_whileTheOfferIsShowing_closesIt() {
+        runBlocking { container.shoppingRepository.addManual("Arroz", 1.0, MeasureUnit.KILOGRAM) }
+        launch()
+        rule.waitFor(hasText("Arroz"))
+        rule.onNodeWithText("Arroz").performClick()
+        rule.waitFor(hasText("A la despensa"))
+
+        // Con el reloj quieto: si se cerrara solo por tiempo (4 s), seguiría ahí tras medio segundo.
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithText("Arroz").performClick()
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+        rule.onNodeWithText("A la despensa").assertDoesNotExist()
+        rule.mainClock.autoAdvance = true
+        assertThat(runBlocking { container.pantryRepository.observe().first() }).isEmpty()
+    }
 }

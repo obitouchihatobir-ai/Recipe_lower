@@ -46,7 +46,7 @@ class DiaryTextsTest {
     @Test
     fun statsDescription_readsTheStarsAsWords() {
         val stats = CookStats(count = 3, lastDate = today.minusDays(14), averageRating = 3.4)
-        assertThat(cookStatsLine(stats, today)).isEqualTo("La hiciste 3 veces · última hace 2 semanas · ★★★⯪☆")
+        assertThat(cookStatsLine(stats, today)).isEqualTo("La hiciste 3 veces · última hace 2 semanas")
         assertThat(cookStatsDescription(stats, today))
             .isEqualTo("La hiciste 3 veces · última hace 2 semanas · valoración media: 3,5 de 5 estrellas")
         val four = CookStats(count = 1, lastDate = today, averageRating = 4.2)
@@ -69,8 +69,8 @@ class DiaryTextsTest {
     }
 
     @Test
-    fun ratingStars_filledAndEmpty() {
-        assertThat(ratingStars(4)).isEqualTo("★★★★☆")
-        assertThat(ratingStars(null)).isEqualTo("")
+    fun ratingFills_wholeStars() {
+        assertThat(ratingFills(4)).containsExactly(1f, 1f, 1f, 1f, 0f).inOrder()
+        assertThat(ratingFills(null)).isEmpty()
     }
 }

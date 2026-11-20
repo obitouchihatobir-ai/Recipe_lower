@@ -65,12 +65,27 @@ const val DATABASE_FILE_NAME = "$FILE_PREFIX-base-de-datos.db"
 const val DRIVE_DOCUMENT_NAME = "$FILE_PREFIX-copia-automatica.zip"
 
 /**
- * «Copia importada: 3 recetas, 1 foto.» (con entradas del diario, «3 recetas, 2 entradas del diario, 1 foto.»), y si
+ * «Copia importada: 3 recetas, 1 foto.» Lo demás que se añadió o actualizó solo se nombra si hay algo: «3 recetas,
+ * 2 entradas del diario, 1 artículo de la despensa, 2 comidas del menú, 1 valoración de maridaje, 1 foto.» Y si
  * alguna foto no se pudo copiar, «2 fotos no se pudieron copiar.»
  */
-fun importSummary(recipes: Int, images: Int, failedImages: Int = 0, diaryEntries: Int = 0): String {
-    val diary = if (diaryEntries > 0) ", ${diaryCountText(diaryEntries)}" else ""
-    val base = "Copia importada: ${recipeCountText(recipes)}$diary, ${plural(images, "foto", "fotos")}."
+fun importSummary(
+    recipes: Int,
+    images: Int,
+    failedImages: Int = 0,
+    diaryEntries: Int = 0,
+    pantryItems: Int = 0,
+    meals: Int = 0,
+    ratings: Int = 0,
+): String {
+    val extras = listOfNotNull(
+        diaryEntries.takeIf { it > 0 }?.let(::diaryCountText),
+        pantryItems.takeIf { it > 0 }?.let { plural(it, "artículo de la despensa", "artículos de la despensa") },
+        meals.takeIf { it > 0 }?.let { plural(it, "comida del menú", "comidas del menú") },
+        ratings.takeIf { it > 0 }?.let { plural(it, "valoración de maridaje", "valoraciones de maridaje") },
+    )
+    val parts = listOf(recipeCountText(recipes)) + extras + plural(images, "foto", "fotos")
+    val base = "Copia importada: ${parts.joinToString(", ")}."
     return when (failedImages) {
         0 -> base
         1 -> "$base 1 foto no se pudo copiar."

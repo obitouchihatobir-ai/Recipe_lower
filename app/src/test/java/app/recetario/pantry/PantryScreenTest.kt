@@ -1,5 +1,6 @@
 package app.recetario.pantry
 
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -120,6 +121,20 @@ class PantryScreenTest {
 
         rule.waitFor(hasText("Ya está en la despensa"))
         assertThat(pantryNames()).containsExactly("Arroz")
+    }
+
+    @Test
+    fun onlySymbols_isIgnored_withoutAlreadyThere() {
+        openPantry()
+        rule.waitFor(hasText("Tu despensa está vacía. Añade lo que tienes en casa."))
+
+        rule.onNodeWithTag("pantry-field").performTextInput("!!!")
+        // Sin letras ni números no hay nada que añadir: «Añadir» apagado y ni Intro ni el botón dicen nada.
+        rule.onNodeWithTag("pantry-add").assertIsNotEnabled()
+        rule.onNodeWithTag("pantry-field").performImeAction()
+        rule.mainClock.advanceTimeBy(500)
+        rule.onNodeWithText("Ya está en la despensa").assertDoesNotExist()
+        assertThat(pantryNames()).isEmpty()
     }
 
     @Test

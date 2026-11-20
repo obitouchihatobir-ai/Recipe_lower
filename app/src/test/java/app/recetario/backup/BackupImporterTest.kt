@@ -290,7 +290,7 @@ class BackupImporterTest {
 
         // La copia previa devuelve exactamente lo que había.
         val restored = BackupTestEnv(tmp).also { others += it }
-        assertThat(restored.import(safety, ImportMode.REPLACE_ALL)).isEqualTo(ImportResult.Ok(recipes = 1, images = 2, diaryEntries = 1))
+        assertThat(restored.import(safety, ImportMode.REPLACE_ALL)).isEqualTo(ImportResult.Ok(recipes = 1, images = 2, diaryEntries = 1, pantryItems = 1, meals = 1, ratings = 1))
         assertThat(restored.snapshot()).isEqualTo(before)
 
         // Otra importación en el mismo minuto no pisa la copia anterior.
@@ -383,10 +383,15 @@ class BackupImporterTest {
         val result = local.import(backupZip(backupOf(recipe("local", "Tortilla nueva", t3))), ImportMode.MERGE)
 
         assertThat(result).isEqualTo(ImportResult.Ok(recipes = 1, images = 0))
+        // Sobrescribir la receta no se lleva lo que cuelga de ella (protege contra un CASCADE futuro).
+        assertThat(local.recipes.observeRecipe("local").first()?.title).isEqualTo("Tortilla nueva")
+        assertThat(local.db.mealPlanDao().getAll().map { it.id to it.recipeId }).containsExactly("menu-local" to "local")
+        assertThat(local.diaryEntries().map { it.id to it.recipeId }).containsExactly("diario-local" to "local")
+        assertThat(local.db.pairingRatingDao().getAll().map { it.pairKey }).containsExactly("CATALOG:vino|RECIPE:local")
         assertThat(local.backups()).containsExactly("antes-de-importar-2026-11-13-2140.zip")
         val restored = BackupTestEnv(tmp).also { others += it }
         assertThat(restored.import(local.localFile("antes-de-importar-2026-11-13-2140.zip").readBytes(), ImportMode.REPLACE_ALL))
-            .isEqualTo(ImportResult.Ok(recipes = 1, images = 2, diaryEntries = 1))
+            .isEqualTo(ImportResult.Ok(recipes = 1, images = 2, diaryEntries = 1, pantryItems = 1, meals = 1, ratings = 1))
         assertThat(restored.snapshot()).isEqualTo(before)
     }
 
@@ -501,7 +506,8 @@ class BackupImporterTest {
 
         assertThat(local.import(zip, ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0))
         assertThat(local.snapshot()).isEqualTo(before)
-        assertThat(local.import(zip, ImportMode.REPLACE_ALL)).isEqualTo(ImportResult.Ok(recipes = 1, images = 0, diaryEntries = 1))
+        assertThat(local.import(zip, ImportMode.REPLACE_ALL))
+            .isEqualTo(ImportResult.Ok(recipes = 1, images = 0, diaryEntries = 1, pantryItems = 1, meals = 1, ratings = 1))
         assertThat(local.snapshot()).isEqualTo(before)
     }
 
@@ -594,7 +600,7 @@ class BackupImporterTest {
             ),
         )
 
-        assertThat(local.import(backupZip(backup), ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0))
+        assertThat(local.import(backupZip(backup), ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0, pantryItems = 1))
 
         val items = local.db.pantryDao().getAll()
         assertThat(items.map { it.name }).containsExactly("Arroz", "Lentejas")
@@ -630,7 +636,7 @@ class BackupImporterTest {
             ),
         )
 
-        assertThat(local.import(backupZip(backup), ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0))
+        assertThat(local.import(backupZip(backup), ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0, meals = 1))
 
         assertThat(local.db.mealPlanDao().getAll()).containsExactly(
             MealPlanEntity("m-local", "2026-11-16", "COMIDA", "r1", 2),
@@ -659,7 +665,7 @@ class BackupImporterTest {
             ),
         )
 
-        assertThat(local.import(backupZip(backup), ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0))
+        assertThat(local.import(backupZip(backup), ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0, ratings = 2))
 
         assertThat(local.db.pairingRatingDao().getAll().sortedBy { it.pairKey }).containsExactly(
             rating("k1", "CATALOG", "vino", "RECIPE", "r1", false, t2),

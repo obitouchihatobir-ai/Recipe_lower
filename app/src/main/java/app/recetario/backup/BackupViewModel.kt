@@ -463,7 +463,10 @@ class BackupViewModel(
                 }
                 _messages.trySend(
                     when (result) {
-                        is ImportResult.Ok -> importSummary(result.recipes, result.images, result.failedImages, result.diaryEntries)
+                        is ImportResult.Ok -> importSummary(
+                            result.recipes, result.images, result.failedImages, result.diaryEntries,
+                            result.pantryItems, result.meals, result.ratings,
+                        )
                         is ImportResult.Error -> result.message
                     },
                 )

@@ -66,6 +66,23 @@ import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import app.recetario.settings.BackupStatus
 import kotlinx.coroutines.runBlocking
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.performScrollTo
+import androidx.room.testing.MigrationTestHelper
+import androidx.test.platform.app.InstrumentationRegistry
+import app.recetario.core.data.AppDatabase
+import app.recetario.core.data.DatabaseUpgradeGuard
+import app.recetario.core.data.GuardResult
+import app.recetario.core.data.SaveOption
+import app.recetario.core.data.UpgradeErrorContent
+import app.recetario.core.data.createV1Database
+import app.recetario.diary.CookLogEntry
+import app.recetario.navigation.Diary
+import app.recetario.testing.testClock
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -74,9 +91,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.time.Instant
+import java.time.LocalDate
 
 /**
- * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle, Ajustes, Acerca de, Apariencia, Categorías, Copias de seguridad (también con Google Drive), el modo cocina, la compra y algunas animaciones a medias (porciones, tachado, confeti, «Receta guardada») en los tres temas, en `app/build/capturas/` (CI las sube como
+ * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle (también con la línea del
+ * diario y su historial), Ajustes, Acerca de, Apariencia, Categorías, Copias de seguridad (también con Google Drive y
+ * la copia «Antes de actualizar»), el modo cocina (con la tarjeta del diario bajo «¡Listo!»), la compra, la despensa,
+ * «¿Qué puedo hacer?», el Diario, la pantalla de error de la actualización y algunas animaciones a medias (porciones, tachado, confeti, «Receta guardada») en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -85,6 +106,11 @@ import java.time.Instant
 class CapturasTest {
     @get:Rule
     val rule = createComposeRule()
+
+    @get:Rule
+    val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), AppDatabase::class.java)
+
+    private val context = ApplicationProvider.getApplicationContext<Context>()
 
     private var container: AppContainer? = null
 
@@ -172,6 +198,87 @@ class CapturasTest {
         captureHomeNotice(c, nav, name)
         captureSaved(c, nav, name)
         captureShopping(c, name)
+        capturePantry(c, nav, name)
+        captureDiary(c, nav, name)
+    }
+
+    /** Despensa (pestaña de Compra) y «¿Qué puedo hacer?» con una receta completa y otras a medias. */
+    private fun capturePantry(c: AppContainer, nav: NavHostController, name: String) {
+        runBlocking {
+            for (item in listOf("Calabaza", "Cebolla", "Ajo", "Caldo de verduras", "Limones", "Hierbabuena")) {
+                c.pantryRepository.add(item)
+            }
+        }
+        rule.onNodeWithTag("shopping-tab-pantry").performClick()
+        rule.waitFor(hasTestTag("pantry-list"))
+        rule.waitFor(hasText("Hierbabuena"))
+        save("despensa-$name")
+
+        rule.onNodeWithTag("pantry-what-can-i-make").performClick()
+        rule.waitFor(hasTestTag("what-can-i-make-list"))
+        rule.waitFor(hasText("Limonada con hierbabuena"))
+        save("que-puedo-hacer-$name")
+        rule.runOnIdle { nav.popBackStack() }
+        rule.waitForGone(hasTestTag("what-can-i-make-list"))
+    }
+
+    /**
+     * Diario: la cronología por meses, una entrada abierta (estrellas dibujadas y fotos), y en el detalle la línea
+     * «La hiciste…» con media estrella (4,5) y su historial.
+     */
+    private fun captureDiary(c: AppContainer, nav: NavHostController, name: String) {
+        runBlocking {
+            fun entry(id: String, recipeId: String?, title: String, date: LocalDate, rating: Int?, note: String = "") =
+                CookLogEntry(id, recipeId, title, date, rating, note, emptyList(), Instant.parse("2026-11-01T10:00:00Z"), Instant.parse("2026-11-01T10:00:00Z"))
+            c.diaryRepository.save(entry("d1", "calabaza", "Crema de calabaza", LocalDate.of(2026, 11, 10), 5, "Con un poco de jengibre: perfecta."))
+            c.diaryRepository.save(entry("d2", "calabaza", "Crema de calabaza", LocalDate.of(2026, 10, 24), 4))
+            c.diaryRepository.save(entry("d3", "limonada", "Limonada con hierbabuena", LocalDate.of(2026, 10, 2), 3, "Menos azúcar la próxima vez."))
+            c.diaryRepository.save(entry("d4", null, "Pan de muerto", LocalDate.of(2026, 9, 1), null, "Receta de la vecina."))
+        }
+        rule.runOnIdle { nav.navigate(Diary) }
+        rule.waitFor(hasTestTag("diary-list"))
+        rule.waitFor(hasText("Pan de muerto"))
+        save("diario-$name")
+        rule.onNodeWithTag("diary-entry-d1").performClick()
+        rule.waitFor(hasTestTag("log-panel"))
+        save("diario-entrada-$name")
+        rule.onNodeWithTag("diary-cancel").performScrollTo().performClick()
+        rule.waitForGone(hasTestTag("log-panel"))
+
+        rule.runOnIdle { nav.navigate(RecipeDetail("calabaza")) }
+        rule.waitFor(hasTestTag("detail-stats"))
+        rule.waitFor(hasText("La hiciste 2 veces · última hace 3 días"))
+        rule.onNodeWithTag("detail-list").performScrollToNode(hasTestTag("detail-stats"))
+        save("detalle-diario-$name")
+        rule.onNodeWithTag("detail-stats").performClick()
+        rule.waitFor(hasTestTag("diary-history"))
+        save("detalle-historial-$name")
+    }
+
+    /** La pantalla de error de la actualización (§6.2) en los tres temas, con sus dos mensajes. */
+    @Test
+    fun errorActualizar() {
+        var theme by mutableStateOf(ThemeChoice.CALIDO)
+        var unreadable by mutableStateOf(false)
+        rule.setContent {
+            RecetarioTheme(theme) {
+                UpgradeErrorContent(
+                    message = if (unreadable) BackupMessages.DATABASE_UNREADABLE else BackupMessages.MIGRATION_FAILED,
+                    save = if (unreadable) SaveOption.DATABASE else SaveOption.COPY,
+                    busy = false,
+                    snackbar = remember { SnackbarHostState() },
+                    onSaveOutside = {},
+                )
+            }
+        }
+        for (choice in ThemeChoice.entries) {
+            for (bad in listOf(false, true)) {
+                theme = choice
+                unreadable = bad
+                rule.waitFor(hasTestTag("upgrade-error"))
+                save("error-actualizar${if (bad) "-ilegible" else ""}-${choice.name.lowercase()}")
+            }
+        }
     }
 
     /** Porciones: el número rodando a mitad del cambio de 4 a 5 (después vuelve a 4 para las demás capturas). */
@@ -245,6 +352,10 @@ class CapturasTest {
             File(dir, "Sazon-2026-11-08-0300.zip").outputStream().use { c.backupManager.export(it) }
             File(dir, "antes-de-importar-2026-11-01-0900.zip").writeText("roto")
         }
+        // Una copia de antes de actualizar (de una v1 con «Sopa de tortilla»), como la que deja la guarda.
+        createV1Database(helper, "capturas-v1.db")
+        val guard = DatabaseUpgradeGuard(context.getDatabasePath("capturas-v1.db"), c.backupManager.localBackupsDir, testClock)
+        val beforeUpdate = (guard.prepare() as GuardResult.Copied).fileName
         // El zip que «elige» el selector falso: se comprueba entero antes de ofrecer nada.
         val chosen = backupZip(
             backupOf(sampleRecipe("p1", "Paella"), sampleRecipe("p2", "Gazpacho"), sampleRecipe("p3", "Flan")),
@@ -291,6 +402,9 @@ class CapturasTest {
         rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("local-backup-antes-de-importar-2026-11-01-0900.zip"))
         rule.waitFor(hasText("Copia dañada"))
         save("copias-telefono-$name")
+        rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("local-backup-$beforeUpdate"))
+        rule.waitFor(hasText("Antes de actualizar", substring = true))
+        save("copias-antes-de-actualizar-$name")
         rule.onNodeWithTag("backup-list").performScrollToNode(hasTestTag("backup-import"))
         rule.onNodeWithTag("backup-import").performClick()
         rule.waitFor(hasTestTag("import-mode-panel"))
@@ -363,6 +477,13 @@ class CapturasTest {
         markDone(4, midwayCapture = "cocina-confeti-$name", midwayMs = 450)
         rule.waitFor(hasText("¡Listo!"))
         save("cocina-listo-$name")
+        // Bajo «¡Listo!», la tarjeta del diario con 4 estrellas elegidas.
+        rule.waitFor(hasTestTag("diary-card"))
+        rule.onNodeWithTag("cooking-list").performScrollToNode(hasContentDescription("4 estrellas"))
+        rule.onNodeWithContentDescription("4 estrellas").performClick()
+        rule.waitFor(hasText("4 de 5 estrellas"))
+        rule.onNodeWithTag("cooking-list").performScrollToNode(hasTestTag("diary-save"))
+        save("cocina-diario-$name")
         rule.runOnIdle { c.timerManager.cancel("p2") }
     }
 

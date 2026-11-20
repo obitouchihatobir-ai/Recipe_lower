@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +48,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.recetario.core.ui.components.AppTextField
+import app.recetario.core.ui.components.DrawnStar
+import app.recetario.core.ui.components.DrawnStars
 import app.recetario.core.ui.components.FieldLabel
 import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.PhotoOrPlaceholder
@@ -224,33 +228,29 @@ fun StarRating(rating: Int?, onRate: (Int) -> Unit, modifier: Modifier = Modifie
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        if (on) "★" else "☆",
-                        color = if (on) c.accent else c.muted,
-                        fontSize = 28.sp,
-                        modifier = Modifier.clearAndSetSemantics {},
-                    )
+                    DrawnStar(if (on) 1f else 0f, if (on) c.accent else c.muted, Modifier.size(28.dp).clearAndSetSemantics {})
                 }
             }
         }
     }
 }
 
-/** Estrellas de una entrada en una lista («★★★★☆»), leídas como «4 de 5 estrellas»; nada sin valoración. */
+/** Estrellas dibujadas de una entrada en una lista, leídas como «4 de 5 estrellas»; nada sin valoración. */
 @Composable
 fun RatingStars(rating: Int?, modifier: Modifier = Modifier) {
     if (rating == null) return
-    Text(
-        ratingStars(rating),
-        color = LocalRecetarioColors.current.accent,
-        fontSize = 14.sp,
-        modifier = modifier.clearAndSetSemantics { contentDescription = ratingDescription(rating) },
+    DrawnStars(
+        ratingFills(rating),
+        LocalRecetarioColors.current.accent,
+        modifier.semantics(mergeDescendants = true) { contentDescription = ratingDescription(rating) },
     )
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun LogPhotos(draft: LogDraft, photoStore: PhotoStore, actions: LogFormActions) {
     val c = LocalRecetarioColors.current
+    // FlowRow: con 3 fotos en 360 dp, «Añadir foto» pasa a la línea siguiente en vez de aplastarse.
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         draft.photos.forEachIndexed { i, name ->
             Box(Modifier.size(64.dp)) {

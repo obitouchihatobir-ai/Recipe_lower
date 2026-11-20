@@ -16,17 +16,23 @@ import app.recetario.testing.sampleRecipe
 import app.recetario.testing.waitFor
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class WhatCanIMakeTest {
-    @get:Rule
+    /** Cierra la base de datos después de desechar la composición (como en ShoppingScreenTest). */
+    @get:Rule(order = 0)
+    val closeDatabase = object : ExternalResource() {
+        override fun after() = container.database.close()
+    }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -35,9 +41,6 @@ class WhatCanIMakeTest {
     fun setUp() {
         container = installTestContainer()
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     private fun ingredients(recipe: String, vararg names: String): List<Ingredient> =
         names.mapIndexed { i, n -> ingredient("$recipe-$i", n, 1.0, MeasureUnit.PIECE) }

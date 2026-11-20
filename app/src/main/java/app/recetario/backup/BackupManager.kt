@@ -35,9 +35,18 @@ sealed interface ImportResult {
     /**
      * [recipes]: recetas añadidas o actualizadas; [images]: fotos copiadas al teléfono; [failedImages]: fotos de la
      * copia que alguna receta usa y no se pudieron copiar (la receta muestra un marcador); [diaryEntries]: entradas
-     * del diario añadidas o actualizadas.
+     * del diario añadidas o actualizadas; [pantryItems], [meals] y [ratings]: artículos de la despensa, comidas del
+     * menú y valoraciones de maridaje añadidos (o, las valoraciones, actualizados).
      */
-    data class Ok(val recipes: Int, val images: Int, val failedImages: Int = 0, val diaryEntries: Int = 0) : ImportResult
+    data class Ok(
+        val recipes: Int,
+        val images: Int,
+        val failedImages: Int = 0,
+        val diaryEntries: Int = 0,
+        val pantryItems: Int = 0,
+        val meals: Int = 0,
+        val ratings: Int = 0,
+    ) : ImportResult
     data class Error(val message: String) : ImportResult
 }
 

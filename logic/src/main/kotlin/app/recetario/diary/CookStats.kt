@@ -18,11 +18,13 @@ fun statsByRecipe(entries: List<CookLogEntry>): Map<String, CookStats> =
 
 fun roundToHalfStar(avg: Double): Double = Math.round(avg * 2) / 2.0
 
-private fun starsText(avg: Double): String {
-    val half = roundToHalfStar(avg.coerceIn(0.0, 5.0))
-    val full = half.toInt()
-    val hasHalf = half - full >= 0.5
-    return "★".repeat(full) + (if (hasHalf) "⯪" else "") + "☆".repeat(5 - full - if (hasHalf) 1 else 0)
+/**
+ * Relleno de cada una de las 5 estrellas (1, 0,5 o 0) para una media redondeada a media estrella. Las estrellas
+ * se dibujan (no se escriben con un glifo: el de media estrella falta en algunas fuentes de Android).
+ */
+fun starFills(average: Double): List<Float> {
+    val half = roundToHalfStar(average.coerceIn(0.0, 5.0))
+    return (1..5).map { n -> (half - (n - 1)).coerceIn(0.0, 1.0).toFloat() }
 }
 
 internal fun relativeDate(date: LocalDate, today: LocalDate): String {
@@ -37,13 +39,13 @@ internal fun relativeDate(date: LocalDate, today: LocalDate): String {
     }
 }
 
+/** «La hiciste 3 veces · última hace 2 semanas» (o «Aún no la has hecho»); la media va aparte, con [starFills]. */
 fun cookStatsLine(stats: CookStats?, today: LocalDate): String {
     if (stats == null || stats.count == 0 || stats.lastDate == null) return "Aún no la has hecho"
     val times = if (stats.count == 1) "1 vez" else "${stats.count} veces"
     val rel = relativeDate(stats.lastDate, today)
     val date = if (stats.count == 1) rel else "última $rel"
-    val base = "La hiciste $times · $date"
-    return if (stats.averageRating == null) base else "$base · ${starsText(stats.averageRating)}"
+    return "La hiciste $times · $date"
 }
 
 /** Ids de recetas hechas, cuya última vez fue hace al menos `minDays`; la más antigua primero. */

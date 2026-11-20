@@ -28,24 +28,27 @@ import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.ExternalResource
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class SettingsBasicsTest {
-    @get:Rule
+    /** Cierra la base de datos después de desechar la composición (como en ShoppingScreenTest). */
+    @get:Rule(order = 0)
+    val closeDatabase = object : ExternalResource() {
+        override fun after() {
+            container?.database?.close()
+        }
+    }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private var container: AppContainer? = null
-
-    @After
-    fun tearDown() {
-        container?.database?.close()
-    }
 
     @Test
     fun editBasics_changesCoverage() {

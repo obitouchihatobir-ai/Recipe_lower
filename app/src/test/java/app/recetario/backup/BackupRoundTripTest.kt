@@ -244,7 +244,7 @@ class BackupRoundTripTest {
 
         val result = b.import(zip, ImportMode.REPLACE_ALL)
 
-        assertThat(result).isEqualTo(ImportResult.Ok(recipes = 2, images = 3, diaryEntries = 2))
+        assertThat(result).isEqualTo(ImportResult.Ok(recipes = 2, images = 3, diaryEntries = 2, pantryItems = 2, meals = 3, ratings = 2))
         assertThat(b.snapshot()).isEqualTo(before)
         assertThat(b.cacheFiles()).isEmpty()
 

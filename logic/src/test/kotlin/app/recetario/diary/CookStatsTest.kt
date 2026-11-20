@@ -57,7 +57,8 @@ class CookStatsTest {
     @Test
     fun line_threeWithRating() {
         val s = CookStats(3, today.minusDays(14), 4.2)
-        assertThat(cookStatsLine(s, today)).isEqualTo("La hiciste 3 veces · última hace 2 semanas · ★★★★☆")
+        // Las estrellas se dibujan aparte (starFills): un glifo de media estrella falta en algunas fuentes de Android.
+        assertThat(cookStatsLine(s, today)).isEqualTo("La hiciste 3 veces · última hace 2 semanas")
     }
 
     @Test
@@ -67,9 +68,14 @@ class CookStatsTest {
     }
 
     @Test
-    fun line_halfStar() {
-        assertThat(cookStatsLine(CookStats(2, today, 3.75), today)).endsWith("★★★★☆")
-        assertThat(cookStatsLine(CookStats(2, today, 3.4), today)).endsWith("★★★⯪☆")
+    fun starFills_roundToHalfStars() {
+        assertThat(starFills(3.75)).containsExactly(1f, 1f, 1f, 1f, 0f).inOrder()
+        assertThat(starFills(3.4)).containsExactly(1f, 1f, 1f, 0.5f, 0f).inOrder()
+        assertThat(starFills(4.5)).containsExactly(1f, 1f, 1f, 1f, 0.5f).inOrder()
+        assertThat(starFills(5.0)).containsExactly(1f, 1f, 1f, 1f, 1f).inOrder()
+        assertThat(starFills(0.2)).containsExactly(0f, 0f, 0f, 0f, 0f).inOrder()
+        assertThat(starFills(7.0)).containsExactly(1f, 1f, 1f, 1f, 1f).inOrder()
+        assertThat(starFills(-1.0)).containsExactly(0f, 0f, 0f, 0f, 0f).inOrder()
     }
 
     @Test

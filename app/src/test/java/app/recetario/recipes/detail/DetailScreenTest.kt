@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -135,12 +136,25 @@ class DetailScreenTest {
         rule.waitFor(hasText("1,2 kg"))
     }
 
+    private val need = hasText("🛒 Lo que necesito → a la compra")
+
     /**
-     * «Lo que necesito» por su acción: con la línea del diario en la cabecera, tras desplazarse el botón puede quedar
-     * justo detrás de «▶ Modo cocina» (fijo abajo) y un toque en su centro caería en ese otro botón.
+     * Desplaza hasta «Lo que necesito» y, si queda detrás de «▶ Modo cocina» (fijo abajo), un poco más: el relleno
+     * inferior de la lista (alto real del botón + márgenes) deja siempre sitio para que quede por encima.
      */
-    private fun tapNeed() =
-        rule.onNodeWithText("🛒 Lo que necesito → a la compra").performSemanticsAction(SemanticsActions.OnClick)
+    private fun scrollNeedAboveCookButton() {
+        rule.onNodeWithTag("detail-list").performScrollToNode(need)
+        val overlap = rule.onNode(need).getBoundsInRoot().bottom - rule.onNodeWithTag("detail-cook").getBoundsInRoot().top
+        if (overlap > 0.dp) {
+            val px = with(rule.density) { (overlap + 8.dp).toPx() }
+            rule.onNodeWithTag("detail-list").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, px) }
+        }
+        rule.waitForIdle()
+        assertThat(rule.onNode(need).getBoundsInRoot().bottom).isAtMost(rule.onNodeWithTag("detail-cook").getBoundsInRoot().top)
+    }
+
+    /** Un toque de verdad en el centro del botón (no solo su acción): no cae en «▶ Modo cocina». */
+    private fun tapNeed() = rule.onNode(need).performClick()
 
     @Test
     fun need_addsUncheckedAndShowsMessage() {
@@ -148,9 +162,10 @@ class DetailScreenTest {
         launch()
         rule.waitFor(hasText("Calabaza"))
         rule.onNodeWithText("Calabaza").performClick() // marcada: no se añade
-        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("🛒 Lo que necesito → a la compra"))
+        scrollNeedAboveCookButton()
         tapNeed()
         rule.waitFor(hasText("✓ 7 ingredientes añadidos a tu lista de compra"))
+        assertThat(cookingServings).isNull() // el toque no cayó en «▶ Modo cocina»
         val items = runBlocking { container.shoppingRepository.observe().first() }.values.flatten()
         assertThat(items).hasSize(7)
     }
@@ -228,8 +243,7 @@ class DetailScreenTest {
         save()
         launch()
         rule.waitFor(hasText("Calabaza"))
-        rule.onNodeWithTag("detail-list").performScrollToNode(hasText("🛒 Lo que necesito → a la compra"))
-        rule.waitForIdle()
+        scrollNeedAboveCookButton()
         rule.mainClock.autoAdvance = false
         val message = hasText("✓ 8 ingredientes añadidos a tu lista de compra")
         fun toastShown() = rule.onAllNodes(message).fetchSemanticsNodes().isNotEmpty()

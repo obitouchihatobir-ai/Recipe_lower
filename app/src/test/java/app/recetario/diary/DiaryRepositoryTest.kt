@@ -181,4 +181,29 @@ class DiaryRepositoryTest {
         assertThat(db.pairingRatingDao().getAll().map { it.pairKey })
             .containsExactly("CATALOG:cafe|RECIPE:r2", "CATALOG:r1|RECIPE:r2")
     }
+
+    @Test
+    fun editor_importPhoto_revokedUri_showsMessageWithoutCrashing() {
+        val failures = java.util.concurrent.CopyOnWriteArrayList<Throwable>()
+        val scope = kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default +
+                kotlinx.coroutines.CoroutineExceptionHandler { _, e -> failures += e },
+        )
+        val editor = LogEntryEditor(diary, photos, Clock.fixed(now, ZoneOffset.UTC), scope, scope)
+        editor.startNew("r1", "Crema de calabaza")
+        // Android quita el permiso de la URI a mitad de lectura: el proveedor lanza SecurityException.
+        val revoked = object : java.io.InputStream() {
+            override fun read(): Int = throw SecurityException("Permission Denial")
+        }
+
+        editor.importPhoto(revoked)
+
+        val deadline = System.currentTimeMillis() + 5_000
+        while (editor.draft.value?.error == null && failures.isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10)
+        }
+        assertThat(failures).isEmpty()
+        assertThat(editor.draft.value?.error).isEqualTo(LogEntryEditor.PHOTO_FAILED)
+        assertThat(editor.draft.value?.photos).isEmpty()
+    }
 }

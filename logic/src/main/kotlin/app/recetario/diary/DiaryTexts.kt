@@ -27,21 +27,16 @@ fun groupByMonth(entries: List<CookLogEntry>): List<Pair<YearMonth, List<CookLog
 /** Texto para TalkBack de una valoración: «4 de 5 estrellas» o «Sin valoración». */
 fun ratingDescription(rating: Int?): String = if (rating == null) "Sin valoración" else "$rating de 5 estrellas"
 
-/** Las estrellas de una valoración entera («★★★★☆»); vacío sin valoración. */
-fun ratingStars(rating: Int?): String {
-    if (rating == null) return ""
-    val n = rating.coerceIn(0, 5)
-    return "★".repeat(n) + "☆".repeat(5 - n)
-}
+/** Relleno de las 5 estrellas de una valoración entera (como [starFills]); vacío sin valoración. */
+fun ratingFills(rating: Int?): List<Float> = if (rating == null) emptyList() else starFills(rating.toDouble())
 
-/** [cookStatsLine] con la media en palabras («valoración media: 3,5 de 5 estrellas») en vez de estrellas, para TalkBack. */
+/** [cookStatsLine] con la media en palabras («valoración media: 3,5 de 5 estrellas»), para TalkBack. */
 fun cookStatsDescription(stats: CookStats?, today: LocalDate): String {
     val line = cookStatsLine(stats, today)
     val average = stats?.averageRating ?: return line
-    val stars = line.substringAfterLast(" · ")
     val half = roundToHalfStar(average.coerceIn(0.0, 5.0))
     val number = if (half % 1.0 == 0.0) half.toInt().toString() else half.toString().replace('.', ',')
-    return line.removeSuffix(stars) + "valoración media: $number de 5 estrellas"
+    return "$line · valoración media: $number de 5 estrellas"
 }
 
 /** Fecha de una entrada en el panel: «Hoy», «Ayer» o «5 de marzo de 2026». */

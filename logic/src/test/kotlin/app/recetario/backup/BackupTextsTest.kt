@@ -29,6 +29,20 @@ class BackupTextsTest {
     }
 
     @Test
+    fun importSummary_countsPantryMenuAndRatings_whenThereAreAny() {
+        // Combinar sin recetas nuevas pero con despensa: no basta con «0 recetas, 0 fotos».
+        assertThat(importSummary(0, 0, pantryItems = 2))
+            .isEqualTo("Copia importada: 0 recetas, 2 artículos de la despensa, 0 fotos.")
+        assertThat(importSummary(1, 1, diaryEntries = 1, pantryItems = 1, meals = 1, ratings = 1))
+            .isEqualTo(
+                "Copia importada: 1 receta, 1 entrada del diario, 1 artículo de la despensa, 1 comida del menú, " +
+                    "1 valoración de maridaje, 1 foto.",
+            )
+        assertThat(importSummary(2, 0, meals = 3, ratings = 2))
+            .isEqualTo("Copia importada: 2 recetas, 3 comidas del menú, 2 valoraciones de maridaje, 0 fotos.")
+    }
+
+    @Test
     fun replaceComparison_comparesTheCopyWithWhatYouHave() {
         assertThat(replaceComparison(backupRecipes = 12, localRecipes = 40)).isEqualTo("La copia tiene 12 recetas; ahora tienes 40.")
         assertThat(replaceComparison(backupRecipes = 1, localRecipes = 1)).isEqualTo("La copia tiene 1 receta; ahora tienes 1.")
