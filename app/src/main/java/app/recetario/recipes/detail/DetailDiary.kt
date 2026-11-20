@@ -24,9 +24,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import app.recetario.core.ui.components.DrawnStars
 import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.PhotoOrPlaceholder
 import app.recetario.core.ui.components.SectionTitle
@@ -38,13 +40,14 @@ import app.recetario.diary.RatingStars
 import app.recetario.diary.cookStatsDescription
 import app.recetario.diary.cookStatsLine
 import app.recetario.diary.logDateLabel
+import app.recetario.diary.starFills
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.settings.BottomPanel
 import java.time.LocalDate
 
 /**
- * «La hiciste 3 veces · última hace 2 semanas · ★★★★☆» (o «Aún no la has hecho»); tocarla abre el historial.
- * TalkBack lee las estrellas como «valoración media: 4 de 5 estrellas». Al lado, «✓ Lo hice».
+ * «La hiciste 3 veces · última hace 2 semanas» y la media en estrellas dibujadas (o «Aún no la has hecho»); tocarla
+ * abre el historial. TalkBack lee las estrellas como «valoración media: 4 de 5 estrellas». Al lado, «✓ Lo hice».
  */
 @Composable
 internal fun CookStatsRow(stats: CookStats?, today: LocalDate, onHistory: () -> Unit, onLog: () -> Unit) {
@@ -65,8 +68,13 @@ internal fun CookStatsRow(stats: CookStats?, today: LocalDate, onHistory: () -> 
                 line,
                 color = c.muted,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = if (description != line) Modifier.semantics { contentDescription = description } else Modifier,
+                modifier = Modifier.weight(1f, fill = false)
+                    .then(if (description != line) Modifier.semantics { contentDescription = description } else Modifier),
             )
+            stats?.averageRating?.let { average ->
+                Spacer(Modifier.width(6.dp))
+                DrawnStars(starFills(average), c.accent, Modifier.testTag("detail-stars"))
+            }
         }
         Spacer(Modifier.width(8.dp))
         TagPill("✓ Lo hice", accent = true, onClick = onLog, modifier = Modifier.testTag("detail-log"))
@@ -88,7 +96,16 @@ internal fun BoxScope.HistoryPanel(
     BottomPanel(onDismiss, "diary-history") {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle("Historial")
-            MutedText(cookStatsLine(stats, today), Modifier.semantics { contentDescription = cookStatsDescription(stats, today) })
+            Row(
+                Modifier.clearAndSetSemantics { contentDescription = cookStatsDescription(stats, today) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MutedText(cookStatsLine(stats, today), Modifier.weight(1f, fill = false))
+                stats?.averageRating?.let { average ->
+                    Spacer(Modifier.width(6.dp))
+                    DrawnStars(starFills(average), c.accent)
+                }
+            }
             history.forEachIndexed { i, entry ->
                 if (i > 0) HorizontalDivider(color = c.line)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {

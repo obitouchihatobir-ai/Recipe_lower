@@ -530,6 +530,13 @@ class CapturasTest {
         sampleRecipe(
             "limonada", "Limonada con hierbabuena", DefaultCategories.DRINK_ID, minutes = 10,
             flavor = FlavorProfile(sweet = 1, sour = 3), updatedAt = 600, favorite = true,
+            // Para «¿Qué puedo hacer?»: con los limones y la hierbabuena de la despensa, está todo.
+            ingredients = listOf(
+                ingredient("l1", "Limones", 4.0, MeasureUnit.PIECE),
+                ingredient("l2", "Hierbabuena", null, MeasureUnit.PINCH),
+                ingredient("l3", "Agua", 1.0, MeasureUnit.LITER),
+                ingredient("l4", "Azúcar", 100.0, MeasureUnit.GRAM),
+            ),
         ),
         sampleRecipe(
             "bloody", "Bloody Mary", DefaultCategories.DRINK_ID, minutes = 5,

@@ -1,7 +1,6 @@
 package app.recetario.diary
 
 import app.recetario.recipes.data.PhotoStore
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -91,6 +90,10 @@ class LogEntryEditor(
             val name = try {
                 photoStore.import(source)
             } catch (_: IOException) {
+                _draft.update { it?.copy(error = PHOTO_FAILED) }
+                return@launch
+            } catch (_: SecurityException) {
+                // La URI dejó de tener permiso (p. ej., revocado a mitad de lectura): aviso, sin cerrarse.
                 _draft.update { it?.copy(error = PHOTO_FAILED) }
                 return@launch
             }

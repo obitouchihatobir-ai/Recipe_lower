@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,7 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -216,10 +221,16 @@ fun DetailContent(
     var conversionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var historyOpen by rememberSaveable { mutableStateOf(false) }
 
+    // Alto real del botón fijo «▶ Modo cocina» (crece con el tamaño de letra); el final de la lista queda por encima.
+    val density = LocalDensity.current
+    var cookButtonHeight by remember { mutableStateOf(52.dp) }
+    val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val listBottom = if (recipe != null) cookButtonHeight + COOK_BUTTON_MARGIN * 2 + navigationBottom else navigationBottom
+
     Box(Modifier.fillMaxSize().background(c.bg)) {
         LazyColumn(
             Modifier.fillMaxSize().testTag("detail-list"),
-            contentPadding = PaddingValues(bottom = 120.dp),
+            contentPadding = PaddingValues(bottom = listBottom),
         ) {
             item(key = "hero") {
                 Box {
@@ -421,7 +432,8 @@ fun DetailContent(
         }
 
         Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp).padding(bottom = 18.dp),
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()
+                .padding(horizontal = 18.dp).padding(bottom = COOK_BUTTON_MARGIN),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             SnackbarHost(snackbar)
@@ -429,7 +441,9 @@ fun DetailContent(
             if (recipe != null) {
                 Button(
                     onClick = onCooking,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("detail-cook"),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                        .onSizeChanged { cookButtonHeight = with(density) { it.height.toDp() } }
+                        .testTag("detail-cook"),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp),
@@ -481,3 +495,6 @@ private fun serveTempText(t: ServeTemp) = when (t) {
     ServeTemp.COLD -> "Se sirve fría"
     ServeTemp.ROOM -> "Se sirve a temperatura ambiente"
 }
+
+/** Margen bajo «▶ Modo cocina» y hueco entre el final de la lista y el botón. */
+private val COOK_BUTTON_MARGIN = 18.dp

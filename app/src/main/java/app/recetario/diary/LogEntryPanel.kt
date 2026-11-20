@@ -251,7 +251,11 @@ fun RatingStars(rating: Int?, modifier: Modifier = Modifier) {
 private fun LogPhotos(draft: LogDraft, photoStore: PhotoStore, actions: LogFormActions) {
     val c = LocalRecetarioColors.current
     // FlowRow: con 3 fotos en 360 dp, «Añadir foto» pasa a la línea siguiente en vez de aplastarse.
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
         draft.photos.forEachIndexed { i, name ->
             Box(Modifier.size(64.dp)) {
                 PhotoOrPlaceholder(

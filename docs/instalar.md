@@ -2,7 +2,7 @@
 
 Sazón no está en Google Play. GitHub la compila, la firma con tu llave y la deja en la página **Releases** del repositorio. Desde ahí la descargas al móvil.
 
-> **¿Te han pasado un APK de prueba (`Sazon-0.1.0-prueba.apk`)?** Se instala como en el paso 4, pero lleva una llave provisional. Lee antes el apartado 7.
+> **¿Te han pasado un APK de prueba (`Sazon-0.2.0-prueba.apk`)?** Se instala como en el paso 4, pero lleva una llave provisional. Lee antes el apartado 7.
 
 Los pasos 1 y 2 se hacen **una sola vez**, mejor desde un ordenador. Después, para instalar y actualizar, solo necesitas el móvil (pasos 3 a 5).
 
@@ -40,7 +40,7 @@ Si termina con una cruz roja, ábrela y lee el mensaje:
 ## 3. Descarga la app en el móvil
 
 1. En el móvil, abre esta dirección con el navegador: <https://github.com/obitouchihatobir-ai/Recipe_lower/releases/latest>
-2. En **Assets** (Archivos), toca **Sazon-0.1.0.apk** (sin tilde). El número cambia con cada versión.
+2. En **Assets** (Archivos), toca **Sazon-0.2.0.apk** (sin tilde). El número cambia con cada versión.
 3. Si el navegador avisa de que el archivo puede ser dañino, elige descargarlo de todos modos. Es tu propia app.
 
 ## 4. Permite instalar apps desconocidas e instálala
@@ -60,7 +60,9 @@ Cuando termines, puedes volver a desactivar el permiso del punto 2. Solo lo nece
    2. Pulsa **Run workflow**, comprueba que pone **Branch: main** y pulsa el botón verde **Run workflow**.
    3. Si termina con el aviso «Ejecuta «Publicar APK» en la rama main.», se lanzó desde otra rama: repítelo eligiendo **main**. Así nunca se publica código que aún no está en `main`.
    4. Si termina con «Falta la llave: ejecuta primero el flujo «Crear llave de firma»», haz antes el paso 2.
-3. Para actualizar, repite los pasos 3 y 4. La versión nueva se instala **encima** de la anterior y conservas tus recetas.
+3. Para actualizar, repite los pasos 3 y 4. **Desde la 0.1.0, cada versión de Releases se instala encima de la anterior sin desinstalar nada**: conservas tus recetas, el diario, la despensa, las fotos y los ajustes. No hace falta exportar ni importar (aunque una copia fuera del teléfono nunca está de más).
+   - Si la versión nueva cambia la base de datos (por ejemplo, de la 0.1.0 a la 0.2.0), la primera vez que la abras la app guarda antes una copia de la base de datos anterior en **Ajustes › Copias de seguridad › Copias en el teléfono**, como «Antes de actualizar · fecha». Si algo saliera mal, desde ahí se puede restaurar.
+   - Si la app no pudiera actualizar la base de datos, en vez de cerrarse muestra una pantalla de aviso con un botón para guardar fuera del teléfono la copia (o la base de datos tal cual). No se borra nada.
 4. Esto funciona porque todas las versiones van firmadas con la misma llave. Por eso:
    - no pierdas la frase del paso 1;
    - no borres el archivo `signing/release.p12.enc` del repositorio.
@@ -68,16 +70,18 @@ Cuando termines, puedes volver a desactivar el permiso del punto 2. Solo lo nece
 
 ## 6. Espacio que ocupan las copias
 
-La app guarda copias de seguridad dentro del propio teléfono: una por semana (las de las 4 últimas semanas) y otra antes de cada importación que reemplaza datos (las 3 últimas). Cada copia lleva tus recetas **con sus fotos**, así que con muchas fotos pueden ocupar bastante. Las antiguas se borran solas: normalmente no tienes que hacer nada para liberar espacio. Puedes verlas en **Ajustes › Copias de seguridad › Copias en el teléfono**.
+La app guarda copias de seguridad dentro del propio teléfono: una por semana (las de las 4 últimas semanas), otra antes de cada importación que reemplaza datos (las 3 últimas) y otra de la base de datos antes de cada actualización que la cambia (las 2 últimas). Cada copia lleva tus recetas, el diario y la despensa **con sus fotos**, así que con muchas fotos pueden ocupar bastante. Las antiguas se borran solas: normalmente no tienes que hacer nada para liberar espacio. Puedes verlas en **Ajustes › Copias de seguridad › Copias en el teléfono**.
 
 ## 7. El APK de prueba (`Sazon-…-prueba.apk`)
 
 Cada vez que GitHub comprueba el código, guarda también un APK para probar la app en el móvil: el artefacto **sazon-apk** de la ejecución de **CI**, con el archivo `Sazon-<versión>-prueba.apk` dentro. Es el que se entrega por el chat.
+
+Este apartado es **solo** para los APK de prueba: las versiones de **Releases** se actualizan encima sin desinstalar (apartado 5).
 
 Ese APK va firmado con una **llave provisional**, distinta en cada ejecución, y no con tu llave (paso 2). Por eso Android no deja instalar encima de él ni la versión de **Releases** ni otro APK de prueba: dice que la app «no se ha instalado» o que «entra en conflicto con un paquete existente». Para cambiar a la versión definitiva:
 
 1. En la app, entra en **Ajustes › Copias de seguridad** y toca **Exportar copia**. Guarda el archivo `Sazon-AAAA-MM-DD.zip` fuera de la app: en **Descargas** o en Google Drive.
 2. Desinstala Sazón: mantén pulsado su icono y elige **Desinstalar**. Al desinstalar se borran las recetas del móvil; por eso has hecho antes la copia.
 3. Instala la versión nueva (pasos 3 y 4).
-4. Abre **Ajustes › Copias de seguridad**, toca **Importar copia** y elige el archivo del punto 1. Elige **Reemplazar todo**: en la app recién instalada no hay nada que perder y así vuelven también el tema y el tamaño de la taza (con «Combinar» solo vuelven las recetas, las fotos, las categorías y la compra).
+4. Abre **Ajustes › Copias de seguridad**, toca **Importar copia** y elige el archivo del punto 1. Elige **Reemplazar todo**: en la app recién instalada no hay nada que perder y así vuelven también el tema y el tamaño de la taza (con «Combinar» solo vuelven las recetas, las fotos, las categorías, la compra, el diario y la despensa).
 5. Si usabas la copia automática en Google Drive, vuelve a tocar **Guardar también en Google Drive** en esa misma pantalla: la app nueva no conserva el permiso para escribir en el archivo. Si eliges el archivo de antes, la app te pregunta antes de sobrescribirlo.

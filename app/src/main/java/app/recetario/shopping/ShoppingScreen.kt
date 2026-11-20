@@ -188,13 +188,17 @@ private fun ShoppingListRoute(container: AppContainer, tabs: @Composable () -> U
     fun offerUndo(message: String, items: List<ShoppingItem>) {
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
-            val result = snackbar.showSnackbar(message, actionLabel = "Deshacer", duration = SnackbarDuration.Long)
+            val result = snackbar.showSnackbar(message, actionLabel = UNDO_ACTION, duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) vm.restore(items)
         }
     }
 
-    /** Al marcar como comprado: aviso de 4 s con «A la despensa». */
+    /**
+     * Al marcar como comprado: aviso de 4 s con «A la despensa». No se ofrece mientras se ve un «Deshacer» (borrar o
+     * «Vaciar marcados»): cerrarlo perdería la única forma de recuperar lo borrado.
+     */
     fun offerPantry(name: String) {
+        if (snackbar.currentSnackbarData?.visuals?.actionLabel == UNDO_ACTION) return
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
             val result = snackbar.showSnackbar("«$name» comprado", actionLabel = PANTRY_ACTION, duration = SnackbarDuration.Short)
@@ -366,6 +370,7 @@ fun ShoppingContent(
 }
 
 private const val PANTRY_ACTION = "A la despensa"
+private const val UNDO_ACTION = "Deshacer"
 private const val BOUGHT_KEY = "BOUGHT"
 private const val BOUGHT_LABEL = "Comprado"
 

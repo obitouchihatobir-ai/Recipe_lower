@@ -141,8 +141,9 @@ class RecorridoEtapa2Test {
 
         rule.onNodeWithTag("editor-title").performTextInput(TITLE)
         rule.onNode(hasText("Comidas") and hasAnyAncestor(hasTestTag("editor-list"))).performClick()
-        addIngredient("Arroz", "200", unit = null) // g, la unidad de serie
+        // Primero la que cambia de unidad: solo la fila nueva puede tener aún la de serie (g).
         addIngredient("Tomate", "3", unit = "unidad")
+        addIngredient("Arroz", "200", unit = null) // g, la unidad de serie
         addIngredient("Sal", "5", unit = null) // un básico: no cuenta en la despensa
         addStep("Sofríe el tomate rallado.")
         addStep("Añade el arroz y cuécelo.")
@@ -155,7 +156,7 @@ class RecorridoEtapa2Test {
         val id = runBlocking { container.recipeRepository.observeSummaries().first() }.single { it.title == TITLE }.id
         val recipe = runBlocking { container.recipeRepository.observeRecipe(id).first() }!!
         assertThat(recipe.categoryId).isEqualTo(DefaultCategories.FOOD_ID)
-        assertThat(recipe.ingredients.map { it.name }).containsExactly("Arroz", "Tomate", "Sal").inOrder()
+        assertThat(recipe.ingredients.map { it.name }).containsExactly("Tomate", "Arroz", "Sal").inOrder()
         assertThat(recipe.steps).hasSize(2)
         return recipe
     }

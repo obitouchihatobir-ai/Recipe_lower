@@ -65,7 +65,7 @@ fun PantryRoute(container: AppContainer, tabs: @Composable () -> Unit, onWhatCan
         scope.launch {
             if (vm.add(name)) {
                 query = ""
-            } else if (name.isNotBlank()) {
+            } else if (pantryKey(name).isNotEmpty()) {
                 snackbar.currentSnackbarData?.dismiss()
                 snackbar.showSnackbar("Ya está en la despensa")
             }
@@ -108,7 +108,8 @@ fun PantryContent(
     val suggestions = remember(query, state.items, state.ingredientNames) {
         pantrySuggestions(query, state.ingredientNames, state.items.map { it.name })
     }
-    val canAdd = query.isNotBlank()
+    // Una entrada sin letras ni números («!!!») no tiene nombre que guardar: se ignora (sin «Ya está en la despensa»).
+    val canAdd = pantryKey(query).isNotEmpty()
     ShoppingTabPage(tabs, tag = "pantry-screen", modifier = modifier, snackbar = snackbar) {
         Column(
             Modifier.fillMaxSize().imePadding().padding(horizontal = 18.dp).padding(top = 12.dp),

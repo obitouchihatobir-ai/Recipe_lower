@@ -244,11 +244,14 @@ internal class BackupImporter(
                 Log.w(TAG, "No se pudieron aplicar los ajustes de la copia", e)
             }
         }
-        return ImportResult.Ok(recipes = counts.recipes, images = copied, failedImages = notCopied, diaryEntries = counts.diaryEntries)
+        return ImportResult.Ok(
+            recipes = counts.recipes, images = copied, failedImages = notCopied, diaryEntries = counts.diaryEntries,
+            pantryItems = counts.pantryItems, meals = counts.meals, ratings = counts.ratings,
+        )
     }
 
-    /** Lo que se añadió o actualizó: recetas y entradas del diario. */
-    private class Counts(val recipes: Int, val diaryEntries: Int)
+    /** Lo que se añadió o actualizó: recetas, entradas del diario, despensa, menú y valoraciones. */
+    private class Counts(val recipes: Int, val diaryEntries: Int, val pantryItems: Int, val meals: Int, val ratings: Int)
 
     /** La de la copia es más reciente que la local, que existe ([local] en milisegundos; null si no existe). */
     private fun isNewer(incoming: java.time.Instant, local: Long?) = local != null && incoming.toEpochMilli() > local
@@ -281,10 +284,10 @@ internal class BackupImporter(
         }
         dao.insertShoppingItems(data.shoppingItems.map { it.toShoppingEntity() })
         data.cookLog.forEach { writeCookLog(it) }
-        addPantryItems(data)
-        addMeals(data)
-        addRatings(data)
-        return Counts(recipes = data.recipes.size, diaryEntries = data.cookLog.size)
+        return Counts(
+            recipes = data.recipes.size, diaryEntries = data.cookLog.size,
+            pantryItems = addPantryItems(data), meals = addMeals(data), ratings = addRatings(data),
+        )
     }
 
     /**
@@ -317,10 +320,10 @@ internal class BackupImporter(
             writeCookLog(entry)
             diaryEntries++
         }
-        addPantryItems(data)
-        addMeals(data)
-        addRatings(data)
-        return Counts(recipes = changed, diaryEntries = diaryEntries)
+        return Counts(
+            recipes = changed, diaryEntries = diaryEntries,
+            pantryItems = addPantryItems(data), meals = addMeals(data), ratings = addRatings(data),
+        )
     }
 
     /** Escribe (o sustituye) la entrada con sus fotos; si su receta no existe, queda sin receta (como al borrarla). */
@@ -341,36 +344,45 @@ internal class BackupImporter(
      * Añade los artículos que no están: se compara como al añadir a mano (`normalized` o el mismo nombre en plural),
      * porque `@Upsert` con un id nuevo y un `normalized` que ya existe no haría nada en silencio.
      */
-    private suspend fun addPantryItems(data: ImportData) {
+    private suspend fun addPantryItems(data: ImportData): Int {
         val present = db.backupDao().pantryItems().map { it.name to it.normalized }.toMutableList()
+        var added = 0
         for (item in data.pantry) {
             if (present.any { (name, key) -> key == item.normalized || samePantryName(name, item.name) }) continue
             val row = PantryItemEntity(id = item.id, name = item.name, normalized = item.normalized, addedAt = item.addedAt)
-            if (db.pantryDao().insertIfAbsent(row) != -1L) present += item.name to item.normalized
+            if (db.pantryDao().insertIfAbsent(row) != -1L) {
+                present += item.name to item.normalized
+                added++
+            }
         }
+        return added
     }
 
     /** Solo en huecos libres y con una receta que existe (si se borró, sus platos del menú se van con ella). */
-    private suspend fun addMeals(data: ImportData) {
+    private suspend fun addMeals(data: ImportData): Int {
         val dao = db.backupDao()
+        var added = 0
         for (meal in data.mealPlan) {
             val date = meal.date.toString()
             if (!dao.recipeExists(meal.recipeId) || dao.mealSlotTaken(date, meal.slot)) continue
-            dao.insertMealIfAbsent(MealPlanEntity(id = meal.id, date = date, slot = meal.slot, recipeId = meal.recipeId, servings = meal.servings))
+            val row = MealPlanEntity(id = meal.id, date = date, slot = meal.slot, recipeId = meal.recipeId, servings = meal.servings)
+            if (dao.insertMealIfAbsent(row) != -1L) added++
         }
+        return added
     }
 
     /**
      * Por `pairKey`: se añaden las que faltan y gana la de `ratedAt` posterior. Una con una receta que no existe se
      * descarta (al borrar una receta se borran sus valoraciones).
      */
-    private suspend fun addRatings(data: ImportData) {
+    private suspend fun addRatings(data: ImportData): Int {
         val dao = db.backupDao()
         val rows = data.pairingRatings.filter { r ->
             (r.aKind != RECIPE || dao.recipeExists(r.aId)) && (r.bKind != RECIPE || dao.recipeExists(r.bId)) &&
                 (dao.ratingRatedAt(r.pairKey)?.let { r.ratedAt.toEpochMilli() > it } ?: true)
         }.map { PairingRatingEntity(it.pairKey, it.aKind, it.aId, it.bKind, it.bId, it.liked, it.ratedAt) }
         dao.upsertPairingRatings(rows)
+        return rows.size
     }
 
     /** Por si la caché y los archivos están en discos distintos: copia a un temporal y renombra. */
