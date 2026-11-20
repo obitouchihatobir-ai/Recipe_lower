@@ -197,7 +197,10 @@ fun BackupContent(
                     onDismiss = onDismissPanel,
                 )
                 is ImportPanel.ConfirmReplace -> ConfirmReplacePanel(
-                    comparison = replaceComparison(panel.preview.backupRecipes, panel.preview.localRecipes),
+                    comparison = replaceComparison(
+                        panel.preview.backupRecipes, panel.preview.localRecipes,
+                        panel.preview.backupDiaryEntries, panel.preview.localDiaryEntries,
+                    ),
                     databaseCopy = (panel.source as? ImportSource.Local)?.fileName?.let(::isDatabaseCopy) == true,
                     onConfirm = onConfirmReplace,
                     onDismiss = onDismissPanel,

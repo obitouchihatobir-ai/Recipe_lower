@@ -100,10 +100,11 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>, private 
     }
 
     /**
-     * Ajustes que trae una copia de seguridad al «Reemplazar todo» (tema y taza), en una sola escritura.
-     * Lo que la app no admite se queda como estaba: Nocturno como tema de día o una taza que no es de 240 o 250 ml.
+     * Ajustes que trae una copia de seguridad al «Reemplazar todo» (tema, taza y básicos de la despensa), en una sola
+     * escritura. Lo que la app no admite se queda como estaba: Nocturno como tema de día o una taza que no es de 240 o
+     * 250 ml. [pantryBasics] null (copia v1): vuelven los básicos de serie.
      */
-    suspend fun restoreFromBackup(theme: ThemeSettings, cupMl: Int) {
+    suspend fun restoreFromBackup(theme: ThemeSettings, cupMl: Int, pantryBasics: List<String>? = null) {
         dataStore.edit {
             it[AUTO] = theme.auto
             it[CHOICE] = theme.choice.name
@@ -111,6 +112,11 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>, private 
             it[NIGHT_START] = theme.nightStart.toSecondOfDay() / 60
             it[NIGHT_END] = theme.nightEnd.toSecondOfDay() / 60
             if (cupMl in CUP_SIZES) it[CUP_ML] = cupMl
+            if (pantryBasics == null) {
+                it.remove(PANTRY_BASICS)
+            } else {
+                it[PANTRY_BASICS] = cleanBasics(pantryBasics).joinToString("\n")
+            }
         }
     }
 
@@ -123,9 +129,11 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>, private 
     }.distinctUntilChanged()
 
     suspend fun setPantryBasics(list: List<String>) {
-        val clean = list.map { it.replace('\n', ' ').trim() }.filter { it.isNotEmpty() }.distinct()
+        val clean = cleanBasics(list)
         dataStore.edit { it[PANTRY_BASICS] = clean.joinToString("\n") }
     }
+
+    private fun cleanBasics(list: List<String>) = list.map { it.replace('\n', ' ').trim() }.filter { it.isNotEmpty() }.distinct()
 
     /** Si ya se pidió el permiso de notificaciones (se pide una sola vez, al iniciar el primer temporizador). */
     val notificationPermissionAsked: Flow<Boolean> =

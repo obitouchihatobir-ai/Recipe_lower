@@ -34,15 +34,21 @@ enum class ImportMode { REPLACE_ALL, MERGE }
 sealed interface ImportResult {
     /**
      * [recipes]: recetas añadidas o actualizadas; [images]: fotos copiadas al teléfono; [failedImages]: fotos de la
-     * copia que alguna receta usa y no se pudieron copiar (la receta muestra un marcador).
+     * copia que alguna receta usa y no se pudieron copiar (la receta muestra un marcador); [diaryEntries]: entradas
+     * del diario añadidas o actualizadas.
      */
-    data class Ok(val recipes: Int, val images: Int, val failedImages: Int = 0) : ImportResult
+    data class Ok(val recipes: Int, val images: Int, val failedImages: Int = 0, val diaryEntries: Int = 0) : ImportResult
     data class Error(val message: String) : ImportResult
 }
 
-/** Lo que se sabe de una copia antes de importarla: cuántas recetas trae y cuántas hay ahora. */
+/** Lo que se sabe de una copia antes de importarla: cuántas recetas y entradas del diario trae y cuántas hay ahora. */
 sealed interface PreviewResult {
-    data class Ok(val backupRecipes: Int, val localRecipes: Int) : PreviewResult
+    data class Ok(
+        val backupRecipes: Int,
+        val localRecipes: Int,
+        val backupDiaryEntries: Int = 0,
+        val localDiaryEntries: Int = 0,
+    ) : PreviewResult
     data class Error(val message: String) : PreviewResult
 }
 
@@ -193,14 +199,17 @@ class BackupManager(
                 if (isDatabaseCopy(fileName)) {
                     val recipes = inspectDatabaseCopy(file) ?: return@withContext PreviewResult.Error(BackupMessages.NOT_A_BACKUP)
                     val local = try {
-                        db.backupDao().recipeCount()
+                        db.backupDao().recipeCount() to db.backupDao().cookLogCount()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         Log.w(TAG, "No se pudieron contar las recetas", e)
                         return@withContext PreviewResult.Error(BackupMessages.IMPORT_FAILED)
                     }
-                    return@withContext PreviewResult.Ok(backupRecipes = recipes, localRecipes = local)
+                    return@withContext PreviewResult.Ok(
+                        backupRecipes = recipes, localRecipes = local.first,
+                        backupDiaryEntries = databaseCopyDiaryEntries(file), localDiaryEntries = local.second,
+                    )
                 }
                 val input = try {
                     FileInputStream(file)
@@ -436,6 +445,17 @@ class BackupManager(
     } catch (e: Exception) {
         Log.w(TAG, "La copia ${file.name} no se puede restaurar", e)
         null
+    }
+
+    /** Entradas del diario de una copia de la base de datos; 0 si es de antes del diario (v1) o no se pueden contar. */
+    private fun databaseCopyDiaryEntries(file: File): Int = try {
+        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY, KEEP_ON_CORRUPTION).use { copy ->
+            val hasTable = copy.rawQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cook_log'", null).use { it.moveToFirst() }
+            if (!hasTable) 0 else copy.rawQuery("SELECT COUNT(*) FROM cook_log", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "No se pudieron contar las entradas del diario de ${file.name}", e)
+        0
     }
 
     /**
