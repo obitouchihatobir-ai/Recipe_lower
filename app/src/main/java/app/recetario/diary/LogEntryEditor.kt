@@ -1,6 +1,7 @@
 package app.recetario.diary
 
 import app.recetario.recipes.data.PhotoStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
