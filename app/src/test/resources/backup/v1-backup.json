@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "appVersion": "0.1.0",
+  "createdAt": "2026-11-12T18:00:00Z",
+  "categories": [
+    {
+      "id": "cat-comidas",
+      "name": "Comidas",
+      "emoji": "🍲",
+      "colorHex": "#C8553D",
+      "baseType": "FOOD",
+      "sortOrder": 0,
+      "isDefault": true
+    },
+    {
+      "id": "cat-bebidas",
+      "name": "Bebidas",
+      "emoji": "🍹",
+      "colorHex": "#2A7F8E",
+      "baseType": "DRINK",
+      "sortOrder": 1,
+      "isDefault": true
+    },
+    {
+      "id": "cat-postres",
+      "name": "Postres",
+      "emoji": "🍮",
+      "colorHex": "#B5733A",
+      "baseType": "DESSERT",
+      "sortOrder": 2,
+      "isDefault": true
+    },
+    {
+      "id": "cat-salsas",
+      "name": "Salsas",
+      "emoji": "🥫",
+      "colorHex": "#4A6FA5",
+      "baseType": "OTHER",
+      "sortOrder": 3,
+      "isDefault": false
+    }
+  ],
+  "recipes": [
+    {
+      "id": "v1-receta",
+      "title": "Tortilla de patatas",
+      "categoryId": "cat-comidas",
+      "categoryBaseType": "FOOD",
+      "coverPhoto": "v1-portada.jpg",
+      "description": "La de casa",
+      "totalMinutes": 45,
+      "servings": 4,
+      "difficulty": "MEDIUM",
+      "flavor": {
+        "sweet": 0,
+        "salty": 2,
+        "sour": 0,
+        "bitter": 0,
+        "spicy": 0,
+        "intensity": "MEDIUM",
+        "rich": true
+      },
+      "serveTemp": "HOT",
+      "moments": [
+        "DINNER"
+      ],
+      "alcoholic": null,
+      "course": "MAIN",
+      "ingredients": [
+        {
+          "id": "v1-i1",
+          "section": null,
+          "name": "Patatas",
+          "quantity": 600.0,
+          "unit": "GRAM",
+          "customUnit": null,
+          "note": ""
+        },
+        {
+          "id": "v1-i2",
+          "section": null,
+          "name": "Huevos",
+          "quantity": 6.0,
+          "unit": "PIECE",
+          "customUnit": null,
+          "note": ""
+        },
+        {
+          "id": "v1-i3",
+          "section": null,
+          "name": "Sal",
+          "quantity": null,
+          "unit": "TO_TASTE",
+          "customUnit": null,
+          "note": ""
+        }
+      ],
+      "steps": [
+        {
+          "id": "v1-s1",
+          "text": "Fríe las patatas.",
+          "photos": [
+            "v1-paso.jpg"
+          ],
+          "timerSeconds": 900,
+          "ingredientIds": [
+            "v1-i1"
+          ]
+        },
+        {
+          "id": "v1-s2",
+          "text": "Cuaja con el huevo.",
+          "photos": [],
+          "timerSeconds": null,
+          "ingredientIds": [
+            "v1-i2",
+            "v1-i3"
+          ]
+        }
+      ],
+      "tags": [
+        "Cena"
+      ],
+      "notes": "",
+      "favorite": true,
+      "sourceUrl": null,
+      "aiGenerated": false,
+      "createdAt": "2026-11-10T09:15:00Z",
+      "updatedAt": "2026-11-10T09:15:00Z"
+    }
+  ],
+  "shoppingItems": [
+    {
+      "id": "v1-compra",
+      "name": "Leche",
+      "quantity": 1.0,
+      "unit": "LITER",
+      "customUnit": null,
+      "section": "DAIRY",
+      "checked": false,
+      "sourceRecipeId": null,
+      "createdAt": "2026-11-10T09:15:00Z"
+    }
+  ],
+  "settings": {
+    "themeSettings": {
+      "auto": true,
+      "choice": "CALIDO",
+      "dayTheme": "CALIDO",
+      "nightStart": "22:00",
+      "nightEnd": "07:00"
+    },
+    "cupMl": 240
+  },
+  "images": [
+    "v1-portada.jpg",
+    "v1-paso.jpg"
+  ]
+}

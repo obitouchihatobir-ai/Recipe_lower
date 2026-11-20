@@ -1,6 +1,8 @@
 package app.recetario.backup
 
 import app.recetario.core.ui.theme.ThemeChoice
+import app.recetario.diary.CookLogEntry
+import app.recetario.pantry.PantryItem
 import app.recetario.core.ui.theme.ThemeSettings
 import app.recetario.recipes.model.BaseType
 import app.recetario.recipes.model.Category
@@ -20,6 +22,7 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 
 class BackupModelTest {
@@ -87,12 +90,12 @@ class BackupModelTest {
     @Test
     fun json_hasSchemaVersionAndIsoDates() {
         val text = encodeBackup(backup())
-        assertThat(text).contains("\"schemaVersion\":1")
+        assertThat(text).contains("\"schemaVersion\":2")
         assertThat(text).contains("\"createdAt\":\"2026-11-13T10:00:00Z\"")
         assertThat(text).contains("\"updatedAt\":\"2026-11-13T11:30:15.123Z\"")
         assertThat(text).contains("\"nightStart\":\"21:30\"")
         assertThat(backup().schemaVersion).isEqualTo(BACKUP_SCHEMA_VERSION)
-        assertThat(BACKUP_SCHEMA_VERSION).isEqualTo(1)
+        assertThat(BACKUP_SCHEMA_VERSION).isEqualTo(2)
     }
 
     @Test
@@ -110,7 +113,7 @@ class BackupModelTest {
 
     @Test
     fun decode_newerSchema_isReportedEvenIfTheRestIsUnknown() {
-        assertThat(decodeBackup("""{"schemaVersion":2,"recetas":"otro formato"}"""))
+        assertThat(decodeBackup("""{"schemaVersion":3,"recetas":"otro formato"}"""))
             .isEqualTo(BackupDecodeResult.NewerSchema)
     }
 
@@ -225,5 +228,173 @@ class BackupModelTest {
         for (name in listOf("", ".", "..", "a/b", "a\\b", "a..b", "a\u0000b", "x".repeat(256))) {
             assertThat(isSafeBackupFileName(name)).isFalse()
         }
+    }
+
+    // --- Esquema 2: diario, despensa, menú y valoraciones ---
+
+    private val diary = listOf(
+        CookLogEntry(
+            id = "d1", recipeId = "r1", recipeTitle = "Tarta de queso", date = LocalDate.of(2026, 11, 12), rating = 4,
+            note = "Quedó cremosa", photos = listOf("diario-1.jpg", "diario-2.jpg"), createdAt = created,
+            updatedAt = Instant.parse("2026-11-13T12:00:00.5Z"),
+        ),
+        CookLogEntry(
+            id = "d2", recipeId = null, recipeTitle = "Receta borrada", date = LocalDate.of(2026, 10, 1), rating = null,
+            note = "", photos = emptyList(), createdAt = created, updatedAt = created,
+        ),
+    )
+
+    private val pantry = listOf(
+        PantryItem("p1", "Tomates", "tomates", created),
+        PantryItem("p2", "Arroz", "arroz", created.plusSeconds(1)),
+    )
+
+    private val plan = listOf(
+        PlannedMeal("m1", LocalDate.of(2026, 11, 16), "COMIDA", "r1", 4),
+        PlannedMeal("m2", LocalDate.of(2026, 11, 16), "CENA", "r2", 2),
+    )
+
+    private val ratings = listOf(
+        PairingRating("CATALOG:vino-tinto|RECIPE:r1", "CATALOG", "vino-tinto", "RECIPE", "r1", true, created),
+        PairingRating("RECIPE:r1|RECIPE:r2", "RECIPE", "r1", "RECIPE", "r2", false, created.plusSeconds(60)),
+    )
+
+    private fun backupV2() = backupFileOf(
+        appVersion = "0.2.0", createdAt = created, categories = categories, recipes = listOf(recipe, orphan),
+        shoppingItems = shopping, themeSettings = theme, cupMl = 250, cookLog = diary, pantry = pantry,
+        mealPlan = plan, pairingRatings = ratings, pantryBasics = listOf("sal", "aceite de oliva"),
+    )
+
+    private fun v1Fixture(): String =
+        requireNotNull(javaClass.getResource("/backup/v1-backup.json")) { "Falta la copia v1 de prueba" }.readText()
+
+    @Test
+    fun decode_v1_hasEmptyNewLists() {
+        // Una copia real de la 0.1.0 (esquema 1), escrita con el modelo de entonces.
+        val text = v1Fixture()
+        assertThat(text).contains("\"schemaVersion\": 1")
+        assertThat(text).doesNotContain("cookLog")
+        assertThat(text).doesNotContain("pantry")
+        val file = (decodeBackup(text) as BackupDecodeResult.Ok).file
+        assertThat(file.schemaVersion).isEqualTo(1)
+        assertThat(file.cookLog).isEmpty()
+        assertThat(file.pantry).isEmpty()
+        assertThat(file.mealPlan).isEmpty()
+        assertThat(file.pairingRatings).isEmpty()
+        assertThat(file.settings.pantryBasics).isNull()
+
+        val data = file.toImportData()
+        assertThat(data.recipes.map { it.recipe.title }).containsExactly("Tortilla de patatas")
+        assertThat(data.shoppingItems.map { it.name }).containsExactly("Leche")
+        assertThat(data.cookLog).isEmpty()
+        assertThat(data.pantry).isEmpty()
+        assertThat(data.mealPlan).isEmpty()
+        assertThat(data.pairingRatings).isEmpty()
+        assertThat(data.pantryBasics).isNull()
+        assertThat(data.photoNames).containsExactly("v1-portada.jpg", "v1-paso.jpg")
+    }
+
+    @Test
+    fun decode_v3_isNewer() {
+        assertThat(decodeBackup(encodeBackup(backupV2()).replace("\"schemaVersion\":2", "\"schemaVersion\":3")))
+            .isEqualTo(BackupDecodeResult.NewerSchema)
+        assertThat(decodeBackup("""{"schemaVersion":3}""")).isEqualTo(BackupDecodeResult.NewerSchema)
+        // La 2 es la de ahora: se lee.
+        assertThat(decodeBackup(encodeBackup(backupV2()))).isEqualTo(BackupDecodeResult.Ok(backupV2()))
+    }
+
+    @Test
+    fun json_v2_roundTrip_restoresTheNewData() {
+        val file = (decodeBackup(encodeBackup(backupV2())) as BackupDecodeResult.Ok).file
+        assertThat(file.schemaVersion).isEqualTo(2)
+        val data = file.toImportData()
+        assertThat(data.cookLog).isEqualTo(diary)
+        assertThat(data.pantry).isEqualTo(pantry)
+        assertThat(data.mealPlan).isEqualTo(plan)
+        assertThat(data.pairingRatings).isEqualTo(ratings)
+        assertThat(data.pantryBasics).containsExactly("sal", "aceite de oliva").inOrder()
+        val text = encodeBackup(backupV2())
+        assertThat(text).contains("\"date\":\"2026-11-12\"")
+        assertThat(text).contains("\"updatedAt\":\"2026-11-13T12:00:00.500Z\"")
+    }
+
+    @Test
+    fun validate_badRating_rejected() {
+        for (bad in listOf(0, 6, -1)) {
+            val b = backupV2().let { it.copy(cookLog = it.cookLog.map { e -> e.copy(rating = bad) }) }
+            assertThrows(InvalidBackupException::class.java) { b.toImportData() }
+        }
+        for (good in listOf(1, 5, null)) {
+            val b = backupV2().let { it.copy(cookLog = it.cookLog.map { e -> e.copy(rating = good) }) }
+            assertThat(b.toImportData().cookLog.map { it.rating }).containsExactly(good, good)
+        }
+    }
+
+    @Test
+    fun validate_badSlot_rejected() {
+        for (bad in listOf("MERIENDA", "comida", "", "LUNCH")) {
+            val b = backupV2().let { it.copy(mealPlan = it.mealPlan.map { m -> m.copy(slot = bad) }) }
+            assertThrows(InvalidBackupException::class.java) { b.toImportData() }
+        }
+        // Dos platos en el mismo hueco no los puede tener la app.
+        val twice = backupV2().let { it.copy(mealPlan = it.mealPlan.map { m -> m.copy(slot = "COMIDA") }) }
+        assertThrows(InvalidBackupException::class.java) { twice.toImportData() }
+    }
+
+    @Test
+    fun validate_badPairingKinds_rejected() {
+        val badA = backupV2().let { it.copy(pairingRatings = it.pairingRatings.map { r -> r.copy(aKind = "VINO") }) }
+        assertThrows(InvalidBackupException::class.java) { badA.toImportData() }
+        val badB = backupV2().let { it.copy(pairingRatings = it.pairingRatings.map { r -> r.copy(bKind = "recipe") }) }
+        assertThrows(InvalidBackupException::class.java) { badB.toImportData() }
+    }
+
+    @Test
+    fun validate_newTables_badDatesAndIds_rejected() {
+        val b = backupV2()
+        val cases = listOf(
+            b.copy(cookLog = b.cookLog.map { it.copy(date = "ayer") }),
+            b.copy(cookLog = b.cookLog.map { it.copy(updatedAt = "") }),
+            b.copy(cookLog = b.cookLog.map { it.copy(createdAt = "x") }),
+            b.copy(cookLog = b.cookLog + b.cookLog.first()),
+            b.copy(cookLog = b.cookLog.map { it.copy(id = " ") }),
+            b.copy(pantry = b.pantry.map { it.copy(addedAt = "hoy") }),
+            b.copy(pantry = b.pantry + b.pantry.first().copy(name = "Lentejas", normalized = "lentejas")),
+            b.copy(mealPlan = b.mealPlan.map { it.copy(date = "2026-13-01") }),
+            b.copy(mealPlan = b.mealPlan + b.mealPlan.first().copy(date = "2026-11-20")),
+            b.copy(mealPlan = b.mealPlan.map { it.copy(recipeId = "") }),
+            b.copy(pairingRatings = b.pairingRatings.map { it.copy(ratedAt = "nunca") }),
+            b.copy(pairingRatings = b.pairingRatings + b.pairingRatings.first()),
+            b.copy(pairingRatings = b.pairingRatings.map { it.copy(pairKey = "") }),
+        )
+        for (bad in cases) assertThrows(InvalidBackupException::class.java) { bad.toImportData() }
+    }
+
+    @Test
+    fun validate_newTables_keepValuesTheAppCanShow() {
+        val b = backupV2().let { f ->
+            f.copy(
+                cookLog = f.cookLog.map { it.copy(photos = listOf("../recetario.db", "a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg")) },
+                mealPlan = f.mealPlan.map { it.copy(servings = 0) },
+                // El mismo artículo dos veces (plural): queda uno.
+                pantry = f.pantry + BackupPantryItem("p3", "tomate", "tomate", created.toString()),
+            )
+        }
+        val data = b.toImportData()
+        assertThat(data.cookLog.first().photos).containsExactly("a.jpg", "b.jpg", "c.jpg", "d.jpg").inOrder()
+        assertThat(data.mealPlan.map { it.servings }).containsExactly(1, 1)
+        assertThat(data.pantry.map { it.id }).containsExactly("p1", "p2")
+        // `normalized` se recalcula con la clave de la app.
+        val odd = backupV2().let { it.copy(pantry = listOf(BackupPantryItem("p9", "Ajo  Negro", "AJO!", created.toString()))) }
+        assertThat(odd.toImportData().pantry.single().normalized).isEqualTo("ajo negro")
+        // Un artículo sin letras ni números no lo puede crear la app: se descarta.
+        val empty = backupV2().let { it.copy(pantry = listOf(BackupPantryItem("p9", "¡!", "", created.toString()))) }
+        assertThat(empty.toImportData().pantry).isEmpty()
+    }
+
+    @Test
+    fun photoNames_includeDiary() {
+        assertThat(backupV2().toImportData().photoNames)
+            .containsExactly("portada.jpg", "paso-1a.jpg", "paso-1b.jpg", "diario-1.jpg", "diario-2.jpg")
     }
 }

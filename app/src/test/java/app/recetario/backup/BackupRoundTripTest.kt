@@ -3,6 +3,9 @@ package app.recetario.backup
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.ThemeChoice
+import app.recetario.diary.CookLogEntry
+import app.recetario.pairing.data.PairingRatingEntity
+import app.recetario.plan.data.MealPlanEntity
 import app.recetario.recipes.model.BaseType
 import app.recetario.recipes.model.Category
 import app.recetario.recipes.model.Course
@@ -24,6 +27,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 
 @RunWith(AndroidJUnit4::class)
@@ -106,7 +110,7 @@ class BackupRoundTripTest {
         assertThat(entries.getValue("images/portada.jpg").toList()).isEqualTo(fakePhoto(1).toList())
         val decoded = decodeBackup(String(entries.getValue("backup.json")))
         val file = (decoded as BackupDecodeResult.Ok).file
-        assertThat(file.schemaVersion).isEqualTo(1)
+        assertThat(file.schemaVersion).isEqualTo(2)
         assertThat(file.appVersion).isEqualTo("0.1.0")
         assertThat(file.createdAt).isEqualTo("2026-11-13T20:40:00Z")
         assertThat(file.categories.map { it.id }).containsExactly(DefaultCategories.FOOD_ID, DefaultCategories.DRINK_ID, DefaultCategories.DESSERT_ID)
@@ -171,5 +175,81 @@ class BackupRoundTripTest {
         assertThat(json).doesNotContain("lastExternal")
         assertThat(json).doesNotContain("notification")
         assertThat(a.settings.backupStatus.first().lastExternal).isEqualTo(Instant.parse("2026-11-01T10:00:00Z"))
+    }
+
+    @Test
+    fun roundTrip_v2_identical() = runBlocking<Unit> {
+        val a = env()
+        a.writePhoto("portada.jpg", fakePhoto(1))
+        a.saveAt(fullRecipe("r1", DefaultCategories.FOOD_ID, "portada.jpg", emptyList(), listOf("Cena")), Instant.parse("2026-11-01T10:00:00Z"))
+        a.saveAt(fullRecipe("r2", DefaultCategories.DRINK_ID, null, emptyList(), emptyList()), Instant.parse("2026-11-02T10:00:00Z"))
+        // Diario: con receta y fotos, sin valoración y sin receta (borrada), y una foto compartida con la receta.
+        a.writePhoto("diario-1.jpg", fakePhoto(11))
+        a.writePhoto("diario-2.jpg", fakePhoto(12, size = 40_000))
+        a.diary.restore(
+            CookLogEntry(
+                "d1", "r1", "Receta r1", LocalDate.of(2026, 11, 10), 5, "Perfecta", listOf("diario-2.jpg", "diario-1.jpg", "portada.jpg"),
+                Instant.parse("2026-11-10T20:00:00Z"), Instant.parse("2026-11-11T08:30:00.250Z"),
+            ),
+        )
+        a.diary.restore(
+            CookLogEntry(
+                "d2", null, "Una que ya no está", LocalDate.of(2026, 9, 3), null, "", emptyList(),
+                Instant.parse("2026-09-03T19:00:00Z"), Instant.parse("2026-09-03T19:00:00Z"),
+            ),
+        )
+        a.pantry.add("Tomates")
+        a.pantry.add("Aceite de oliva")
+        a.db.mealPlanDao().upsert(
+            listOf(
+                MealPlanEntity("m1", "2026-11-16", "COMIDA", "r1", 4),
+                MealPlanEntity("m2", "2026-11-16", "CENA", "r2", 2),
+                MealPlanEntity("m3", "2026-11-17", "DESAYUNO", "r1", 1),
+            ),
+        )
+        a.db.pairingRatingDao().upsert(
+            listOf(
+                PairingRatingEntity("CATALOG:vino|RECIPE:r1", "CATALOG", "vino", "RECIPE", "r1", true, Instant.parse("2026-11-05T10:00:00Z")),
+                PairingRatingEntity("RECIPE:r1|RECIPE:r2", "RECIPE", "r1", "RECIPE", "r2", false, Instant.parse("2026-11-06T10:00:00Z")),
+            ),
+        )
+        a.settings.setPantryBasics(listOf("sal", "agua", "caldo"))
+        val before = a.snapshot()
+        assertThat(before.diary).hasSize(2)
+        assertThat(before.pantry).hasSize(2)
+        assertThat(before.mealPlan).hasSize(3)
+        assertThat(before.ratings).hasSize(2)
+        val zip = a.exportBytes()
+        val entries = unzip(zip)
+        assertThat(entries.keys).containsExactly("backup.json", "images/portada.jpg", "images/diario-2.jpg", "images/diario-1.jpg")
+        assertThat((decodeBackup(String(entries.getValue("backup.json"))) as BackupDecodeResult.Ok).file.images)
+            .containsExactly("portada.jpg", "diario-2.jpg", "diario-1.jpg").inOrder()
+
+        // Otro teléfono con datos del esquema 2 que deben desaparecer.
+        val b = env()
+        b.saveAt(fullRecipe("vieja", DefaultCategories.FOOD_ID, null, emptyList(), emptyList()), Instant.parse("2026-10-01T10:00:00Z"))
+        b.writePhoto("diario-viejo.jpg", fakePhoto(9))
+        b.diary.restore(
+            CookLogEntry(
+                "d-viejo", "vieja", "Vieja", LocalDate.of(2026, 10, 1), 2, "", listOf("diario-viejo.jpg"),
+                Instant.parse("2026-10-01T10:00:00Z"), Instant.parse("2026-10-01T10:00:00Z"),
+            ),
+        )
+        b.pantry.add("Tomate")
+        b.pantry.add("Harina")
+        b.db.mealPlanDao().upsert(listOf(MealPlanEntity("m-viejo", "2026-11-16", "COMIDA", "vieja", 1)))
+        b.db.pairingRatingDao().upsert(
+            listOf(PairingRatingEntity("CATALOG:vino|RECIPE:vieja", "CATALOG", "vino", "RECIPE", "vieja", true, Instant.parse("2026-10-02T10:00:00Z"))),
+        )
+
+        val result = b.import(zip, ImportMode.REPLACE_ALL)
+
+        assertThat(result).isEqualTo(ImportResult.Ok(recipes = 2, images = 3, diaryEntries = 2))
+        assertThat(b.snapshot()).isEqualTo(before)
+        assertThat(b.cacheFiles()).isEmpty()
+
+        // Y combinar la misma copia otra vez no cambia nada.
+        assertThat(b.import(zip, ImportMode.MERGE)).isEqualTo(ImportResult.Ok(recipes = 0, images = 0))
+        assertThat(b.snapshot()).isEqualTo(before)
     }
 }

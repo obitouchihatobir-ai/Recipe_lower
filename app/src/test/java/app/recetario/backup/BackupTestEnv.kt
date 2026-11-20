@@ -9,6 +9,12 @@ import androidx.test.core.app.ApplicationProvider
 import app.recetario.core.data.AppDatabase
 import app.recetario.core.data.DefaultCategories
 import app.recetario.core.ui.theme.ThemeSettings
+import app.recetario.diary.CookLogEntry
+import app.recetario.diary.RoomDiaryRepository
+import app.recetario.pairing.data.PairingRatingEntity
+import app.recetario.pantry.RoomPantryRepository
+import app.recetario.pantry.data.PantryItemEntity
+import app.recetario.plan.data.MealPlanEntity
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.data.RoomRecipeRepository
 import app.recetario.recipes.model.Category
@@ -57,6 +63,8 @@ class BackupTestEnv(private val tmp: TemporaryFolder, val clock: Clock = backupC
     )
     val recipes = RoomRecipeRepository(db, photos, clock)
     val shopping = RoomShoppingRepository(db, clock, settings.cupMl)
+    val diary = RoomDiaryRepository(db, photos, clock)
+    val pantry = RoomPantryRepository(db, clock)
     /** Los documentos «de fuera» (Drive, Descargas…). */
     val documents = FakeDocuments()
     val manager = BackupManager(
@@ -100,7 +108,16 @@ class BackupTestEnv(private val tmp: TemporaryFolder, val clock: Clock = backupC
         theme = settings.themeSettings.first(),
         cupMl = settings.cupMl.first(),
         photos = photoFiles(),
+        diary = diaryEntries(),
+        pantry = db.pantryDao().getAll().sortedBy { it.id },
+        mealPlan = db.mealPlanDao().getAll(),
+        ratings = db.pairingRatingDao().getAll().sortedBy { it.pairKey },
+        pantryBasics = settings.pantryBasics.first(),
     )
+
+    suspend fun diaryEntries(): List<CookLogEntry> = diary.observeEntries().first().sortedBy { it.id }
+
+    suspend fun diaryEntry(id: String): CookLogEntry? = diaryEntries().firstOrNull { it.id == id }
 
     fun photoFiles(): Map<String, List<Byte>> =
         (photos.dir.listFiles() ?: emptyArray()).associate { it.name to it.readBytes().toList() }.toSortedMap()
@@ -227,6 +244,11 @@ data class Snapshot(
     val theme: ThemeSettings,
     val cupMl: Int,
     val photos: Map<String, List<Byte>>,
+    val diary: List<CookLogEntry>,
+    val pantry: List<PantryItemEntity>,
+    val mealPlan: List<MealPlanEntity>,
+    val ratings: List<PairingRatingEntity>,
+    val pantryBasics: List<String>,
 )
 
 /** Un zip con las entradas dadas, en ese orden. */
@@ -279,16 +301,35 @@ fun backupZip(file: BackupFile, vararg images: Pair<String, ByteArray>): ByteArr
     return zipOf(BACKUP_JSON_ENTRY to encodeBackup(withManifest).toByteArray(), *images.map { (n, b) -> "images/$n" to b }.toTypedArray())
 }
 
-/** Una copia con las categorías de serie, sin compra y con los ajustes de serie. */
-fun backupOf(vararg recipes: Recipe, categories: List<Category> = defaultCategories()): BackupFile = backupFileOf(
+/** Una copia con las categorías de serie, sin compra y con los ajustes de serie (y, si se dan, los datos del esquema 2). */
+fun backupOf(
+    vararg recipes: Recipe,
+    categories: List<Category> = defaultCategories(),
+    cookLog: List<CookLogEntry> = emptyList(),
+    pantry: List<app.recetario.pantry.PantryItem> = emptyList(),
+    mealPlan: List<PlannedMeal> = emptyList(),
+    pairingRatings: List<PairingRating> = emptyList(),
+): BackupFile = backupFileOf(
     appVersion = "0.1.0", createdAt = backupClock.instant(), categories = categories, recipes = recipes.toList(),
     shoppingItems = emptyList(), themeSettings = ThemeSettings(), cupMl = 240,
+    cookLog = cookLog, pantry = pantry, mealPlan = mealPlan, pairingRatings = pairingRatings,
 )
 
 fun defaultCategories() = listOf(
     Category(DefaultCategories.FOOD_ID, "Comidas", "🍲", "#C8553D", app.recetario.recipes.model.BaseType.FOOD, 0, true),
     Category(DefaultCategories.DRINK_ID, "Bebidas", "🍹", "#2A7F8E", app.recetario.recipes.model.BaseType.DRINK, 1, true),
     Category(DefaultCategories.DESSERT_ID, "Postres", "🍮", "#B5733A", app.recetario.recipes.model.BaseType.DESSERT, 2, true),
+)
+
+/** La copia real de la 0.1.0 (esquema 1), escrita con el modelo de entonces: `src/test/resources/backup/v1-backup.json`. */
+fun v1BackupJson(): String =
+    requireNotNull(BackupTestEnv::class.java.getResource("/backup/v1-backup.json")) { "Falta la copia v1 de prueba" }.readText()
+
+/** El zip de la copia v1 con sus dos fotos (`v1-portada.jpg` y `v1-paso.jpg`). */
+fun v1BackupZip(): ByteArray = zipOf(
+    BACKUP_JSON_ENTRY to v1BackupJson().toByteArray(),
+    "images/v1-portada.jpg" to fakePhoto(41),
+    "images/v1-paso.jpg" to fakePhoto(42),
 )
 
 /** Unos bytes cualquiera que hacen de foto. */

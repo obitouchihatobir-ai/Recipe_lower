@@ -21,10 +21,28 @@ class BackupTextsTest {
     }
 
     @Test
+    fun importSummary_countsDiaryEntries_whenThereAreAny() {
+        assertThat(importSummary(3, 5, diaryEntries = 2)).isEqualTo("Copia importada: 3 recetas, 2 entradas del diario, 5 fotos.")
+        assertThat(importSummary(1, 1, failedImages = 1, diaryEntries = 1))
+            .isEqualTo("Copia importada: 1 receta, 1 entrada del diario, 1 foto. 1 foto no se pudo copiar.")
+        assertThat(importSummary(3, 5, diaryEntries = 0)).isEqualTo("Copia importada: 3 recetas, 5 fotos.")
+    }
+
+    @Test
     fun replaceComparison_comparesTheCopyWithWhatYouHave() {
         assertThat(replaceComparison(backupRecipes = 12, localRecipes = 40)).isEqualTo("La copia tiene 12 recetas; ahora tienes 40.")
         assertThat(replaceComparison(backupRecipes = 1, localRecipes = 1)).isEqualTo("La copia tiene 1 receta; ahora tienes 1.")
         assertThat(replaceComparison(backupRecipes = 0, localRecipes = 3)).isEqualTo("La copia tiene 0 recetas; ahora tienes 3.")
+    }
+
+    @Test
+    fun replaceComparison_mentionsTheDiary_whenEitherSideHasEntries() {
+        assertThat(replaceComparison(backupRecipes = 12, localRecipes = 40, backupDiaryEntries = 0, localDiaryEntries = 3))
+            .isEqualTo("La copia tiene 12 recetas y 0 entradas del diario; ahora tienes 40 recetas y 3 entradas del diario.")
+        assertThat(replaceComparison(backupRecipes = 1, localRecipes = 1, backupDiaryEntries = 1, localDiaryEntries = 0))
+            .isEqualTo("La copia tiene 1 receta y 1 entrada del diario; ahora tienes 1 receta y 0 entradas del diario.")
+        assertThat(replaceComparison(backupRecipes = 2, localRecipes = 3, backupDiaryEntries = 0, localDiaryEntries = 0))
+            .isEqualTo("La copia tiene 2 recetas; ahora tienes 3.")
     }
 
     @Test

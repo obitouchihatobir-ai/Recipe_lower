@@ -64,9 +64,13 @@ const val DATABASE_FILE_NAME = "$FILE_PREFIX-base-de-datos.db"
 /** Nombre que se propone al elegir el archivo de Google Drive de la copia automática. */
 const val DRIVE_DOCUMENT_NAME = "$FILE_PREFIX-copia-automatica.zip"
 
-/** «Copia importada: 3 recetas, 1 foto.», y si alguna foto no se pudo copiar, «2 fotos no se pudieron copiar.» */
-fun importSummary(recipes: Int, images: Int, failedImages: Int = 0): String {
-    val base = "Copia importada: ${recipeCountText(recipes)}, ${plural(images, "foto", "fotos")}."
+/**
+ * «Copia importada: 3 recetas, 1 foto.» (con entradas del diario, «3 recetas, 2 entradas del diario, 1 foto.»), y si
+ * alguna foto no se pudo copiar, «2 fotos no se pudieron copiar.»
+ */
+fun importSummary(recipes: Int, images: Int, failedImages: Int = 0, diaryEntries: Int = 0): String {
+    val diary = if (diaryEntries > 0) ", ${diaryCountText(diaryEntries)}" else ""
+    val base = "Copia importada: ${recipeCountText(recipes)}$diary, ${plural(images, "foto", "fotos")}."
     return when (failedImages) {
         0 -> base
         1 -> "$base 1 foto no se pudo copiar."
@@ -76,9 +80,20 @@ fun importSummary(recipes: Int, images: Int, failedImages: Int = 0): String {
 
 fun recipeCountText(n: Int): String = plural(n, "receta", "recetas")
 
-/** En la confirmación de «Reemplazar todo»: «La copia tiene 12 recetas; ahora tienes 40.» */
-fun replaceComparison(backupRecipes: Int, localRecipes: Int): String =
-    "La copia tiene ${recipeCountText(backupRecipes)}; ahora tienes $localRecipes."
+fun diaryCountText(n: Int): String = plural(n, "entrada del diario", "entradas del diario")
+
+/**
+ * En la confirmación de «Reemplazar todo»: «La copia tiene 12 recetas; ahora tienes 40.» Si alguno de los dos tiene
+ * diario, también se cuenta (también se sustituye): «La copia tiene 12 recetas y 0 entradas del diario; ahora tienes
+ * 40 recetas y 3 entradas del diario.»
+ */
+fun replaceComparison(backupRecipes: Int, localRecipes: Int, backupDiaryEntries: Int = 0, localDiaryEntries: Int = 0): String =
+    if (backupDiaryEntries == 0 && localDiaryEntries == 0) {
+        "La copia tiene ${recipeCountText(backupRecipes)}; ahora tienes $localRecipes."
+    } else {
+        "La copia tiene ${recipeCountText(backupRecipes)} y ${diaryCountText(backupDiaryEntries)}; " +
+            "ahora tienes ${recipeCountText(localRecipes)} y ${diaryCountText(localDiaryEntries)}."
+    }
 
 private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
 
