@@ -19,10 +19,13 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.time.LocalDate
 
 /** El formulario del diario en un teléfono estrecho: «Añadir foto» no se aplasta con 3 fotos. */
 @RunWith(AndroidJUnit4::class)
+// Con gráficos nativos el texto se mide de verdad (en el modo antiguo, «Añadir foto» mide casi nada).
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w320dp-h640dp")
 class LogEntryFormLayoutTest {
     @get:Rule
@@ -44,8 +47,9 @@ class LogEntryFormLayoutTest {
             }
         }
         val button = rule.onNodeWithTag("diary-add-photo").getBoundsInRoot()
-        // «📷 Añadir foto» mide unos 130 dp; en una Row con 3 fotos de 64 dp quedaba con menos de 100.
-        assertThat(button.width).isAtLeast(120.dp)
+        // «📷 Añadir foto» mide unos 120 dp; en una Row con 3 fotos de 64 dp (320 − 36 de márgenes − 216) le
+        // quedaban 68 como mucho.
+        assertThat(button.width).isAtLeast(100.dp)
         assertThat(button.height).isAtLeast(48.dp)
     }
 }
