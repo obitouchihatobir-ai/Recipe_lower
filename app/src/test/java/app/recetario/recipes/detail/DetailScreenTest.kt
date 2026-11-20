@@ -13,7 +13,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -133,6 +135,13 @@ class DetailScreenTest {
         rule.waitFor(hasText("1,2 kg"))
     }
 
+    /**
+     * «Lo que necesito» por su acción: con la línea del diario en la cabecera, tras desplazarse el botón puede quedar
+     * justo detrás de «▶ Modo cocina» (fijo abajo) y un toque en su centro caería en ese otro botón.
+     */
+    private fun tapNeed() =
+        rule.onNodeWithText("🛒 Lo que necesito → a la compra").performSemanticsAction(SemanticsActions.OnClick)
+
     @Test
     fun need_addsUncheckedAndShowsMessage() {
         save()
@@ -140,7 +149,7 @@ class DetailScreenTest {
         rule.waitFor(hasText("Calabaza"))
         rule.onNodeWithText("Calabaza").performClick() // marcada: no se añade
         rule.onNodeWithTag("detail-list").performScrollToNode(hasText("🛒 Lo que necesito → a la compra"))
-        rule.onNodeWithText("🛒 Lo que necesito → a la compra").performClick()
+        tapNeed()
         rule.waitFor(hasText("✓ 7 ingredientes añadidos a tu lista de compra"))
         val items = runBlocking { container.shoppingRepository.observe().first() }.values.flatten()
         assertThat(items).hasSize(7)
@@ -235,10 +244,10 @@ class DetailScreenTest {
         fun calabazaGrams() = runBlocking { container.shoppingRepository.observe().first() }
             .values.flatten().firstOrNull { it.name == "Calabaza" }?.quantity
 
-        rule.onNodeWithText("🛒 Lo que necesito → a la compra").performClick()
+        tapNeed()
         pump(::toastShown)
         rule.mainClock.advanceTimeBy(2_000)
-        rule.onNodeWithText("🛒 Lo que necesito → a la compra").performClick()
+        tapNeed()
         pump { calabazaGrams() == 1600.0 }
         pump { true } // deja recomponer el nuevo aviso
         // 1 s después del segundo toque (3 s tras el primero) el aviso sigue: su temporizador se reinició.
