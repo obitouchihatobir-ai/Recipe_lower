@@ -472,7 +472,7 @@ class BackupImporterTest {
         val withDiary = backupZip(backupOf(recipe("a", "A", t2), cookLog = listOf(diaryEntry("d1", "a", t2), diaryEntry("d2", null, t2))))
         assertThat(local.preview(withDiary)).isEqualTo(PreviewResult.Ok(backupRecipes = 1, localRecipes = 1, backupDiaryEntries = 2, localDiaryEntries = 1))
         assertThat(local.preview("no es un zip".toByteArray())).isEqualTo(PreviewResult.Error("Este archivo no es una copia de Sazón."))
-        assertThat(local.preview(zipOf(BACKUP_JSON_ENTRY to """{"schemaVersion":2}""".toByteArray())))
+        assertThat(local.preview(zipOf(BACKUP_JSON_ENTRY to """{"schemaVersion":3}""".toByteArray())))
             .isEqualTo(PreviewResult.Error("Esta copia es de una versión más nueva de Sazón. Actualiza la app e inténtalo de nuevo."))
 
         assertThat(local.snapshot()).isEqualTo(before)
