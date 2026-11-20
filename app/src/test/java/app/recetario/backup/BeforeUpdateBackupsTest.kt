@@ -1,6 +1,7 @@
 package app.recetario.backup
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
@@ -130,6 +131,36 @@ class BeforeUpdateBackupsTest {
         rule.waitFor(hasText(BackupMessages.EXPORTED))
         assertThat(picker.inputs.single()).isEqualTo(copyName)
         assertThat(documents.written.toList()).isEqualTo(File(dir, copyName).readBytes().toList())
+    }
+
+    @Test
+    fun beforeUpdateCopy_newerVersion_isDamaged_andNotRestored() {
+        upgradedPhone()
+        // Una copia con recetas pero de una versión de la base de datos más nueva que la de la app.
+        val newer = "antes-de-actualizar-v1-2026-11-12-0900.db"
+        val file = File(container.backupManager.localBackupsDir, newer)
+        SQLiteDatabase.openOrCreateDatabase(file, null).use { db ->
+            db.execSQL("CREATE TABLE recipes (id TEXT PRIMARY KEY, title TEXT)")
+            db.execSQL("INSERT INTO recipes VALUES ('x', 'Del futuro')")
+            db.version = AppDatabase.VERSION + 1
+        }
+        val bytes = file.readBytes()
+
+        assertThat(runBlocking { container.backupManager.localBackups() }).containsExactly(
+            LocalBackup(copyName, recipes = 1),
+            LocalBackup(newer, recipes = null),
+        ).inOrder()
+        assertThat(runBlocking { container.backupManager.restoreBeforeUpdate(newer) })
+            .isEqualTo(BackupResult.Error(BackupMessages.NOT_A_BACKUP))
+        assertThat(restarts.get()).isEqualTo(0)
+        assertThat(file.readBytes().toList()).isEqualTo(bytes.toList())
+        assertThat(readDatabaseFile(dbFile, live = true).first).isEqualTo(AppDatabase.VERSION)
+
+        // En la pantalla, «Copia dañada» sin acciones.
+        launch()
+        rule.waitFor(hasText(BackupMessages.DAMAGED))
+        rule.onNodeWithTag("local-restore-$newer").assertDoesNotExist()
+        rule.onNodeWithTag("local-save-$newer").assertDoesNotExist()
     }
 
     @Test

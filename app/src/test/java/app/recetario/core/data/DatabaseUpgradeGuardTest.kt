@@ -15,6 +15,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.IOException
 
 /** Copia previa a la migración (diseño de la etapa 2, §6.2), con una base de datos v1 de verdad. */
 @RunWith(AndroidJUnit4::class)
@@ -97,14 +98,42 @@ class DatabaseUpgradeGuardTest {
     }
 
     @Test
-    fun guard_unreadableDatabase_failsWithoutDeletingIt() {
+    fun guard_corruptDatabase_distinctMessage_andFileKept() {
         dbFile.parentFile!!.mkdirs()
-        dbFile.writeText("esto no es una base de datos, pero no se borra")
+        val garbage = "esto no es una base de datos, pero no se borra".repeat(200)
+        dbFile.writeText(garbage)
 
-        assertThat(guard().prepare()).isInstanceOf(GuardResult.Failed::class.java)
+        // No es falta de espacio: otro mensaje, y la pantalla de error ofrece guardar el archivo tal cual.
+        assertThat(guard().prepare()).isEqualTo(GuardResult.Failed(BackupMessages.DATABASE_UNREADABLE, databaseUnreadable = true))
 
-        assertThat(dbFile.readText()).isEqualTo("esto no es una base de datos, pero no se borra")
+        // El manejador de serie de Android la habría borrado: sigue ahí, intacta.
+        assertThat(dbFile.readText()).isEqualTo(garbage)
         assertThat(backupsDir.list().orEmpty().toList()).isEmpty()
+    }
+
+    @Test
+    fun guard_failsAfterTmp_cleansUp() {
+        createV1Database(helper, dbName)
+        val leftovers = mutableListOf<File>()
+        // La copia ya está escrita y comprobada; falla justo antes de renombrarla (como un disco que se llena), con
+        // restos de SQLite junto al temporal.
+        val failing = DatabaseUpgradeGuard(dbFile, backupsDir, testClock, beforeRename = { tmp ->
+            assertThat(tmp.isFile).isTrue()
+            assertThat(tmp.name).endsWith(".db.tmp")
+            for (suffix in listOf("-wal", "-shm", "-journal")) File(tmp.path + suffix).apply { writeText("resto") }.also { leftovers += it }
+            throw IOException("disco lleno")
+        })
+
+        assertThat(failing.prepare()).isEqualTo(GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED))
+
+        assertThat(leftovers).hasSize(3)
+        // Ni el temporal ni sus -wal, -shm o -journal: la carpeta queda vacía.
+        assertThat(backupsDir.list()!!.toList()).isEmpty()
+        // La base de datos sigue en la v1, con sus datos.
+        assertThat(readDatabaseFile(dbFile, live = true)).isEqualTo(1 to listOf("Sopa de tortilla"))
+
+        // El siguiente arranque, con espacio, sí la copia.
+        assertThat(guard().prepare()).isEqualTo(GuardResult.Copied(expectedCopy))
     }
 
     @Test

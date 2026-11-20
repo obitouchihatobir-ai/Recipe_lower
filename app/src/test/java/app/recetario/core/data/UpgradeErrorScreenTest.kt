@@ -106,6 +106,32 @@ class UpgradeErrorScreenTest {
     }
 
     @Test
+    fun corruptDatabase_offersSavingTheDatabaseFile_andKeepsIt() {
+        val dbFile = app.getDatabasePath(dbName).apply { parentFile!!.mkdirs() }
+        dbFile.writeText("una base de datos dañada")
+        app.upgrade = GuardResult.Failed(BackupMessages.DATABASE_UNREADABLE, databaseUnreadable = true)
+        container = installTestContainer(documents = documents, databaseFile = dbFile)
+        launch()
+
+        rule.waitFor(hasText(BackupMessages.DATABASE_UNREADABLE))
+        rule.onNodeWithTag("upgrade-save-outside").assertDoesNotExist()
+        rule.onNodeWithTag("upgrade-save-database").performClick()
+        rule.waitForIdle()
+        val shadow = shadowOf(activity)
+        val started = checkNotNull(shadow.nextStartedActivityForResult) { "No se abrió el selector" }
+        assertThat(started.intent.action).isEqualTo(Intent.ACTION_CREATE_DOCUMENT)
+        assertThat(started.intent.getStringExtra(Intent.EXTRA_TITLE)).isEqualTo("Sazon-base-de-datos.db")
+        val uri = "content://prueba/Sazon-base-de-datos.db"
+        shadow.receiveResult(started.intent, Activity.RESULT_OK, Intent().setData(Uri.parse(uri)))
+
+        rule.waitFor(hasText(BackupMessages.EXPORTED))
+        assertThat(String(documents.files.getValue(uri))).isEqualTo("una base de datos dañada")
+        // Nunca se borra ni se abre.
+        assertThat(dbFile.readText()).isEqualTo("una base de datos dañada")
+        assertThat(container.database.isOpen).isFalse()
+    }
+
+    @Test
     fun normalStart_opensTheDatabase_andShowsHome() {
         container = installTestContainer(documents = documents)
         launch()

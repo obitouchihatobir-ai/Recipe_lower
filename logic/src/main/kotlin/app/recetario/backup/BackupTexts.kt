@@ -41,6 +41,9 @@ object BackupMessages {
     /** No se pudo copiar la base de datos antes de migrarla: la app no migra ni abre la base de datos. */
     const val UPDATE_COPY_FAILED = "No hay espacio para hacer la copia de seguridad antes de actualizar. Libera espacio y vuelve a abrir Sazón."
 
+    /** La base de datos está dañada o no se puede leer: no se migra, no se abre y el archivo no se borra. */
+    const val DATABASE_UNREADABLE = "No se pudo leer la base de datos de Sazón. No se ha borrado nada."
+
     /** La migración lanzó una excepción: la copia previa (`antes-de-actualizar-…db`) sigue en el teléfono. */
     const val MIGRATION_FAILED = "No se pudo actualizar la base de datos. Tus recetas siguen guardadas en la copia previa."
 
@@ -54,6 +57,9 @@ fun driveExistingCopyText(backupRecipes: Int, localRecipes: Int): String =
 
 /** Nombre de la app en los nombres de archivo (copias y exportación): sin tilde, para que ningún proveedor ni sistema lo estropee. */
 const val FILE_PREFIX = "Sazon"
+
+/** Nombre que se propone al guardar fuera la base de datos tal cual (cuando no se puede leer). */
+const val DATABASE_FILE_NAME = "$FILE_PREFIX-base-de-datos.db"
 
 /** Nombre que se propone al elegir el archivo de Google Drive de la copia automática. */
 const val DRIVE_DOCUMENT_NAME = "$FILE_PREFIX-copia-automatica.zip"

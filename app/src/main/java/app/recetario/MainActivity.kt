@@ -40,8 +40,11 @@ import kotlinx.coroutines.launch
 private sealed interface Startup {
     data object Ready : Startup
 
-    /** [copyFileName]: la copia de antes de actualizar que se puede guardar fuera, si hay. */
-    data class Error(val message: String, val copyFileName: String?) : Startup
+    /**
+     * [copyFileName]: la copia de antes de actualizar que se puede guardar fuera, si hay. [saveDatabase]: la base de
+     * datos no se puede leer y se ofrece guardarla fuera tal cual.
+     */
+    data class Error(val message: String, val copyFileName: String?, val saveDatabase: Boolean = false) : Startup
 }
 
 class MainActivity : ComponentActivity() {
@@ -113,7 +116,7 @@ class MainActivity : ComponentActivity() {
                     RecetarioTheme(shown) {
                         when (started) {
                             Startup.Ready -> AppNavHost(container)
-                            is Startup.Error -> UpgradeErrorRoute(container, started.message, started.copyFileName)
+                            is Startup.Error -> UpgradeErrorRoute(container, started.message, started.copyFileName, started.saveDatabase)
                         }
                     }
                 }
@@ -124,7 +127,7 @@ class MainActivity : ComponentActivity() {
     /** Abre la base de datos fuera del hilo principal, salvo si la guarda no pudo hacer la copia previa. */
     private fun openDatabase(upgrade: GuardResult, container: AppContainer): Startup {
         val backupsDir = container.backupManager.localBackupsDir
-        (upgrade as? GuardResult.Failed)?.let { return Startup.Error(it.message, copyFileName = null) }
+        (upgrade as? GuardResult.Failed)?.let { return Startup.Error(it.message, copyFileName = null, saveDatabase = it.databaseUnreadable) }
         return try {
             container.database.openHelper.writableDatabase
             Startup.Ready

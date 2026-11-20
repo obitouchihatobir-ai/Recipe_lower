@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.recetario.AppContainer
 import app.recetario.backup.BackupMessages
+import app.recetario.backup.DATABASE_FILE_NAME
 import app.recetario.backup.ExportResult
 import app.recetario.backup.LocalBackupKind
 import app.recetario.backup.parseLocalBackupName
@@ -53,12 +54,14 @@ fun newestUpdateCopy(backupsDir: File): String? =
         .firstOrNull()
 
 /**
- * La base de datos no se puede abrir (diseño de la etapa 2, §6.2): no se hizo la copia previa (no se migra) o la
- * migración falló. Solo muestra el motivo y, si hay copia previa ([copyFileName]), «Guardar la copia fuera del
- * teléfono». No abre la base de datos ni se cierra: al volver a abrir Sazón se intenta de nuevo.
+ * La base de datos no se puede abrir (diseño de la etapa 2, §6.2): no se hizo la copia previa (no se migra), la
+ * base de datos está dañada o la migración falló. Muestra el motivo y, si hay copia previa ([copyFileName]),
+ * «Guardar la copia fuera del teléfono»; si la base de datos no se puede leer ([saveDatabase]), «Guardar la base de
+ * datos fuera del teléfono» (el archivo tal cual). No abre la base de datos ni se cierra: al volver a abrir Sazón se
+ * intenta de nuevo.
  */
 @Composable
-fun UpgradeErrorRoute(container: AppContainer, message: String, copyFileName: String?) {
+fun UpgradeErrorRoute(container: AppContainer, message: String, copyFileName: String?, saveDatabase: Boolean = false) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var busy by rememberSaveable { mutableStateOf(false) }
@@ -69,10 +72,15 @@ fun UpgradeErrorRoute(container: AppContainer, message: String, copyFileName: St
         }
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        if (uri != null && copyFileName != null) {
+        if (uri != null && (copyFileName != null || saveDatabase)) {
             busy = true
             scope.launch {
-                val result = container.backupManager.copyLocalToDocument(copyFileName, uri.toString())
+                val manager = container.backupManager
+                val result = if (copyFileName != null) {
+                    manager.copyLocalToDocument(copyFileName, uri.toString())
+                } else {
+                    manager.copyDatabaseToDocument(uri.toString())
+                }
                 busy = false
                 say(if (result is ExportResult.Ok) BackupMessages.EXPORTED else BackupMessages.EXPORT_FAILED)
             }
@@ -80,12 +88,16 @@ fun UpgradeErrorRoute(container: AppContainer, message: String, copyFileName: St
     }
     UpgradeErrorContent(
         message = message,
-        canSaveOutside = copyFileName != null,
+        save = when {
+            copyFileName != null -> SaveOption.COPY
+            saveDatabase -> SaveOption.DATABASE
+            else -> null
+        },
         busy = busy,
         snackbar = snackbar,
         onSaveOutside = {
             try {
-                if (copyFileName != null) launcher.launch(copyFileName)
+                launcher.launch(copyFileName ?: DATABASE_FILE_NAME)
             } catch (_: ActivityNotFoundException) {
                 say(BackupMessages.NO_PICKER)
             }
@@ -93,10 +105,16 @@ fun UpgradeErrorRoute(container: AppContainer, message: String, copyFileName: St
     )
 }
 
+/** Qué se puede guardar fuera desde la pantalla de error: la copia previa o la base de datos tal cual. */
+enum class SaveOption(val label: String, val tag: String) {
+    COPY("Guardar la copia fuera del teléfono", "upgrade-save-outside"),
+    DATABASE("Guardar la base de datos fuera del teléfono", "upgrade-save-database"),
+}
+
 @Composable
 fun UpgradeErrorContent(
     message: String,
-    canSaveOutside: Boolean,
+    save: SaveOption?,
     busy: Boolean,
     snackbar: SnackbarHostState,
     onSaveOutside: () -> Unit,
@@ -124,14 +142,14 @@ fun UpgradeErrorContent(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.testTag("upgrade-error-message"),
             )
-            if (canSaveOutside) {
+            if (save != null) {
                 Button(
                     onClick = onSaveOutside,
                     enabled = !busy,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("upgrade-save-outside"),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(save.tag),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
-                ) { Text("Guardar la copia fuera del teléfono", fontSize = 15.sp, fontWeight = FontWeight.W700) }
+                ) { Text(save.label, fontSize = 15.sp, fontWeight = FontWeight.W700) }
             }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))

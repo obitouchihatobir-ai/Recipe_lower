@@ -156,6 +156,9 @@ class BackupTextsTest {
             .containsExactly("antes-de-actualizar-v1-2026-11-20-0915.db", "Sazon-2026-11-14-0300.zip", "otra.zip").inOrder()
         assertThat(BackupMessages.UPDATE_COPY_FAILED)
             .isEqualTo("No hay espacio para hacer la copia de seguridad antes de actualizar. Libera espacio y vuelve a abrir Sazón.")
+        assertThat(BackupMessages.DATABASE_UNREADABLE)
+            .isEqualTo("No se pudo leer la base de datos de Sazón. No se ha borrado nada.")
+        assertThat(DATABASE_FILE_NAME).isEqualTo("Sazon-base-de-datos.db")
         assertThat(BackupMessages.MIGRATION_FAILED)
             .isEqualTo("No se pudo actualizar la base de datos. Tus recetas siguen guardadas en la copia previa.")
     }

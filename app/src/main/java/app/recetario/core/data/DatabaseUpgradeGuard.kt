@@ -2,6 +2,8 @@ package app.recetario.core.data
 
 import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteDatabaseCorruptException
+import android.database.sqlite.SQLiteFullException
 import android.util.Log
 import app.recetario.backup.BackupMessages
 import app.recetario.backup.LocalBackupKind
@@ -29,8 +31,11 @@ sealed interface GuardResult {
     /** Había que migrar y ya hay copia ([fileName], en la carpeta de copias): Room puede abrirla y migrarla. */
     data class Copied(val fileName: String) : GuardResult
 
-    /** No se pudo hacer la copia: **no se migra** ni se abre la base de datos. */
-    data class Failed(val message: String) : GuardResult
+    /**
+     * No se pudo hacer la copia: **no se migra** ni se abre la base de datos. [databaseUnreadable]: la base de datos
+     * está dañada o no se puede leer (no es falta de espacio); la pantalla de error ofrece guardarla fuera tal cual.
+     */
+    data class Failed(val message: String, val databaseUnreadable: Boolean = false) : GuardResult
 }
 
 /**
@@ -38,26 +43,45 @@ sealed interface GuardResult {
  * `RecetarioApp.onCreate`, así vale también para WorkManager): si [dbFile] existe y su `user_version` es menor que
  * [targetVersion], la copia tal cual en [backupsDir] como `antes-de-actualizar-v<vieja>-<AAAA-MM-DD-HHmm>[-N].db`.
  *
- * 1. La abre en lectura y escritura (sin cambiar su modo de diario) y pasa el WAL al archivo principal
- *    (`PRAGMA wal_checkpoint(TRUNCATE)`); así el archivo principal lo tiene todo.
+ * 0. Lee `user_version` abriéndola en solo lectura (lo único que se hace en un arranque normal).
+ * 1. Solo si hay que migrar, la abre en lectura y escritura, en WAL como la abre Room, y pasa el WAL al archivo
+ *    principal (`PRAGMA wal_checkpoint(TRUNCATE)`); así el archivo principal lo tiene todo.
  * 2. La copia a un `.tmp` con fsync. La copia se pasa a diario clásico (`journal_mode=DELETE`): así se puede leer
  *    después (al listarla o restaurarla) sin dejar `-wal` ni `-shm` en la carpeta de copias. Se comprueba con
  *    `PRAGMA integrity_check` y solo entonces toma su nombre, sin pisar ninguna (`-2`, `-3`…).
  * 3. Se borran las de este tipo que sobran (se conservan [UPDATE_COPIES_KEPT]; nunca la recién escrita).
  *
- * Ante cualquier fallo borra el temporal y devuelve [GuardResult.Failed]: la base de datos se queda como estaba.
+ * Ante cualquier fallo borra el temporal (y sus `-wal`, `-shm` y `-journal`) y devuelve [GuardResult.Failed]: la
+ * base de datos se queda como estaba y nunca se borra. Si no se puede leer (dañada), con
+ * [BackupMessages.DATABASE_UNREADABLE]; si falla al copiar o escribir, con [BackupMessages.UPDATE_COPY_FAILED].
+ * [beforeRename] se llama con la copia ya comprobada, justo antes de darle su nombre (las pruebas lo usan para
+ * fallar después de escribir el temporal).
  */
 class DatabaseUpgradeGuard(
     private val dbFile: File,
     private val backupsDir: File,
     private val clock: Clock,
     private val targetVersion: Int = AppDatabase.VERSION,
+    private val beforeRename: (File) -> Unit = {},
 ) {
+    /** La base de datos (o su copia, idéntica) está dañada. */
+    private class UnreadableDatabaseException(message: String) : Exception(message)
+
     fun prepare(): GuardResult {
         if (!dbFile.isFile) return GuardResult.Ready
+        val version = try {
+            readVersion()
+        } catch (e: Exception) {
+            return readFailure(e)
+        }
+        if (version >= targetVersion) return GuardResult.Ready
+        try {
+            checkpoint()
+        } catch (e: Exception) {
+            return readFailure(e)
+        }
         var tmp: File? = null
         return try {
-            val version = checkpoint() ?: return GuardResult.Ready
             if (!backupsDir.isDirectory && !backupsDir.mkdirs()) error("No se pudo crear la carpeta de copias")
             // Restos de una copia que Android cortó a medias.
             backupsDir.listFiles { f -> f.name.contains(".db.tmp") }?.forEach { it.delete() }
@@ -71,6 +95,7 @@ class DatabaseUpgradeGuard(
                 }
             }
             verifyCopy(partial, version)
+            beforeRename(partial)
             // Sin REPLACE_EXISTING: nunca pisa otra copia.
             Files.move(partial.toPath(), target.toPath())
             rotate(target.name)
@@ -78,7 +103,8 @@ class DatabaseUpgradeGuard(
             GuardResult.Copied(target.name)
         } catch (e: Exception) {
             Log.e(TAG, "No se pudo copiar la base de datos antes de actualizar", e)
-            GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED)
+            // La copia es idéntica: si está dañada, lo está la base de datos (no es falta de espacio).
+            if (e is UnreadableDatabaseException || e is SQLiteDatabaseCorruptException) unreadable() else GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED)
         } finally {
             tmp?.let { t ->
                 t.delete()
@@ -87,23 +113,39 @@ class DatabaseUpgradeGuard(
         }
     }
 
-    /** `user_version` de la base de datos; si hay que migrar, antes pasa el WAL al archivo principal. Null: no hay que migrar. */
-    private fun checkpoint(): Int? {
+    /** Al leer la base de datos: sin espacio es «No hay espacio…»; cualquier otro fallo, que no se puede leer. */
+    private fun readFailure(e: Exception): GuardResult.Failed {
+        Log.e(TAG, "No se pudo leer la base de datos antes de actualizar", e)
+        return if (e is SQLiteFullException) GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED) else unreadable()
+    }
+
+    private fun unreadable() = GuardResult.Failed(BackupMessages.DATABASE_UNREADABLE, databaseUnreadable = true)
+
+    /** `user_version`, en solo lectura y sin tocar el modo de diario: es lo único que se hace en un arranque normal. */
+    private fun readVersion(): Int {
+        val db = SQLiteDatabase.openDatabase(dbFile.path, null, SQLiteDatabase.OPEN_READONLY, KEEP_ON_CORRUPTION)
+        try {
+            return db.version
+        } finally {
+            db.close()
+        }
+    }
+
+    /** Pasa el WAL al archivo principal, para copiar solo ese archivo. */
+    private fun checkpoint() {
         val db = SQLiteDatabase.openDatabase(
             dbFile.path,
             null,
-            // Con WAL activado Android no cambia el modo de diario del archivo (Room lo usa así).
+            // Con ENABLE_WRITE_AHEAD_LOGGING Android la deja en WAL (o la pone), como la abre Room después; sin él la
+            // pasaría a su modo de diario por defecto.
             SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING,
             KEEP_ON_CORRUPTION,
         )
         try {
-            val version = db.version
-            if (version >= targetVersion) return null
             db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c ->
                 // La primera columna es 1 si no se pudo completar (otra conexión la tenía ocupada).
                 if (c.moveToFirst() && c.getInt(0) != 0) error("El punto de control del WAL no se completó")
             }
-            return version
         } finally {
             db.close()
         }
@@ -117,7 +159,7 @@ class DatabaseUpgradeGuard(
                 check(c.moveToFirst() && c.getString(0).equals("delete", ignoreCase = true)) { "La copia sigue en modo WAL" }
             }
             db.rawQuery("PRAGMA integrity_check", null).use { c ->
-                check(c.moveToFirst() && c.getString(0) == "ok" && c.count == 1) { "La copia no está entera" }
+                if (!(c.moveToFirst() && c.getString(0) == "ok" && c.count == 1)) throw UnreadableDatabaseException("La copia no está entera")
             }
             check(db.version == version) { "La copia es de otra versión" }
         } finally {

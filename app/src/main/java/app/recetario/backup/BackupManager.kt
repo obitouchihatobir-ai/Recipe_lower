@@ -257,8 +257,15 @@ class BackupManager(
      * actualización, que no tiene ViewModel). Como [exportToDocument]: si no se pudo abrir, solo se borra si está
      * vacío; si falló después de abrirlo, se borra.
      */
-    suspend fun copyLocalToDocument(fileName: String, uri: String): ExportResult {
-        val file = localFile(fileName)
+    suspend fun copyLocalToDocument(fileName: String, uri: String): ExportResult = fileToDocument(localFile(fileName), uri)
+
+    /**
+     * «Guardar la base de datos fuera del teléfono» cuando no se puede leer: copia tal cual el archivo de la base de
+     * datos (sin abrirlo ni tocarlo) en el documento [uri], como [copyLocalToDocument].
+     */
+    suspend fun copyDatabaseToDocument(uri: String): ExportResult = fileToDocument(databaseFile?.takeIf { it.isFile }, uri)
+
+    private suspend fun fileToDocument(file: File?, uri: String): ExportResult {
         return mutex.withLock {
             withContext(io + NonCancellable) {
                 if (file == null) {
@@ -414,13 +421,14 @@ class BackupManager(
 
     /**
      * Número de recetas de una copia de la base de datos de antes de actualizar si se puede restaurar: se abre en
-     * solo lectura (está en diario clásico: no deja `-wal` ni `-shm`), pasa `PRAGMA quick_check` y tiene la tabla de
-     * recetas. Null si no.
+     * solo lectura (está en diario clásico: no deja `-wal` ni `-shm`), no es de una versión más nueva que la de la
+     * app (Room no sabría abrirla), pasa `PRAGMA quick_check` y tiene la tabla de recetas. Null si no.
      */
     private fun inspectDatabaseCopy(file: File): Int? = try {
         val copy = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY, KEEP_ON_CORRUPTION)
         try {
-            val ok = copy.rawQuery("PRAGMA quick_check", null).use { it.moveToFirst() && it.getString(0) == "ok" }
+            val ok = copy.version <= AppDatabase.VERSION &&
+                copy.rawQuery("PRAGMA quick_check", null).use { it.moveToFirst() && it.getString(0) == "ok" }
             if (!ok) null else copy.rawQuery("SELECT COUNT(*) FROM recipes", null).use { if (it.moveToFirst()) it.getInt(0) else null }
         } finally {
             copy.close()
