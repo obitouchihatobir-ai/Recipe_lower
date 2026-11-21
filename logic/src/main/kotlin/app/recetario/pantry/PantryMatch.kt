@@ -16,6 +16,9 @@ private fun sameWord(a: String, b: String) =
 private fun wordsIn(small: List<String>, big: List<String>) =
     small.isNotEmpty() && small.all { w -> big.any { sameWord(w, it) } }
 
+/** Todas las palabras de [phrase] están, completas (con plural básico), en [text]: «chile poblano» en «chiles poblanos asados». */
+internal fun wordsWithin(phrase: String, text: String): Boolean = wordsIn(words(phrase), words(text))
+
 /** Clave única de un artículo de la despensa: normalizado, sin tildes ni puntuación. */
 fun pantryKey(name: String): String = words(name).joinToString(" ")
 
