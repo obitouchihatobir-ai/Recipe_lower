@@ -55,7 +55,7 @@ fun ratings(container: AppContainer): Map<String, Boolean> = runBlocking { conta
 
 /** Nodos cuya etiqueta de prueba empieza por [prefix]. */
 fun hasTestTagPrefix(prefix: String) = SemanticsMatcher("testTag empieza por $prefix") {
-    it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(prefix) == true
+    it.config.getOrElseNullable(SemanticsProperties.TestTag) { null }?.startsWith(prefix) == true
 }
 
 /** Desplaza la lista [listTag] hasta [matcher], esperando a que los datos lleguen (Room va en otro hilo). */
