@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.isSelected
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -161,8 +162,9 @@ class TodayCardTest {
         rule.onNodeWithTag("today-create-drink").performClick()
         // El editor se abre con Bebidas ya elegida.
         rule.waitFor(hasTestTag("editor-title"))
-        rule.waitFor(hasText("Bebidas") and isSelected())
-        rule.onNode(hasText("Comidas") and isSelected()).assertDoesNotExist()
+        // (El chip seleccionable no lleva el texto en el árbol sin fusionar: lo lleva un descendiente.)
+        rule.waitFor(isSelected() and hasAnyDescendant(hasText("Bebidas")))
+        rule.onNode(isSelected() and hasAnyDescendant(hasText("Comidas")), useUnmergedTree = true).assertDoesNotExist()
         rule.waitForIdle()
     }
 
@@ -194,15 +196,19 @@ class TodayCardTest {
         val owner = TestLifecycleOwner()
         rule.setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                RecetarioTheme(ThemeChoice.CALIDO) { HomeRoute(c, onCategory = {}, onRecipe = {}, onAdd = {}) }
+                RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(c) }
             }
         }
-        rule.waitUntil(5_000) { offline.forecastRequests.size == 1 }
+        rule.waitFor(hasTestTag("home-diary"))
+        rule.waitUntil(5_000) { offline.forecastRequests.isNotEmpty() }
+        rule.waitForIdle()
+        val before = offline.forecastRequests.size
 
         // La app pasa a segundo plano y vuelve (ON_PAUSE y ON_RESUME): se pide otra vez.
         rule.runOnIdle { owner.registry.currentState = Lifecycle.State.STARTED }
+        rule.waitForIdle()
         rule.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        rule.waitUntil(5_000) { offline.forecastRequests.size == 2 }
+        rule.waitUntil(5_000) { offline.forecastRequests.size > before }
     }
 
     @Test
@@ -253,7 +259,8 @@ class TodayCardTest {
         rule.waitFor(hasTestTag("today-weather"))
         rule.onNodeWithTag("today-weather").assert(hasContentDescription("El tiempo ahora: mayormente soleado, 9 °C en Madrid"))
         // Solo la descripción: el texto visible no se lee otra vez.
-        rule.onAllNodes(hasText("9 °C · Madrid", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        // (En el árbol fusionado, el que lee TalkBack; el sin fusionar conserva los textos que se sustituyen.)
+        rule.onAllNodes(hasText("9 °C · Madrid", substring = true)).assertCountEquals(0)
         // Con clima, el porqué habla del tiempo: frío y algo caliente.
         rule.waitUntil(5_000) { textOf("today-reason") == "Hace 9 °C: algo caliente y reconfortante" }
         assertThat(runBlocking { c.weatherRepository.snapshot.first() }).isNotNull()

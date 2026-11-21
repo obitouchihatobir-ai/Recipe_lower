@@ -44,6 +44,13 @@ import app.recetario.core.ui.motion.SAVED_CHECK_MS
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.About
+import app.recetario.navigation.FullMenu
+import app.recetario.navigation.Pairing
+import app.recetario.navigation.PairingCompare
+import app.recetario.navigation.PairingHistory
+import app.recetario.pairing.CompareWheelProgress
+import app.recetario.recipes.model.Course
+import app.recetario.weather.LocationMode
 import app.recetario.navigation.LocationWeather
 import app.recetario.navigation.MealTimesSettings
 import app.recetario.testing.FakeOpenMeteo
@@ -72,6 +79,7 @@ import app.recetario.testing.sampleRecipe
 import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import app.recetario.settings.BackupStatus
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.getValue
@@ -203,6 +211,18 @@ class CapturasTest {
         rule.waitFor(hasTestTag("appearance-screen"))
         rule.waitFor(hasTestTag("auto-note"))
         save("apariencia-$name")
+        // Con Automático y una ubicación sale «Según la salida y la puesta del sol».
+        runBlocking {
+            c.settingsRepository.setAuto(true)
+            c.settingsRepository.setThemeBySun(true)
+        }
+        rule.waitFor(hasTestTag("sun-switch"))
+        save("apariencia-sol-$name")
+        runBlocking {
+            c.settingsRepository.setThemeBySun(false)
+            c.settingsRepository.setAuto(false)
+        }
+        rule.waitForGone(hasTestTag("sun-switch"))
 
         rule.runOnIdle { nav.navigate(Categories) }
         rule.waitFor(hasText("Postres"))
@@ -220,7 +240,84 @@ class CapturasTest {
         captureShopping(c, name)
         capturePantry(c, nav, name)
         captureDiary(c, nav, name)
+        capturePairing(c, nav, name)
+        captureHomeWithoutWeather(c, nav, name)
     }
+
+    /** Sin recetas: la tarjeta Hoy vacía («Cuando tengas recetas…» y «+ Nueva receta»), en los tres temas. */
+    @Test
+    fun inicioVacio() {
+        val c = installTestContainer().also { container = it }
+        var theme by mutableStateOf(ThemeChoice.CALIDO)
+        rule.setContent { RecetarioTheme(theme) { AppNavHost(c) } }
+        for (t in listOf(ThemeChoice.CALIDO, ThemeChoice.FRESCO, ThemeChoice.NOCTURNO)) {
+            rule.runOnIdle { theme = t }
+            rule.waitFor(hasTestTag("today-empty"))
+            save("inicio-vacio-${t.name.lowercase()}")
+        }
+    }
+
+    /** Inicio sin ubicación: la tarjeta Hoy sin el tiempo pequeño y con el porqué de la hora o la estación. */
+    private fun captureHomeWithoutWeather(c: AppContainer, nav: NavHostController, name: String) {
+        runBlocking { c.settingsRepository.setLocationMode(LocationMode.NONE) }
+        rule.runOnIdle { nav.navigate(Home) }
+        rule.waitFor(hasTestTag("today-card"))
+        rule.waitForGone(hasTestTag("today-weather"))
+        save("inicio-sin-clima-$name")
+    }
+
+    /**
+     * Maridaje: la sección del detalle, la pestaña con una bebida elegida, la rueda comparativa (también a mitad del
+     * dibujo), el menú completo y el historial con una 👍 y una 👎.
+     */
+    private fun capturePairing(c: AppContainer, nav: NavHostController, name: String) {
+        rule.runOnIdle { nav.navigate(RecipeDetail("calabaza")) }
+        rule.waitFor(hasTestTag("detail-list"))
+        rule.waitUntil(10_000) {
+            runCatching { rule.onNodeWithTag("detail-list").performScrollToNode(hasTestTag("detail-pairing")) }.isSuccess
+        }
+        save("detalle-maridaje-$name")
+        // «Le iría bien…» solo sale si la guía de sabores conoce algún ingrediente.
+        if (runCatching { rule.onNodeWithTag("detail-list").performScrollToNode(hasTestTag("detail-goes-well")) }.isSuccess) {
+            save("detalle-le-iria-bien-$name")
+        }
+
+        runBlocking {
+            val d = c.pairingRepository.observeData().first()
+            val crema = d.find("RECIPE", "calabaza")!!
+            c.pairingRepository.rate(crema, d.find("RECIPE", "limonada")!!, true)
+            c.pairingRepository.rate(crema, d.find("RECIPE", "bloody")!!, false)
+        }
+        rule.runOnIdle { nav.navigate(Pairing(subject = "RECIPE:limonada")) }
+        rule.waitFor(hasTestTag("pairing-subject"))
+        rule.waitFor(hasTestTag("pairing-row-RECIPE:calabaza"))
+        save("maridaje-$name")
+
+        // La rueda a mitad: la primera ya entera y la segunda creciendo.
+        rule.mainClock.autoAdvance = false
+        rule.runOnUiThread { nav.navigate(PairingCompare("RECIPE", "calabaza", "RECIPE", "limonada")) }
+        pumpUntil { wheelProgress()?.let { it[1] >= 0.4f } == true }
+        save("rueda-dibujando-$name", settleMs = 0)
+        rule.mainClock.autoAdvance = true
+        rule.waitUntil(5_000) { wheelProgress() == listOf(1f, 1f) }
+        save("rueda-$name")
+        rule.onNodeWithTag("compare-reasons").performScrollTo()
+        save("rueda-frases-$name")
+
+        rule.runOnIdle { nav.navigate(FullMenu) }
+        rule.waitFor(hasTestTag("full-menu-reason"))
+        save("menu-completo-$name")
+
+        rule.runOnIdle { nav.navigate(PairingHistory) }
+        rule.waitFor(hasTestTag("pairing-history-list"))
+        rule.waitFor(hasTestTag("history-RECIPE:bloody|RECIPE:calabaza"))
+        save("historial-maridaje-$name")
+    }
+
+    /** El avance de las dos ruedas (null si la rueda aún no está). */
+    private fun wheelProgress(): List<Float>? =
+        rule.onAllNodes(hasTestTag("compare-wheel")).fetchSemanticsNodes().singleOrNull()
+            ?.config?.getOrElseNullable(CompareWheelProgress) { null }
 
     /** Despensa (pestaña de Compra) y «¿Qué puedo hacer?» con una receta completa y otras a medias. */
     private fun capturePantry(c: AppContainer, nav: NavHostController, name: String) {
@@ -622,7 +719,7 @@ class CapturasTest {
                 Step("p3", "Añade la calabaza y el caldo. Cuece 20 minutos a fuego medio.", emptyList(), 1200, setOf("c1", "c4")),
                 Step("p4", "Tritura, añade la nata, la nuez moscada, sal y pimienta, y sirve caliente.", emptyList(), null, setOf("c5", "c7", "c8")),
             ),
-        ).copy(notes = "La próxima vez: un toque de jengibre y menos caldo."),
+        ).copy(notes = "La próxima vez: un toque de jengibre y menos caldo.", course = Course.MAIN),
         sampleRecipe(
             "flan", "Flan casero de la abuela con caramelo líquido y un toque de vainilla", DefaultCategories.DESSERT_ID,
             minutes = 50, flavor = FlavorProfile(sweet = 3), updatedAt = 300,

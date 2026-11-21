@@ -60,11 +60,21 @@ class FakeOpenMeteo(
     }
 }
 
-/** Previsión de 7 días desde [firstDay], con la temperatura aparente de ahora, la salida y la puesta del sol. */
-fun forecastJson(firstDay: LocalDate, apparent: Double = 24.0, sunrise: String = "06:30", sunset: String = "18:10"): String {
+/**
+ * Previsión de 7 días desde [firstDay], con la temperatura aparente, la lluvia y el código del tiempo de ahora
+ * (1: mayormente soleado; 61: lluvia débil), la salida y la puesta del sol.
+ */
+fun forecastJson(
+    firstDay: LocalDate,
+    apparent: Double = 24.0,
+    sunrise: String = "06:30",
+    sunset: String = "18:10",
+    precipitation: Double = 0.0,
+    weatherCode: Int = 1,
+): String {
     val days = (0L..6L).map { firstDay.plusDays(it) }
     fun list(f: (LocalDate) -> String) = days.joinToString(",") { f(it) }
-    return """{"current":{"apparent_temperature":$apparent,"precipitation":0.0,"weather_code":1,"is_day":1},
+    return """{"current":{"apparent_temperature":$apparent,"precipitation":$precipitation,"weather_code":$weatherCode,"is_day":1},
         "daily":{"time":[${list { "\"$it\"" }}],"weather_code":[${list { "1" }}],
         "temperature_2m_max":[${list { "25.0" }}],"temperature_2m_min":[${list { "12.0" }}],
         "precipitation_probability_max":[${list { "10" }}],
