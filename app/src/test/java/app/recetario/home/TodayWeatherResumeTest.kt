@@ -55,8 +55,15 @@ class TodayWeatherResumeTest {
         val before = offline.forecastRequests.size
 
         // La app pasa a segundo plano y vuelve (ON_PAUSE y ON_RESUME): se pide otra vez.
+        println("DIAG before=$before")
         s.moveToState(Lifecycle.State.STARTED)
+        println("DIAG state=${s.state}")
         s.moveToState(Lifecycle.State.RESUMED)
-        rule.waitUntil(5_000) { offline.forecastRequests.size > before }
+        println("DIAG state=${s.state}")
+        try {
+            rule.waitUntil(5_000) { offline.forecastRequests.size > before }
+        } finally {
+            println("DIAG after=${offline.forecastRequests.size}")
+        }
     }
 }

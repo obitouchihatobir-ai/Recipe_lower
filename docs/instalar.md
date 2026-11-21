@@ -85,3 +85,10 @@ Ese APK va firmado con una **llave provisional**, distinta en cada ejecución, y
 3. Instala la versión nueva (pasos 3 y 4).
 4. Abre **Ajustes › Copias de seguridad**, toca **Importar copia** y elige el archivo del punto 1. Elige **Reemplazar todo**: en la app recién instalada no hay nada que perder y así vuelven también el tema y el tamaño de la taza (con «Combinar» solo vuelven las recetas, las fotos, las categorías, la compra, el diario y la despensa).
 5. Si usabas la copia automática en Google Drive, vuelve a tocar **Guardar también en Google Drive** en esa misma pantalla: la app nueva no conserva el permiso para escribir en el archivo. Si eliges el archivo de antes, la app te pregunta antes de sobrescribirlo.
+
+## 8. Ubicación e internet (desde la 0.3.0)
+
+La 0.3.0 trae la tarjeta **Hoy**, que puede tener en cuenta el tiempo que hace. Es opcional:
+
+- **Ubicación aproximada.** Solo se pide si tocas **Usar mi ubicación aproximada** en **Ajustes › Ubicación y clima**. Android pregunta una vez; si dices que no, la app no vuelve a preguntar y puedes **Elegir ciudad** a mano. La app nunca pide la ubicación precisa, y la ubicación no va en las copias de seguridad. **Quitar ubicación** borra la ciudad, la ubicación guardada y el tiempo.
+- **Internet.** La app solo se conecta a **Open-Meteo** (`api.open-meteo.com` para el tiempo y `geocoding-api.open-meteo.com` para buscar una ciudad), y solo si eliges una ciudad o la ubicación aproximada. Le envía las coordenadas redondeadas (o el nombre que buscas), nada más: ni recetas ni datos tuyos. Sin conexión, la app funciona igual, sin el tiempo.

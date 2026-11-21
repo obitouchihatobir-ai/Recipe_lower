@@ -116,6 +116,8 @@ class RecorridoEtapa2bTest {
                 setAuto(false)
                 // Una ciudad inventada (nunca la ubicación del usuario).
                 setCity(Place(CITY, "Provincia de Prueba", "Tierra de Prueba", 40.0, -3.5))
+                // Una copia reciente fuera del teléfono: Inicio sin el recordatorio de las copias.
+                updateBackupStatus { it.copy(lastExternal = clock.instant().minusSeconds(86_400)) }
             }
         }
         threeRecipes()

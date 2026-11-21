@@ -21,13 +21,13 @@ fun ScreenTitle(text: String, modifier: Modifier = Modifier) {
 
 /** Título de sección (17 sp, letra de títulos del tema). */
 @Composable
-fun SectionTitle(text: String, modifier: Modifier = Modifier) {
+fun SectionTitle(text: String, modifier: Modifier = Modifier, maxLines: Int = 1) {
     Text(
         text,
         modifier = modifier,
         color = LocalRecetarioColors.current.ink,
         style = MaterialTheme.typography.titleLarge.copy(fontSize = 17.sp, lineHeight = 22.sp),
-        maxLines = 1,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
     )
 }

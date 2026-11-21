@@ -237,7 +237,8 @@ fun CompareContent(
                 .padding(horizontal = 18.dp).padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            SectionTitle("${a.name} + ${b.name}", Modifier.fillMaxWidth())
+            // Los dos nombres enteros (en una línea se cortaba el segundo).
+            SectionTitle("${a.name} + ${b.name}", Modifier.fillMaxWidth(), maxLines = 3)
             Spacer(Modifier.height(8.dp))
             CompareWheel(a.flavor, b.flavor, compareWheelDescription(a, b))
             // La rueda ya lo dice todo a TalkBack: la leyenda solo nombra las líneas.
