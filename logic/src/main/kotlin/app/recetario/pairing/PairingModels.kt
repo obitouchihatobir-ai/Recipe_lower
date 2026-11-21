@@ -44,8 +44,11 @@ data class PairScore(val score: Int, val reasons: List<String>, val top: Princip
 /** Una pareja valorada con 👍 ([liked] true) o 👎. */
 data class RatedPair(val a: PairingItem, val b: PairingItem, val liked: Boolean)
 
-/** [liked] es true si la pareja tiene 👍 (las 👎 no se sugieren). */
-data class Suggestion(val item: PairingItem, val score: Int, val reasons: List<String>, val liked: Boolean?)
+/**
+ * [liked] es true si la pareja tiene 👍 (las 👎 no se sugieren). [ratable] es false si los dos lados son del catálogo:
+ * esa pareja no se puede valorar (la interfaz no muestra 👍/👎).
+ */
+data class Suggestion(val item: PairingItem, val score: Int, val reasons: List<String>, val liked: Boolean?, val ratable: Boolean)
 
 data class FullMenu(
     val starter: PairingItem?,

@@ -29,7 +29,7 @@ private fun c(p: Principle, points: Int, reason: String) = Contribution(p, point
 private fun intensity(a: PairingItem, b: PairingItem): Contribution {
     val (ia, ib) = a.flavor.intensity.ordinal to b.flavor.intensity.ordinal
     return when (abs(ia - ib)) {
-        0 -> c(Principle.INTENSITY, 12, "${capitalized(ref(a))} y ${ref(b)} tienen una intensidad parecida: ninguno tapa al otro.")
+        0 -> c(Principle.INTENSITY, 12, "${capitalized(ref(a))} y ${ref(b)} tienen una intensidad parecida, sin que uno tape al otro.")
         1 -> c(Principle.INTENSITY, 4, "${capitalized(ref(a))} y ${ref(b)} tienen intensidades cercanas.")
         else -> {
             val (strong, light) = if (ia > ib) a to b else b to a
@@ -80,7 +80,20 @@ private fun dessertDrink(a: PairingItem, b: PairingItem): Contribution? {
     } else {
         // Un amargo (café, té, cerveza oscura) con un postre es un contraste buscado: resta la mitad.
         val penalty = maxOf(-30, 10 * diff).let { if (drink.flavor.bitter >= 2) it / 2 else it }
-        c(Principle.DESSERT_DRINK_SWEETER, penalty, "Lo dulce ${de(dessert)} resaltará la acidez y el amargor ${de(drink)}.")
+        c(Principle.DESSERT_DRINK_SWEETER, penalty, dessertClashReason(dessert, drink))
+    }
+}
+
+/** Nombra solo lo que la bebida tiene de verdad (acidez, amargor o ninguno). */
+private fun dessertClashReason(dessert: PairingItem, drink: PairingItem): String {
+    val traits = listOfNotNull(
+        "la acidez".takeIf { drink.flavor.sour >= 1 },
+        "el amargor".takeIf { drink.flavor.bitter >= 1 },
+    )
+    return if (traits.isEmpty()) {
+        "Lo dulce ${de(dessert)} apaga el sabor ${de(drink)}."
+    } else {
+        "Lo dulce ${de(dessert)} resaltará ${traits.joinToString(" y ")} ${de(drink)}."
     }
 }
 
@@ -88,7 +101,7 @@ private fun spicyNeedsFresh(a: PairingItem, b: PairingItem): Contribution? {
     val hotA = a.flavor.spicy >= 2
     val hotB = b.flavor.spicy >= 2
     if (hotA && hotB) {
-        return c(Principle.SPICY_NEEDS_FRESH, -6, "Juntos, el picante ${de(a)} y el ${de(b)} se suma y puede resultar excesivo.")
+        return c(Principle.SPICY_NEEDS_FRESH, -6, "Juntos, el picante ${de(a)} y el ${de(b)} se suman y pueden resultar excesivos.")
     }
     val (hot, other) = when {
         hotA -> a to b
@@ -127,6 +140,10 @@ private fun bitterBalance(a: PairingItem, b: PairingItem): Contribution? {
     return c(Principle.BITTER_BALANCE, 12, "Lo dulce ${de(sweet)} suaviza el amargor ${de(bitter)}.")
 }
 
+/** Chocolate caliente, champurrado, atole: con un plato salado no hacen de contraste, pesan. */
+private fun hotRichDrink(item: PairingItem) =
+    item.role == PairRole.DRINK && item.serveTemp == ServeTemp.HOT && item.flavor.rich
+
 private fun saltyLikesSourSweet(a: PairingItem, b: PairingItem): Contribution? {
     // Lo salado es el de un plato (no el escarchado de una bebida).
     val options = listOf(a to b, b to a).filter { (salty, _) -> salty.flavor.salty >= 2 && salty.role != PairRole.DRINK }
@@ -138,7 +155,7 @@ private fun saltyLikesSourSweet(a: PairingItem, b: PairingItem): Contribution? {
                 10 + 2 * (other.flavor.sour - 2),
                 "Lo ácido ${de(other)} realza lo salado ${de(salty)}.",
             )
-            other.flavor.sweet >= 2 -> c(
+            other.flavor.sweet >= 2 && !hotRichDrink(other) -> c(
                 Principle.SALTY_LIKES_SOUR_SWEET,
                 8,
                 "El contraste dulce ${de(other)} va bien con lo salado ${de(salty)}.",
@@ -153,7 +170,7 @@ private fun saltyLikesSourSweet(a: PairingItem, b: PairingItem): Contribution? {
 
 private fun tempPlural(t: ServeTemp) = when (t) {
     ServeTemp.HOT -> "calientes"
-    ServeTemp.COLD -> "fríos"
+    ServeTemp.COLD -> "en frío"
     ServeTemp.ROOM -> "a temperatura ambiente"
 }
 
@@ -187,6 +204,13 @@ internal fun pairContributions(a: PairingItem, b: PairingItem): List<Contributio
     saltyLikesSourSweet(a, b),
     temperature(a, b),
 )
+
+/** Las frases de los principios que suman (con [weights]), de más a menos peso. */
+internal fun positiveReasons(a: PairingItem, b: PairingItem, weights: Map<Principle, Double> = DEFAULT_WEIGHTS): List<String> =
+    pairContributions(a, b).map { it to it.points * (weights[it.principle] ?: 1.0) }
+        .filter { it.second > 0 && it.first.reason != null }
+        .sortedByDescending { it.second }
+        .map { it.first.reason!! }
 
 /**
  * Puntuación de 0 a 100 (50 más los puntos de cada principio por su peso) y 1 o 2 frases: las de los principios que

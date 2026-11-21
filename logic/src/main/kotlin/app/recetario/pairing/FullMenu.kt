@@ -24,34 +24,43 @@ fun fullMenu(
     fun points(a: PairingItem, b: PairingItem) =
         scorePair(a, b, weights).score + if (liked(a, b) == true) LIKED_BONUS else 0
 
-    fun pool(own: (PairingItem) -> Boolean) = recipes.filter(own).ifEmpty { catalog.filter(own) }
-    val drinks = pool { it.role == PairRole.DRINK }
-    val starters = pool { it.role != PairRole.DRINK && it.role != PairRole.DESSERT && it.course == Course.STARTER }
-    val desserts = pool { it.role == PairRole.DESSERT }
+    // Cada hueco: las recetas propias que se pueden juntar; si todas tienen 👎 (o no hay), el catálogo.
+    fun pool(fits: (PairingItem) -> Boolean, ok: (PairingItem) -> Boolean) =
+        recipes.filter { fits(it) && ok(it) }.ifEmpty { catalog.filter { fits(it) && ok(it) } }
+    val isDrink = { it: PairingItem -> it.role == PairRole.DRINK }
+    val isStarter = { it: PairingItem -> it.role != PairRole.DRINK && it.role != PairRole.DESSERT && it.course == Course.STARTER }
+    val isDessert = { it: PairingItem -> it.role == PairRole.DESSERT }
 
     val order = compareBy<Pair<PairingItem, Int>> { -it.second }.thenBy { normalize(it.first.name) }.thenBy { it.first.id }
-    fun best(options: List<PairingItem>, value: (PairingItem) -> Int?): Pair<PairingItem, Int>? =
-        options.mapNotNull { o -> value(o)?.let { o to it } }.sortedWith(order).firstOrNull()
+    fun best(options: List<PairingItem>, value: (PairingItem) -> Int): Pair<PairingItem, Int>? =
+        options.map { o -> o to value(o) }.sortedWith(order).firstOrNull()
 
     val menus = mains.map { main ->
-        val drink = best(drinks) { d -> if (allowed(d, main)) points(d, main) else null }
+        val drink = best(pool(isDrink) { allowed(it, main) }) { points(it, main) }
         val d = drink?.first
-        val starter = best(starters.filter { !sameItem(it, main) }) { s ->
-            if (!allowed(s, main) || (d != null && !allowed(d, s))) null
-            else points(s, main) + (d?.let { points(it, s) } ?: 0)
+        val starter = best(pool(isStarter) { !sameItem(it, main) && allowed(it, main) && (d == null || allowed(d, it)) }) { s ->
+            points(s, main) + (d?.let { points(it, s) } ?: 0)
         }
-        val dessert = best(desserts) { x ->
-            if (d != null) (if (allowed(d, x)) points(d, x) else null) else points(x, main)
+        val dessert = best(pool(isDessert) { if (d != null) allowed(d, it) else allowed(it, main) }) { x ->
+            if (d != null) points(d, x) else points(x, main)
         }
         val total = listOfNotNull(drink, starter, dessert).sumOf { it.second }
-        FullMenu(starter?.first, main, dessert?.first, d, menuReason(main, d, starter?.first)) to total
+        FullMenu(starter?.first, main, dessert?.first, d, menuReason(main, d, starter?.first, dessert?.first, weights)) to total
     }
     return menus.sortedWith(compareBy<Pair<FullMenu, Int>> { -it.second }.thenBy { normalize(it.first.main.name) })
         .first().first
 }
 
-private fun menuReason(main: PairingItem, drink: PairingItem?, starter: PairingItem?): String = when {
-    drink != null -> scorePair(drink, main).reasons.first()
-    starter != null -> scorePair(starter, main).reasons.first()
-    else -> "Un menú alrededor ${de(main)}."
-}
+/** La primera frase positiva (con [weights]) de bebida–principal, entrada–principal o postre–bebida. */
+private fun menuReason(
+    main: PairingItem,
+    drink: PairingItem?,
+    starter: PairingItem?,
+    dessert: PairingItem?,
+    weights: Map<Principle, Double>,
+): String = listOfNotNull(
+    drink?.let { it to main },
+    starter?.let { it to main },
+    if (dessert != null && drink != null) dessert to drink else null,
+).firstNotNullOfOrNull { (a, b) -> positiveReasons(a, b, weights).firstOrNull() }
+    ?: "Un menú alrededor ${de(main)}."

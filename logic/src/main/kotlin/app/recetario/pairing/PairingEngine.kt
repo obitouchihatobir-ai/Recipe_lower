@@ -41,12 +41,13 @@ fun suggestPairings(
 ): List<Suggestion> = candidates
     .filter { sensiblePair(subject, it) && !sameItem(subject, it) }
     .mapNotNull { candidate ->
-        val liked = ratableKey(subject, candidate)?.let { ratings[it] }
+        val key = ratableKey(subject, candidate)
+        val liked = key?.let { ratings[it] }
         if (liked == false) return@mapNotNull null
         val score = scorePair(subject, candidate, weights)
         val points = if (liked == true) minOf(100, score.score + LIKED_BONUS) else score.score
         if (liked != true && points < MIN_SUGGESTION_SCORE) return@mapNotNull null
-        Suggestion(candidate, points, score.reasons, liked)
+        Suggestion(candidate, points, score.reasons, liked, ratable = key != null)
     }
     .sortedWith(
         compareBy<Suggestion> { if (it.item.kind == RECIPE) 0 else 1 }

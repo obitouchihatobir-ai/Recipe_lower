@@ -15,7 +15,7 @@ fun pairKey(a: Pair<String, String>, b: Pair<String, String>): String {
 fun pairKey(a: PairingItem, b: PairingItem): String = pairKey(a.kind to a.id, b.kind to b.id)
 
 /** La clave, o null si los dos son del catálogo (esa pareja no se puede valorar). */
-internal fun ratableKey(a: PairingItem, b: PairingItem): String? =
+fun ratableKey(a: PairingItem, b: PairingItem): String? =
     if (a.kind == CATALOG && b.kind == CATALOG) null else pairKey(a, b)
 
 internal const val RECIPE = "RECIPE"

@@ -13,7 +13,7 @@ data class FlavorEntry(val ingredient: String, val goesWith: List<String>)
 /** Guía de sabores incluida (`pairing/flavors.json`): «Le iría bien…» en el detalle. */
 object FlavorGuide {
     val entries: List<FlavorEntry> by lazy {
-        readResource("pairing/flavors.json") { json.decodeFromString(ListSerializer(FlavorEntry.serializer()), it) }
+        readResource("pairing/flavors.json", ListSerializer(FlavorEntry.serializer()))
     }
 
     /**
