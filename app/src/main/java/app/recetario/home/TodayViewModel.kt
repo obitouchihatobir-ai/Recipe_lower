@@ -181,12 +181,9 @@ class TodayViewModel(
 
     /** Al entrar en Inicio: pide el tiempo (solo si la caché tiene más de 1 h) sin bloquear nada. */
     fun refreshWeather() {
-        println("DIAG refreshWeather called")
         viewModelScope.launch {
             try {
-                println("DIAG refresh start")
                 refresh()
-                println("DIAG refresh end")
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

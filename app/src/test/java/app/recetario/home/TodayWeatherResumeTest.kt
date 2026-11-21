@@ -13,7 +13,11 @@ import app.recetario.testing.installTestContainer
 import app.recetario.testing.sampleRecipe
 import app.recetario.testing.waitFor
 import app.recetario.weather.Place
+import android.os.Looper
+import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.robolectric.Shadows.shadowOf
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -32,6 +36,7 @@ class TodayWeatherResumeTest {
 
     private lateinit var container: AppContainer
     private var scenario: ActivityScenario<MainActivity>? = null
+    private val offline = FakeOpenMeteo(offline = true)
 
     @After
     fun tearDown() {
@@ -41,7 +46,6 @@ class TodayWeatherResumeTest {
 
     @Test
     fun weather_askedAgainWhenReturningToTheApp() {
-        val offline = FakeOpenMeteo(offline = true)
         container = installTestContainer(openMeteo = offline)
         runBlocking {
             container.settingsRepository.setAuto(false)
@@ -50,20 +54,27 @@ class TodayWeatherResumeTest {
         }
         val s = ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
         rule.waitFor(hasTestTag("today-card"))
-        rule.waitUntil(5_000) { offline.forecastRequests.isNotEmpty() }
-        rule.waitForIdle()
-        val before = offline.forecastRequests.size
+        waitForRequests(1)
 
-        // La app pasa a segundo plano y vuelve (ON_PAUSE y ON_RESUME): se pide otra vez.
-        println("DIAG before=$before")
-        s.moveToState(Lifecycle.State.STARTED)
-        println("DIAG state=${s.state}")
-        s.moveToState(Lifecycle.State.RESUMED)
-        println("DIAG state=${s.state}")
-        try {
-            rule.waitUntil(5_000) { offline.forecastRequests.size > before }
-        } finally {
-            println("DIAG after=${offline.forecastRequests.size}")
+        // La app pasa a segundo plano y vuelve (ON_PAUSE y ON_RESUME): cada vez se pide otra vez.
+        for (round in 2..4) {
+            s.moveToState(Lifecycle.State.STARTED)
+            s.moveToState(Lifecycle.State.RESUMED)
+            waitForRequests(round)
         }
+    }
+
+    /**
+     * Espera a que se hayan pedido [n] previsiones y a que la última petición termine (sin conexión, anota el fallo):
+     * así la siguiente no espera al candado de la anterior. Vacía la cola del hilo principal en cada vuelta.
+     */
+    private fun waitForRequests(n: Int) {
+        rule.waitUntil(10_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            offline.forecastRequests.size >= n &&
+                runBlocking { container.settingsRepository.weatherFailedAt.first() } != null
+        }
+        assertThat(offline.forecastRequests).hasSize(n)
+        runBlocking { container.settingsRepository.setWeatherFailedAt(null) }
     }
 }
