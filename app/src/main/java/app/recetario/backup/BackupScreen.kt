@@ -518,7 +518,7 @@ private fun BoxScope.ImportModePanel(restoring: Boolean, onMerge: () -> Unit, on
         }
         ModeOption(
             title = "Reemplazar todo",
-            explanation = "Sustituye todas tus recetas por las de la copia. Antes se guarda una copia de lo actual.",
+            explanation = "Sustituye todas tus recetas, el diario y la despensa por los de la copia. Antes se guarda una copia de lo actual.",
             color = MaterialTheme.colorScheme.error,
             border = MaterialTheme.colorScheme.error,
             tag = "import-replace",
@@ -560,10 +560,10 @@ private fun BoxScope.ConfirmReplacePanel(comparison: String, databaseCopy: Boole
         Text(
             if (databaseCopy) {
                 // La copia de la base de datos no lleva los ajustes; después la app se reinicia y la actualiza.
-                "Tus recetas, categorías y lista de la compra se sustituirán por las de la copia, y Sazón se reiniciará. " +
+                "Tus recetas, categorías, lista de la compra, diario y despensa se sustituirán por los de la copia, y Sazón se reiniciará. " +
                     "Antes se guardará en el teléfono una copia de lo que tienes ahora."
             } else {
-                "Tus recetas, categorías, lista de la compra y ajustes se sustituirán por los de la copia. " +
+                "Tus recetas, categorías, lista de la compra, diario, despensa y ajustes se sustituirán por los de la copia. " +
                     "Antes se guardará en el teléfono una copia de lo que tienes ahora."
             },
             color = c.ink,

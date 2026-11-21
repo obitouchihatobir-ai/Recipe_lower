@@ -41,8 +41,13 @@ class RecetarioApp : Application() {
 
     /**
      * Cómo quedó la base de datos antes de abrirla ([DatabaseUpgradeGuard]). Si es [GuardResult.Failed], nada abre
-     * la base de datos (ni la pantalla ni la copia semanal): no se migra sin copia previa.
+     * la base de datos (ni la pantalla ni la copia semanal): no se migra sin copia previa. `MainActivity` repite la
+     * guarda al abrirse si falló (p. ej., sin espacio y con el proceso aún vivo).
+     *
+     * `@Volatile`: lo escriben `onCreate` y `MainActivity` (en IO) y lo leen WorkManager e IO, así nadie ve un valor
+     * viejo; antes de `onCreate` nadie puede leerlo con sentido, porque [container] aún no existe.
      */
+    @Volatile
     var upgrade: GuardResult = GuardResult.Ready
 
     override fun onCreate() {
@@ -80,7 +85,7 @@ class AppContainer(
     /** Documentos de fuera (Drive, Descargas…) de las copias; las pruebas pasan uno falso. */
     val backupDocuments: BackupDocuments = ContentResolverDocuments(context.contentResolver),
     /** Archivo de la base de datos (para restaurar una copia de antes de actualizar); null con la de memoria de las pruebas. */
-    databaseFile: File? = context.getDatabasePath(AppDatabase.FILE_NAME),
+    val databaseFile: File? = context.getDatabasePath(AppDatabase.FILE_NAME),
     /** Reinicia el proceso tras restaurar la base de datos; las pruebas pasan uno falso (no pueden cerrar la JVM). */
     restartApp: () -> Unit = { restartProcess(context.applicationContext) },
 ) {

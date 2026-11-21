@@ -20,6 +20,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import app.recetario.backup.BackupMessages
 import app.recetario.cooking.TimerNotifications
+import app.recetario.core.data.DatabaseUpgradeGuard
 import app.recetario.core.data.GuardResult
 import app.recetario.core.data.UpgradeErrorRoute
 import app.recetario.core.data.newestUpdateCopy
@@ -85,7 +86,7 @@ class MainActivity : ComponentActivity() {
         // migración falla, se muestra la pantalla de error y no se pinta la app (ni se cierra en bucle).
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                startup = openDatabase(app.upgrade, container)
+                startup = openDatabase(app, container)
                 container.settingsRepository.themeSettings.first()
             } finally {
                 contentReady = true
@@ -124,10 +125,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Abre la base de datos fuera del hilo principal, salvo si la guarda no pudo hacer la copia previa. */
-    private fun openDatabase(upgrade: GuardResult, container: AppContainer): Startup {
+    /**
+     * Abre la base de datos fuera del hilo principal, salvo si la guarda no pudo hacer la copia previa. Si falló
+     * (al arrancar el proceso, que puede seguir vivo), se repite aquí: quizá ya hay espacio. Nada ha abierto Room aún.
+     */
+    private fun openDatabase(app: RecetarioApp, container: AppContainer): Startup {
         val backupsDir = container.backupManager.localBackupsDir
-        (upgrade as? GuardResult.Failed)?.let { return Startup.Error(it.message, copyFileName = null, saveDatabase = it.databaseUnreadable) }
+        val dbFile = container.databaseFile
+        if (app.upgrade is GuardResult.Failed && dbFile != null) {
+            app.upgrade = DatabaseUpgradeGuard(dbFile, backupsDir, container.clock).prepare()
+        }
+        (app.upgrade as? GuardResult.Failed)?.let { return Startup.Error(it.message, copyFileName = null, saveDatabase = it.databaseUnreadable) }
         return try {
             container.database.openHelper.writableDatabase
             Startup.Ready

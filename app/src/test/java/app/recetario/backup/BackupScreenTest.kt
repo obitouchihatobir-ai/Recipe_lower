@@ -103,7 +103,7 @@ class BackupScreenTest {
         assertThat((picker.inputs.single() as Array<*>).toList())
             .containsExactly("application/zip", "application/x-zip-compressed", "application/octet-stream").inOrder()
         rule.onNodeWithText("Añade lo que falte y actualiza lo más reciente. No borra nada.").assertExists()
-        rule.onNodeWithText("Sustituye todas tus recetas por las de la copia. Antes se guarda una copia de lo actual.").assertExists()
+        rule.onNodeWithText("Sustituye todas tus recetas, el diario y la despensa por los de la copia. Antes se guarda una copia de lo actual.").assertExists()
 
         // Primera confirmación: aún no se ha tocado nada.
         rule.onNodeWithTag("import-replace").performClick()

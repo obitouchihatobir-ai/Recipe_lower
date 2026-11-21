@@ -242,7 +242,8 @@ fun RatingStars(rating: Int?, modifier: Modifier = Modifier) {
     DrawnStars(
         ratingFills(rating),
         LocalRecetarioColors.current.accent,
-        modifier.semantics(mergeDescendants = true) { contentDescription = ratingDescription(rating) },
+        // Sin parada propia: TalkBack la lee con la fila que la contiene.
+        modifier.clearAndSetSemantics { contentDescription = ratingDescription(rating) },
     )
 }
 

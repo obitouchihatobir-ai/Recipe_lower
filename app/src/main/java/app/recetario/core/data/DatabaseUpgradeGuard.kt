@@ -3,6 +3,7 @@ package app.recetario.core.data
 import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabaseCorruptException
+import android.database.sqlite.SQLiteDatabaseLockedException
 import android.database.sqlite.SQLiteFullException
 import android.util.Log
 import app.recetario.backup.BackupMessages
@@ -54,7 +55,8 @@ sealed interface GuardResult {
  *
  * Ante cualquier fallo borra el temporal (y sus `-wal`, `-shm` y `-journal`) y devuelve [GuardResult.Failed]: la
  * base de datos se queda como estaba y nunca se borra. Si no se puede leer (dañada), con
- * [BackupMessages.DATABASE_UNREADABLE]; si falla al copiar o escribir, con [BackupMessages.UPDATE_COPY_FAILED].
+ * [BackupMessages.DATABASE_UNREADABLE]; si falla al copiar o escribir, o el punto de control no se puede hacer
+ * porque otra conexión la tiene ocupada o bloqueada, con [BackupMessages.UPDATE_COPY_FAILED].
  * [beforeRename] se llama con la copia ya comprobada, justo antes de darle su nombre (las pruebas lo usan para
  * fallar después de escribir el temporal).
  */
@@ -72,6 +74,9 @@ class DatabaseUpgradeGuard(
     /** La base de datos (o su copia, idéntica) está dañada. */
     private class UnreadableDatabaseException(message: String) : Exception(message)
 
+    /** Otra conexión la tenía ocupada (`SQLITE_BUSY` en la columna `busy`): no es un daño. */
+    private class CheckpointIncompleteException : Exception("El punto de control del WAL no se completó")
+
     fun prepare(): GuardResult {
         if (!dbFile.isFile) return GuardResult.Ready
         val version = try {
@@ -83,6 +88,11 @@ class DatabaseUpgradeGuard(
         try {
             checkpoint()
         } catch (e: Exception) {
+            // Ocupada o bloqueada por otra conexión: no está dañada, la copia no se pudo hacer ahora.
+            if (e is SQLiteDatabaseLockedException || e is CheckpointIncompleteException) {
+                Log.e(TAG, "El punto de control del WAL no se pudo hacer", e)
+                return GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED)
+            }
             return readFailure(e)
         }
         var tmp: File? = null
@@ -166,7 +176,7 @@ class DatabaseUpgradeGuard(
         try {
             db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c ->
                 // La primera columna es 1 si no se pudo completar (otra conexión la tenía ocupada).
-                if (c.moveToFirst() && c.getInt(0) != 0) error("El punto de control del WAL no se completó")
+                if (c.moveToFirst() && c.getInt(0) != 0) throw CheckpointIncompleteException()
             }
         } finally {
             db.close()
