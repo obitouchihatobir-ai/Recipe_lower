@@ -21,6 +21,8 @@ import app.recetario.diary.RoomDiaryRepository
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.data.RoomRecipeRepository
+import app.recetario.pairing.PairingRepository
+import app.recetario.pairing.RoomPairingRepository
 import app.recetario.pantry.PantryRepository
 import app.recetario.pantry.RoomPantryRepository
 import app.recetario.shopping.RoomShoppingRepository
@@ -124,6 +126,9 @@ class AppContainer(
 
     /** El tamaño de la taza sale de los ajustes. */
     val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, settingsRepository.cupMl)
+
+    /** Valoraciones de maridaje (👍/👎) y lo que necesitan sus pantallas (recetas propias y catálogo). */
+    val pairingRepository: PairingRepository = RoomPairingRepository(database, recipeRepository, clock)
 
     /** La despensa (pestaña Despensa de Compra); sus básicos están en los ajustes. */
     val pantryRepository: PantryRepository = RoomPantryRepository(database, clock)

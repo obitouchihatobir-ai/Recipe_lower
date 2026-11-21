@@ -27,7 +27,7 @@ enum class Tab(val label: String, val icon: ImageVector, val tag: String, val ro
     HOME("Inicio", AppIcons.Home, "tab-home", Home::class, Home),
     RECIPES("Recetas", AppIcons.Recipes, "tab-recipes", Recipes::class, Recipes()),
     SHOPPING("Compra", AppIcons.Shopping, "tab-shopping", Shopping::class, Shopping),
-    PAIRING("Maridaje", AppIcons.Pairing, "tab-pairing", Pairing::class, Pairing),
+    PAIRING("Maridaje", AppIcons.Pairing, "tab-pairing", Pairing::class, Pairing()),
 }
 
 @Composable

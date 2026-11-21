@@ -13,8 +13,21 @@ data class Recipes(val categoryId: String? = null)
 @Serializable
 data object Shopping
 
+/** Pestaña Maridaje; [subject] («RECIPE:id») la abre con esa receta elegida («Ver más» del detalle). */
 @Serializable
-data object Pairing
+data class Pairing(val subject: String? = null)
+
+/** Rueda comparativa de dos elementos (`RECIPE` o `CATALOG`). */
+@Serializable
+data class PairingCompare(val aKind: String, val aId: String, val bKind: String, val bId: String)
+
+/** Menú completo (desde la pestaña Maridaje). */
+@Serializable
+data object FullMenu
+
+/** Historial de parejas valoradas (desde la pestaña Maridaje). */
+@Serializable
+data object PairingHistory
 
 // Pantallas de receta.
 @Serializable

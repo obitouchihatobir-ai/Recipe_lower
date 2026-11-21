@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.recetario.AppContainer
+import app.recetario.pairing.PairingItem
 import app.recetario.core.ui.components.MutedText
 import app.recetario.core.ui.components.PhotoOrPlaceholder
 import app.recetario.core.ui.components.ScreenTitle
@@ -100,6 +101,10 @@ fun DetailRoute(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onCooking: (servings: Int) -> Unit,
+    /** «Ver más» del maridaje (null: sin el botón). */
+    onMorePairings: (() -> Unit)? = null,
+    /** Tocar una pareja del maridaje: la rueda comparativa. */
+    onComparePairing: ((PairingItem) -> Unit)? = null,
 ) {
     val vm: DetailViewModel = viewModel(factory = DetailViewModel.factory(container, recipeId))
     val live by vm.state.collectAsStateWithLifecycle()
@@ -168,6 +173,9 @@ fun DetailRoute(
         logDraft = logDraft,
         logActions = logActions,
         onLog = vm::startLog,
+        onRatePairing = vm::ratePairing,
+        onComparePairing = onComparePairing,
+        onMorePairings = onMorePairings,
     )
 }
 
@@ -211,6 +219,12 @@ fun DetailContent(
     logActions: LogFormActions? = null,
     /** «Lo hice» (null: sin diario). */
     onLog: (() -> Unit)? = null,
+    /** 👍/👎 de una pareja del maridaje. */
+    onRatePairing: (PairingItem, Boolean?) -> Unit = { _, _ -> },
+    /** Tocar una pareja: la rueda comparativa (null: no se puede tocar). */
+    onComparePairing: ((PairingItem) -> Unit)? = null,
+    /** «Ver más»: la pestaña Maridaje con esta receta (null: sin el botón). */
+    onMorePairings: (() -> Unit)? = null,
 ) {
     val c = LocalRecetarioColors.current
     val radius = LocalRecetarioShapes.current.radius
@@ -407,6 +421,22 @@ fun DetailContent(
                             )
                             Text(step.text, color = c.ink, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp))
                         }
+                    }
+                }
+                if (state.pairings.isNotEmpty()) {
+                    item(key = "pairing") {
+                        DetailPairingSection(
+                            suggestions = state.pairings,
+                            onRate = onRatePairing,
+                            onCompare = onComparePairing,
+                            onMore = onMorePairings,
+                            modifier = Modifier.padding(horizontal = 18.dp).padding(top = 8.dp, bottom = 10.dp),
+                        )
+                    }
+                }
+                if (state.goesWellWith.isNotEmpty()) {
+                    item(key = "goes-well") {
+                        GoesWellWithSection(state.goesWellWith, Modifier.padding(horizontal = 18.dp).padding(top = 8.dp, bottom = 10.dp))
                     }
                 }
                 if (recipe.notes.isNotBlank()) {

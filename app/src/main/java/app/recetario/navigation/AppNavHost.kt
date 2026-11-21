@@ -48,7 +48,10 @@ import app.recetario.core.ui.motion.SavedToast
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.diary.DiaryRoute
 import app.recetario.home.HomeRoute
-import app.recetario.pairing.PairingPlaceholderScreen
+import app.recetario.pairing.CompareRoute
+import app.recetario.pairing.FullMenuRoute
+import app.recetario.pairing.PairingHistoryRoute
+import app.recetario.pairing.PairingRoute
 import app.recetario.recipes.detail.DetailRoute
 import app.recetario.recipes.editor.EditorRoute
 import app.recetario.recipes.list.RecipesRoute
@@ -171,7 +174,41 @@ fun AppNavHost(
                         composable<PantryBasics> { from ->
                             PantryBasicsRoute(container, onBack = { navController.from(from) { popBackStack() } })
                         }
-                        composable<Pairing> { PairingPlaceholderScreen() }
+                        composable<Pairing> { from ->
+                            PairingRoute(
+                                container = container,
+                                onCompare = { subject, other ->
+                                    navController.from(from) { navigate(PairingCompare(subject.kind, subject.id, other.kind, other.id)) }
+                                },
+                                onFullMenu = { navController.from(from) { navigate(FullMenu) } },
+                                onHistory = { navController.from(from) { navigate(PairingHistory) } },
+                            )
+                        }
+                        composable<PairingCompare> { from ->
+                            val route = from.toRoute<PairingCompare>()
+                            CompareRoute(
+                                container = container,
+                                first = route.aKind to route.aId,
+                                second = route.bKind to route.bId,
+                                onBack = { navController.from(from) { popBackStack() } },
+                            )
+                        }
+                        composable<FullMenu> { from ->
+                            FullMenuRoute(
+                                container = container,
+                                onBack = { navController.from(from) { popBackStack() } },
+                                onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
+                            )
+                        }
+                        composable<PairingHistory> { from ->
+                            PairingHistoryRoute(
+                                container = container,
+                                onBack = { navController.from(from) { popBackStack() } },
+                                onCompare = { pair ->
+                                    navController.from(from) { navigate(PairingCompare(pair.a.kind, pair.a.id, pair.b.kind, pair.b.id)) }
+                                },
+                            )
+                        }
                         composable<RecipeDetail> { from ->
                             val route = from.toRoute<RecipeDetail>()
                             CompositionLocalProvider(LocalNavAnimatedVisibilityScope provides this) {
@@ -181,6 +218,10 @@ fun AppNavHost(
                                     onBack = { navController.from(from) { popBackStack() } },
                                     onEdit = { navController.from(from) { navigate(RecipeEditor(id = route.id)) } },
                                     onCooking = { servings -> navController.from(from) { navigate(Cooking(route.id, servings)) } },
+                                    onMorePairings = { navController.from(from) { openPairingFor(route.id) } },
+                                    onComparePairing = { other ->
+                                        navController.from(from) { navigate(PairingCompare("RECIPE", route.id, other.kind, other.id)) }
+                                    },
                                 )
                             }
                         }
@@ -282,6 +323,12 @@ private fun NavHostController.navigateToTab(tab: Tab) = navigate(tab.route) {
     popUpTo<Home> { saveState = true }
     launchSingleTop = true
     restoreState = true
+}
+
+/** «Ver más» del maridaje del detalle: la pestaña Maridaje con la receta ya elegida. */
+private fun NavHostController.openPairingFor(recipeId: String) = navigate(Pairing(subject = "RECIPE:$recipeId")) {
+    popUpTo<Home> { saveState = true }
+    launchSingleTop = true
 }
 
 /** Un chip de categoría de Inicio abre Recetas filtrado (sin recuperar el filtro anterior). */

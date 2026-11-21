@@ -13,6 +13,12 @@ import app.recetario.diary.CookStats
 import app.recetario.diary.DiaryRepository
 import app.recetario.diary.LogEntryEditor
 import app.recetario.diary.statsByRecipe
+import app.recetario.pairing.FlavorGuide
+import app.recetario.pairing.PairingItem
+import app.recetario.pairing.PairingRepository
+import app.recetario.pairing.Suggestion
+import app.recetario.pairing.ratableKey
+import app.recetario.pairing.suggestPairings
 import app.recetario.recipes.data.PhotoStore
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.list.DEFAULT_EMOJI
@@ -30,6 +36,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -54,7 +62,19 @@ data class DetailUiState(
     /** Sus entradas del diario, la más reciente primero. */
     val history: List<CookLogEntry> = emptyList(),
     val today: LocalDate = LocalDate.MIN,
+    /** Maridaje: la receta como elemento del motor (null sin maridaje o mientras carga). */
+    val pairingSubject: PairingItem? = null,
+    /** Las 3 mejores parejas (primero las recetas propias, luego el catálogo); las de 👎 no salen. */
+    val pairings: List<Suggestion> = emptyList(),
+    /** «Le iría bien…»: hasta 6 sabores que todavía no lleva. */
+    val goesWellWith: List<String> = emptyList(),
 )
+
+/** Lo que el detalle muestra del maridaje. */
+private data class DetailPairingInfo(val subject: PairingItem?, val top: List<Suggestion>, val goesWellWith: List<String>)
+
+/** Cuántas parejas salen en el detalle. */
+const val DETAIL_PAIRINGS = 3
 
 /** Estado del detalle. Porciones y casillas se guardan en [savedStateHandle] (sobreviven al giro), no en disco. */
 class DetailViewModel(
@@ -67,6 +87,10 @@ class DetailViewModel(
     /** Crea el editor de «Lo hice» (null: sin diario, en algunas pruebas). */
     newLogEditor: ((CoroutineScope) -> LogEntryEditor)? = null,
     private val clock: Clock = Clock.systemDefaultZone(),
+    /** Maridaje (null: sin maridaje, en algunas pruebas). */
+    private val pairing: PairingRepository? = null,
+    /** Donde se guardan las valoraciones: no se cortan al salir de la pantalla. */
+    private val writeScope: CoroutineScope? = null,
 ) : ViewModel() {
 
     /** «Lo hice»: la entrada del diario que se está apuntando a mano. */
@@ -77,7 +101,20 @@ class DetailViewModel(
     private val servingsOverride = savedStateHandle.getStateFlow(SERVINGS_KEY, 0)
     private val checked = savedStateHandle.getStateFlow(CHECKED_KEY, arrayListOf<String>())
 
-    val state: StateFlow<DetailUiState> = combine(
+    private val pairingInfo: Flow<DetailPairingInfo?> = pairing?.let { p ->
+        combine(p.observeData(), repo.observeRecipe(id)) { data, recipe ->
+            val subject = data.recipes.firstOrNull { it.id == id }
+            DetailPairingInfo(
+                subject = subject,
+                top = subject?.let { suggestPairings(it, data.all, data.ratings, DETAIL_PAIRINGS, data.weights) }.orEmpty(),
+                goesWellWith = FlavorGuide.goesWellWith(recipe?.ingredients?.map { it.name }.orEmpty()),
+            )
+        }.flowOn(Dispatchers.Default)
+            // El detalle no espera al maridaje: sale en cuanto llega la receta y el maridaje se suma después.
+            .onStart<DetailPairingInfo?> { emit(null) }
+    } ?: flowOf(null)
+
+    private val base: Flow<DetailUiState> = combine(
         repo.observeRecipe(id), repo.observeCategories(), servingsOverride, checked, history,
     ) { recipe, categories, override, checkedIds, entries ->
         if (recipe == null) {
@@ -100,7 +137,20 @@ class DetailViewModel(
                 today = LocalDate.now(clock),
             )
         }
+    }
+
+    val state: StateFlow<DetailUiState> = combine(base, pairingInfo) { s, info ->
+        if (info == null || s.recipe == null) s
+        else s.copy(pairingSubject = info.subject, pairings = info.top, goesWellWith = info.goesWellWith)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailUiState())
+
+    /** 👍/👎 de una pareja del detalle ([liked] null la quita). Catálogo con catálogo no llega aquí. */
+    fun ratePairing(other: PairingItem, liked: Boolean?) {
+        val subject = state.value.pairingSubject ?: return
+        val repository = pairing ?: return
+        if (ratableKey(subject, other) == null) return
+        (writeScope ?: viewModelScope).launch { repository.rate(subject, other, liked) }
+    }
 
     fun setServings(n: Int) {
         savedStateHandle[SERVINGS_KEY] = n.coerceIn(MIN_SERVINGS, MAX_SERVINGS)
@@ -181,6 +231,8 @@ class DetailViewModel(
                     diary = container.diaryRepository,
                     newLogEditor = container::newLogEditor,
                     clock = container.clock,
+                    pairing = container.pairingRepository,
+                    writeScope = container.applicationScope,
                 )
             }
         }
