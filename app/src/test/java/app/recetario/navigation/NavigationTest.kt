@@ -64,7 +64,8 @@ class NavigationTest {
         rule.onNodeWithTag("tab-shopping").assertIsSelected()
 
         rule.onNodeWithTag("tab-pairing").performClick()
-        rule.onNodeWithText("Muy pronto: descubre qué bebida, plato o postre combina con cada receta.").assertIsDisplayed()
+        rule.onNodeWithTag("pairing-screen").assertIsDisplayed()
+        rule.onNodeWithText("¿Con qué combina…?").assertIsDisplayed()
         rule.onNodeWithTag("tab-pairing").assertIsSelected()
 
         rule.onNodeWithTag("tab-home").performClick()
