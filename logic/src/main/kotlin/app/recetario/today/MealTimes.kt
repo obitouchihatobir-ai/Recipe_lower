@@ -25,3 +25,43 @@ fun MealTimes.momentAt(time: LocalTime): Moment = when {
     time >= breakfast.end && time < lunch.start -> Moment.LUNCH
     else -> Moment.NIGHT
 }
+
+/** Un hueco entre dos comidas y el momento que cuenta en él (ver [momentAt]). */
+data class MealGap(val range: TimeRange, val moment: Moment)
+
+private fun Moment.article(): String = when (this) {
+    Moment.BREAKFAST -> "El desayuno"
+    Moment.LUNCH -> "La comida"
+    Moment.SNACK -> "La merienda"
+    Moment.DINNER -> "La cena"
+    Moment.NIGHT -> "La noche"
+}
+
+private fun MealTimes.ordered(): List<Pair<Moment, TimeRange>> =
+    listOf(Moment.BREAKFAST to breakfast, Moment.LUNCH to lunch, Moment.SNACK to snack, Moment.DINNER to dinner)
+
+/**
+ * Por qué no se pueden guardar estos horarios, o null si valen: ninguna franja vacía ni pasando de la medianoche
+ * ([TimeRange] no da la vuelta), y desayuno, comida, merienda y cena en orden y sin solaparse (pueden tocarse).
+ */
+fun MealTimes.problem(): String? {
+    for ((moment, range) in ordered()) {
+        if (range.end == range.start) return "${moment.article()} no puede quedar ${if (moment == Moment.BREAKFAST) "vacío" else "vacía"}."
+        if (range.end < range.start) return "${moment.article()} no puede pasar de la medianoche."
+    }
+    for ((a, b) in ordered().zipWithNext()) {
+        if (b.second.start < a.second.end) return "${a.first.article()} y ${b.first.article().replaceFirstChar { it.lowercase() }} se solapan."
+    }
+    return null
+}
+
+/** Los huecos entre comidas seguidas (horarios válidos), con el momento que cuenta en cada uno. */
+fun MealTimes.gaps(): List<MealGap> = ordered().zipWithNext().mapNotNull { (a, b) ->
+    if (b.second.start > a.second.end) MealGap(TimeRange(a.second.end, b.second.start), momentAt(a.second.end)) else null
+}
+
+/** «De 11:00 a 13:00 cuenta como comida.» */
+fun gapLine(gap: MealGap): String {
+    val what = if (gap.moment == Moment.NIGHT) "noche" else gap.moment.label.lowercase()
+    return "De ${gap.range.start} a ${gap.range.end} cuenta como $what."
+}

@@ -43,6 +43,18 @@ class WeatherTest {
     }
 
     @Test
+    fun parseForecast_skipsIncompleteDays() {
+        // Un día lejano sin código, máxima o mínima no tira la previsión entera: se salta.
+        val json = """{"daily":{"time":["2026-07-15","2026-07-16","2026-07-17","2026-07-18"],
+            "weather_code":[1,null,3,2],"temperature_2m_max":[20.0,21.0,null,23.0],"temperature_2m_min":[10.0,11.0,12.0,null]}}"""
+        val days = parseForecast(json, now).daily
+        assertThat(days.map { it.date }).containsExactly(LocalDate.of(2026, 7, 15))
+        // Si no queda ninguno, sí lanza.
+        val none = """{"daily":{"time":["2026-07-15"],"weather_code":[null],"temperature_2m_max":[20.0],"temperature_2m_min":[10.0]}}"""
+        assertThrows(WeatherParseException::class.java) { parseForecast(none, now) }
+    }
+
+    @Test
     fun parseForecast_missingSun_isNull() {
         val json = """{"daily":{"time":["2026-07-15"],"weather_code":[1],"temperature_2m_max":[20.0],"temperature_2m_min":[10.0]}}"""
         val d = parseForecast(json, now).daily.single()

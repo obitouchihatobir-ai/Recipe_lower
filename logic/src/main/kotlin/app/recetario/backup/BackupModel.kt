@@ -20,6 +20,10 @@ import app.recetario.recipes.model.Step
 import app.recetario.recipes.quantity.MeasureUnit
 import app.recetario.shopping.ShopSection
 import app.recetario.shopping.ShoppingItem
+import app.recetario.today.MealTimes
+import app.recetario.today.ThermalThresholds
+import app.recetario.today.TimeRange
+import app.recetario.today.problem
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
@@ -37,7 +41,8 @@ import java.time.LocalTime
  *
  * - 1: recetas, categorías, compra y ajustes (la 0.1.0).
  * - 2: además diario (con sus fotos en el manifiesto), despensa, menú, valoraciones de maridaje y los básicos de
- *   la despensa. Una copia 1 se lee con esas listas vacías.
+ *   la despensa. Una copia 1 se lee con esas listas vacías. Desde la 0.3.0 (sin subir el esquema, son opcionales):
+ *   horarios de comidas, umbrales térmicos y tema según el sol. La ubicación nunca va en la copia.
  */
 const val BACKUP_SCHEMA_VERSION = 2
 
@@ -203,13 +208,35 @@ data class BackupPairingRating(
     val ratedAt: String,
 )
 
-/** [pantryBasics]: null en las copias v1 (al reemplazar, quedan los de serie). */
+/**
+ * [pantryBasics]: null en las copias v1 (al reemplazar, quedan los de serie). [mealTimes], [thermalThresholds] y
+ * [themeBySun] (0.3.0): null en las copias anteriores (al reemplazar, quedan los de serie). Sin ubicación: es un dato
+ * personal y el archivo puede compartirse.
+ */
 @Serializable
 data class BackupSettings(
     val themeSettings: BackupThemeSettings,
     val cupMl: Int,
     val pantryBasics: List<String>? = null,
+    val mealTimes: BackupMealTimes? = null,
+    val thermalThresholds: BackupThermalThresholds? = null,
+    val themeBySun: Boolean? = null,
 )
+
+/** Una franja `HH:mm`–`HH:mm` (el fin no se incluye). */
+@Serializable
+data class BackupTimeRange(val start: String, val end: String)
+
+@Serializable
+data class BackupMealTimes(
+    val breakfast: BackupTimeRange,
+    val lunch: BackupTimeRange,
+    val snack: BackupTimeRange,
+    val dinner: BackupTimeRange,
+)
+
+@Serializable
+data class BackupThermalThresholds(val coldBelow: Int, val hotAbove: Int)
 
 @Serializable
 data class BackupThemeSettings(
@@ -293,6 +320,9 @@ fun backupFileOf(
     mealPlan: List<PlannedMeal> = emptyList(),
     pairingRatings: List<PairingRating> = emptyList(),
     pantryBasics: List<String>? = null,
+    mealTimes: MealTimes? = null,
+    thermalThresholds: ThermalThresholds? = null,
+    themeBySun: Boolean? = null,
 ): BackupFile {
     val baseTypes = categories.associate { it.id to it.baseType }
     return BackupFile(
@@ -301,7 +331,12 @@ fun backupFileOf(
         categories = categories.map { it.toBackup() },
         recipes = recipes.map { it.toBackup(baseTypes[it.categoryId]) },
         shoppingItems = shoppingItems.map { it.toBackup() },
-        settings = BackupSettings(themeSettings.toBackup(), cupMl, pantryBasics),
+        settings = BackupSettings(
+            themeSettings.toBackup(), cupMl, pantryBasics,
+            mealTimes = mealTimes?.toBackup(),
+            thermalThresholds = thermalThresholds?.let { BackupThermalThresholds(it.coldBelow, it.hotAbove) },
+            themeBySun = themeBySun,
+        ),
         images = images,
         cookLog = cookLog.map { it.toBackup() },
         pantry = pantry.map { it.toBackup() },
@@ -328,6 +363,10 @@ data class ImportData(
     val pairingRatings: List<PairingRating> = emptyList(),
     /** Null en las copias v1: al reemplazar, vuelven los de serie. */
     val pantryBasics: List<String>? = null,
+    /** Null en las copias anteriores a la 0.3.0 (o si no valen): al reemplazar, vuelven los de serie. */
+    val mealTimes: MealTimes? = null,
+    val thermalThresholds: ThermalThresholds? = null,
+    val themeBySun: Boolean? = null,
 ) {
     /** Fotos a las que apuntan las recetas (portadas y pasos) y el diario. */
     val photoNames: Set<String>
@@ -374,8 +413,22 @@ fun BackupFile.toImportData(): ImportData {
         mealPlan = meals,
         pairingRatings = pairingRatings.map { it.toPairingRating() },
         pantryBasics = settings.pantryBasics,
+        // Un ajuste que no vale (horarios solapados, umbrales al revés) no tira la copia: se quedan los de serie.
+        // Una hora ilegible sí, como las horas de noche.
+        mealTimes = settings.mealTimes?.toMealTimes()?.takeIf { it.problem() == null },
+        thermalThresholds = settings.thermalThresholds?.let { ThermalThresholds(it.coldBelow, it.hotAbove) }?.takeIf { it.isValid },
+        themeBySun = settings.themeBySun,
     )
 }
+
+private fun TimeRange.toBackup() = BackupTimeRange(start.toString(), end.toString())
+
+private fun MealTimes.toBackup() = BackupMealTimes(breakfast.toBackup(), lunch.toBackup(), snack.toBackup(), dinner.toBackup())
+
+private fun BackupTimeRange.toTimeRange() = TimeRange(time(start), time(end))
+
+private fun BackupMealTimes.toMealTimes() =
+    MealTimes(breakfast.toTimeRange(), lunch.toTimeRange(), snack.toTimeRange(), dinner.toTimeRange())
 
 private fun requireUniqueIds(what: String, ids: List<String>) {
     if (ids.any { it.isBlank() }) throw InvalidBackupException("Hay un identificador de $what vacío")

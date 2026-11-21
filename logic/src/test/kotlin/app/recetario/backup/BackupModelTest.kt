@@ -18,6 +18,9 @@ import app.recetario.recipes.model.Step
 import app.recetario.recipes.quantity.MeasureUnit
 import app.recetario.shopping.ShopSection
 import app.recetario.shopping.ShoppingItem
+import app.recetario.today.MealTimes
+import app.recetario.today.ThermalThresholds
+import app.recetario.today.TimeRange
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -396,5 +399,59 @@ class BackupModelTest {
     fun photoNames_includeDiary() {
         assertThat(backupV2().toImportData().photoNames)
             .containsExactly("portada.jpg", "paso-1a.jpg", "paso-1b.jpg", "diario-1.jpg", "diario-2.jpg")
+    }
+
+    private val customTimes = MealTimes(
+        breakfast = TimeRange(LocalTime.of(8, 0), LocalTime.of(10, 30)),
+        dinner = TimeRange(LocalTime.of(20, 0), LocalTime.of(23, 30)),
+    )
+
+    @Test
+    fun backup_v2b_settingsRoundTrip_andOldBackupKeepsDefaults() {
+        val file = backupV2().copy(
+            settings = backupV2().settings.copy(),
+        )
+        val withNew = backupFileOf(
+            appVersion = "0.3.0", createdAt = created, categories = categories, recipes = listOf(recipe),
+            shoppingItems = shopping, themeSettings = theme, cupMl = 250,
+            mealTimes = customTimes, thermalThresholds = ThermalThresholds(12, 28), themeBySun = true,
+        )
+        val text = encodeBackup(withNew)
+        // Sin subir el esquema: la 0.2.0 ignora las claves nuevas.
+        assertThat(text).contains("\"schemaVersion\":2")
+        assertThat(text).contains("\"breakfast\":{\"start\":\"08:00\",\"end\":\"10:30\"}")
+        val data = (decodeBackup(text) as BackupDecodeResult.Ok).file.toImportData()
+        assertThat(data.mealTimes).isEqualTo(customTimes)
+        assertThat(data.thermalThresholds).isEqualTo(ThermalThresholds(12, 28))
+        assertThat(data.themeBySun).isTrue()
+        // Nunca la ubicación.
+        assertThat(text).doesNotContain("latitude")
+        assertThat(text).doesNotContain("city")
+
+        // Copias anteriores (v1 y 2A) sin esos campos: null, es decir, los de serie.
+        for (old in listOf(v1Fixture(), encodeBackup(file))) {
+            val d = (decodeBackup(old) as BackupDecodeResult.Ok).file.toImportData()
+            assertThat(d.mealTimes).isNull()
+            assertThat(d.thermalThresholds).isNull()
+            assertThat(d.themeBySun).isNull()
+        }
+    }
+
+    @Test
+    fun backup_v2b_invalidSettings_areIgnored_badTimesRejected() {
+        val bad = backupFileOf(
+            appVersion = "0.3.0", createdAt = created, categories = categories, recipes = listOf(recipe),
+            shoppingItems = shopping, themeSettings = theme, cupMl = 250,
+            mealTimes = MealTimes(breakfast = TimeRange(LocalTime.of(7, 0), LocalTime.of(14, 0))),
+            thermalThresholds = ThermalThresholds(30, 10),
+        )
+        val data = bad.toImportData()
+        // Horarios que se solapan o umbrales al revés: se quedan los de serie (no se rechaza la copia por un ajuste).
+        assertThat(data.mealTimes).isNull()
+        assertThat(data.thermalThresholds).isNull()
+        val unreadable = encodeBackup(bad).replace("\"start\":\"07:00\"", "\"start\":\"7 en punto\"")
+        assertThrows(InvalidBackupException::class.java) {
+            (decodeBackup(unreadable) as BackupDecodeResult.Ok).file.toImportData()
+        }
     }
 }

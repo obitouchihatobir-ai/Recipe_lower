@@ -17,6 +17,9 @@ import app.recetario.AppContainer
 import app.recetario.RecetarioApp
 import app.recetario.backup.BackupDocuments
 import app.recetario.backup.ContentResolverDocuments
+import app.recetario.weather.LocationProvider
+import java.io.IOException
+import java.net.URL
 import app.recetario.core.data.AppDatabase
 import app.recetario.core.data.DefaultCategories
 import app.recetario.recipes.model.Difficulty
@@ -40,6 +43,8 @@ val testClock: Clock = Clock.fixed(Instant.parse("2026-11-13T20:40:00Z"), ZoneId
  * del sistema, con el `ContentResolver` de Robolectric); [settingsDataStore], los ajustes (por ejemplo, unos que no se
  * pueden guardar); [database] y [databaseFile], una base de datos en archivo (por defecto, en memoria y sin archivo);
  * [restartApp], el reinicio tras restaurar una copia de antes de actualizar (las pruebas no pueden cerrar la JVM).
+ * Nunca hay red: sin [openMeteo], cada petición a Open-Meteo falla como sin conexión; [location] es la ubicación
+ * aproximada del teléfono (por defecto, ninguna).
  */
 fun installTestContainer(
     clock: Clock = testClock,
@@ -49,6 +54,8 @@ fun installTestContainer(
     database: AppDatabase? = null,
     databaseFile: File? = null,
     restartApp: () -> Unit = {},
+    openMeteo: FakeOpenMeteo? = null,
+    location: LocationProvider = LocationProvider { null },
 ): AppContainer {
     val app = ApplicationProvider.getApplicationContext<RecetarioApp>()
     val db = database ?: Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
@@ -60,6 +67,8 @@ fun installTestContainer(
         backupDocuments = documents ?: ContentResolverDocuments(app.contentResolver),
         databaseFile = databaseFile,
         restartApp = restartApp,
+        openConnection = openMeteo?.let { fake -> { url: URL -> fake.open(url) } } ?: { _: URL -> throw IOException("Sin red en las pruebas") },
+        locationProvider = location,
     ).also { app.container = it }
 }
 

@@ -18,3 +18,23 @@ class ThermalTest {
         assertThat(thermalClass(31.0, coldBelow = 20.0, hotAbove = 30.0)).isEqualTo(Thermal.HOT)
     }
 }
+
+class ThermalThresholdsTest {
+    @Test
+    fun defaults_andValidity() {
+        assertThat(ThermalThresholds()).isEqualTo(ThermalThresholds(coldBelow = 15, hotAbove = 24))
+        assertThat(ThermalThresholds().isValid).isTrue()
+        assertThat(ThermalThresholds(20, 20).isValid).isFalse()
+        assertThat(ThermalThresholds(25, 20).isValid).isFalse()
+        assertThat(ThermalThresholds(-30, 20).isValid).isFalse()
+        assertThat(ThermalThresholds(10, 50).isValid).isFalse()
+    }
+
+    @Test
+    fun thermalClass_withThresholds() {
+        val t = ThermalThresholds(coldBelow = 20, hotAbove = 30)
+        assertThat(thermalClass(19.5, t)).isEqualTo(Thermal.COLD)
+        assertThat(thermalClass(25.0, t)).isEqualTo(Thermal.MILD)
+        assertThat(thermalClass(30.5, t)).isEqualTo(Thermal.HOT)
+    }
+}

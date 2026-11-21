@@ -36,18 +36,20 @@ fun parseForecast(json: String, fetchedAt: Instant): WeatherSnapshot {
         val rain = dailyObj["precipitation_probability_max"].arr()
         val rises = dailyObj["sunrise"].arr()
         val sets = dailyObj["sunset"].arr()
-        val daily = times.indices.map { i ->
+        // Un día incompleto (sin código, máxima o mínima) se salta; sin ningún día completo, no hay previsión.
+        val daily = times.indices.mapNotNull { i ->
+            val date = times[i].prim()?.content?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
             DailyForecast(
-                date = LocalDate.parse(times[i].prim()?.content ?: throw WeatherParseException("Día vacío")),
-                weatherCode = codes?.getOrNull(i).prim()?.intOrNull ?: throw WeatherParseException("Falta el código del día"),
-                maxC = maxes?.getOrNull(i).prim()?.doubleOrNull ?: throw WeatherParseException("Falta la máxima"),
-                minC = mins?.getOrNull(i).prim()?.doubleOrNull ?: throw WeatherParseException("Falta la mínima"),
+                date = date,
+                weatherCode = codes?.getOrNull(i).prim()?.intOrNull ?: return@mapNotNull null,
+                maxC = maxes?.getOrNull(i).prim()?.doubleOrNull ?: return@mapNotNull null,
+                minC = mins?.getOrNull(i).prim()?.doubleOrNull ?: return@mapNotNull null,
                 rainProbability = rain?.getOrNull(i).prim()?.intOrNull,
                 sunrise = rises?.getOrNull(i).prim()?.content?.let(::timeOfDay),
                 sunset = sets?.getOrNull(i).prim()?.content?.let(::timeOfDay),
             )
         }
-        if (daily.isEmpty()) throw WeatherParseException("La previsión no tiene días")
+        if (daily.isEmpty()) throw WeatherParseException("La previsión no tiene ningún día completo")
         return WeatherSnapshot(parseCurrent(root["current"].obj()), daily, fetchedAt)
     } catch (e: WeatherParseException) {
         throw e
