@@ -37,6 +37,7 @@ import app.recetario.weather.Place
 import app.recetario.weather.WeatherSnapshot
 import app.recetario.weather.weatherKind
 import app.recetario.weather.weatherLabel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
@@ -52,6 +54,7 @@ import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.random.Random
 
@@ -84,6 +87,8 @@ data class TodayState(
     /** El menú de ahora (para «Otra idea») y el día y momento al que pertenece. */
     val menu: TodayMenu? = null,
     val slotKey: String = "",
+    /** Cuántas veces se pidió «Otra idea» para este menú (un toque que sale de un menú viejo se ignora). */
+    val round: Int = 0,
 ) {
     /** La receta que manda (el plato principal o, de noche, la bebida): la que abre «Empezar». */
     val lead: TodayCardRecipe? get() = items.firstNotNullOfOrNull { it.recipe }
@@ -101,6 +106,9 @@ private data class TodayPrefs(
     val mealTimes: MealTimes,
     val thresholds: ThermalThresholds,
 )
+
+/** Lo que decide el menú: los datos, el día, el momento y «Otra idea» (el minuto exacto no cuenta). */
+private data class TodayKey(val data: TodayData, val day: LocalDate, val moment: Moment, val pick: TodayPick)
 
 /** Todo lo que el motor de Hoy necesita, ya leído. */
 private data class TodayData(
@@ -158,13 +166,30 @@ class TodayViewModel(
         TodayData(s, c, st, prefs.pantry, prefs.basics, prefs.mealTimes, prefs.thresholds, w, pl, r)
     }
 
-    val state: StateFlow<TodayState> = combine(data, now, pick) { d, at, p -> compute(d, at, p) }
+    /**
+     * El reloj solo cuenta por el día y el momento: el motor no usa más de `ctx.now` que la fecha, así que con el mismo
+     * día, momento, datos y «Otra idea» el menú no se vuelve a calcular cada minuto.
+     */
+    val state: StateFlow<TodayState> = combine(data, now, pick) { d, at, p ->
+        val local = LocalDateTime.ofInstant(at, clock.zone)
+        TodayKey(d, local.toLocalDate(), d.mealTimes.momentAt(local.toLocalTime()), p)
+    }
+        .distinctUntilChanged()
+        .map { compute(it) }
         .flowOn(dispatcher)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayState())
 
     /** Al entrar en Inicio: pide el tiempo (solo si la caché tiene más de 1 h) sin bloquear nada. */
     fun refreshWeather() {
-        viewModelScope.launch { runCatching { refresh() } }
+        viewModelScope.launch {
+            try {
+                refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // El repositorio no lanza; si algo falla, Inicio sigue sin el tiempo.
+            }
+        }
     }
 
     /** «Otra idea»: otro menú sin repetir lo ya mostrado en este día y momento. */
@@ -172,6 +197,8 @@ class TodayViewModel(
         val s = state.value
         val menu = s.menu ?: return
         val current = pick.value.takeIf { it.key == s.slotKey } ?: TodayPick(s.slotKey, emptyList(), 0)
+        // Un segundo toque antes de que llegue el menú nuevo saldría del mismo menú y se saltaría una propuesta.
+        if (current.round != s.round) return
         val next = TodayPick(s.slotKey, menu.nextExclude(current.exclude), current.round + 1)
         handle[KEY_SLOT] = next.key
         handle[KEY_EXCLUDE] = ArrayList(next.exclude)
@@ -179,10 +206,13 @@ class TodayViewModel(
         pick.value = next
     }
 
-    private fun compute(d: TodayData, at: Instant, stored: TodayPick): TodayState {
-        val local = LocalDateTime.ofInstant(at, clock.zone)
-        val moment = d.mealTimes.momentAt(local.toLocalTime())
-        val key = "${local.toLocalDate()}|$moment"
+    private fun compute(k: TodayKey): TodayState {
+        val d = k.data
+        val stored = k.pick
+        val moment = k.moment
+        // El motor solo usa la fecha de `now`: el principio del día basta y no cambia con los minutos.
+        val local = k.day.atStartOfDay()
+        val key = "${k.day}|$moment"
         // Otro día u otro momento: empieza de cero.
         val p = stored.takeIf { it.key == key } ?: TodayPick(key, emptyList(), 0)
         val current = d.weather?.current
@@ -242,6 +272,7 @@ class TodayViewModel(
             weather = chip,
             menu = menu,
             slotKey = key,
+            round = p.round,
         )
     }
 

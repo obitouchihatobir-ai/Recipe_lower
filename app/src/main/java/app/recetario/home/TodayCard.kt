@@ -58,6 +58,14 @@ private fun TodaySlot.createLabel(): String = when (this) {
     TodaySlot.SNACK -> "Crear algo"
 }
 
+/** Lo que lee TalkBack en ese enlace: con el tipo de receta, no solo «Crear una». */
+private fun TodaySlot.createDescription(): String = when (this) {
+    TodaySlot.DRINK -> "Crear una bebida"
+    TodaySlot.DESSERT -> "Crear un postre"
+    TodaySlot.MAIN -> "Crear un plato"
+    TodaySlot.SNACK -> "Crear algo para picar"
+}
+
 private val TodaySlot.tag: String get() = name.lowercase()
 
 /** El contenedor de la tarjeta, con el estilo de cada tema (§6.1): degradado terracota, verde claro u oscuro con borde ámbar. */
@@ -162,9 +170,9 @@ private fun WeatherChip(chip: TodayWeatherChip) {
     Row(
         Modifier
             .padding(start = 8.dp)
-            // La descripción manda sobre el texto: TalkBack lee «El tiempo ahora: lluvia, 9 °C en Madrid».
-            .semantics(mergeDescendants = true) { contentDescription = chip.description }
-            .testTag("today-weather"),
+            // Solo la descripción: TalkBack lee «El tiempo ahora: lluvia, 9 °C en Madrid» una vez, sin el texto.
+            .testTag("today-weather")
+            .clearAndSetSemantics { contentDescription = chip.description },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(chip.emoji, fontSize = 14.sp, modifier = Modifier.clearAndSetSemantics { })
@@ -249,10 +257,18 @@ private fun MissingSlot(slot: TodaySlot, onCreate: (TodaySlot) -> Unit, modifier
         Text(slot.missing, color = c.todayInk, style = MaterialTheme.typography.bodyMedium)
         TextButton(
             onClick = { onCreate(slot) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("today-create-${slot.tag}"),
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = slot.createDescription() }
+                .testTag("today-create-${slot.tag}"),
             contentPadding = PaddingValues(horizontal = 0.dp),
         ) {
-            Text("+ ${slot.createLabel()}", color = c.todayInk, fontWeight = FontWeight.W700)
+            Text(
+                "+ ${slot.createLabel()}",
+                color = c.todayInk,
+                fontWeight = FontWeight.W700,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
         }
     }
 }

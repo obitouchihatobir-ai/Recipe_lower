@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onStart
@@ -101,21 +103,28 @@ class DetailViewModel(
     private val servingsOverride = savedStateHandle.getStateFlow(SERVINGS_KEY, 0)
     private val checked = savedStateHandle.getStateFlow(CHECKED_KEY, arrayListOf<String>())
 
+    /** La receta, escuchada una sola vez: la usan el detalle y «Le iría bien…». */
+    private val recipe: Flow<Recipe?> = repo.observeRecipe(id)
+        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
     private val pairingInfo: Flow<DetailPairingInfo?> = pairing?.let { p ->
-        combine(p.observeData(), repo.observeRecipe(id)) { data, recipe ->
+        val top = p.observeData().map { data ->
             val subject = data.recipes.firstOrNull { it.id == id }
-            DetailPairingInfo(
-                subject = subject,
-                top = subject?.let { suggestPairings(it, data.all, data.ratings, DETAIL_PAIRINGS, data.weights) }.orEmpty(),
-                goesWellWith = FlavorGuide.goesWellWith(recipe?.ingredients?.map { it.name }.orEmpty()),
-            )
+            subject to subject?.let { suggestPairings(it, data.all, data.ratings, DETAIL_PAIRINGS, data.weights) }.orEmpty()
+        }
+        // «Le iría bien…» solo depende de los ingredientes: no se recalcula al marcar favorita ni al cambiar otra cosa.
+        val goesWell = recipe.map { r -> r?.ingredients?.map { it.name }.orEmpty() }
+            .distinctUntilChanged()
+            .map { FlavorGuide.goesWellWith(it) }
+        combine(top, goesWell) { (subject, suggestions), flavors ->
+            DetailPairingInfo(subject = subject, top = suggestions, goesWellWith = flavors)
         }.flowOn(Dispatchers.Default)
             // El detalle no espera al maridaje: sale en cuanto llega la receta y el maridaje se suma después.
             .onStart<DetailPairingInfo?> { emit(null) }
     } ?: flowOf(null)
 
     private val base: Flow<DetailUiState> = combine(
-        repo.observeRecipe(id), repo.observeCategories(), servingsOverride, checked, history,
+        recipe, repo.observeCategories(), servingsOverride, checked, history,
     ) { recipe, categories, override, checkedIds, entries ->
         if (recipe == null) {
             DetailUiState(loading = false)

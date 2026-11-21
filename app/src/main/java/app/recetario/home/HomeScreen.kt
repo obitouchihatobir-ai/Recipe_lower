@@ -30,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +37,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.recetario.AppContainer
@@ -79,8 +80,9 @@ fun HomeRoute(
         ),
     )
     val todayVm: TodayViewModel = viewModel(factory = TodayViewModel.factory(container))
-    // Cada vez que se entra en Inicio: el tiempo se pide en segundo plano (solo si la caché tiene más de 1 h).
-    LaunchedEffect(Unit) { todayVm.refreshWeather() }
+    // Cada vez que se entra en Inicio y cada vez que se vuelve a la app (ON_RESUME): el tiempo se pide en segundo
+    // plano (solo si la caché tiene más de 1 h).
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { todayVm.refreshWeather() }
     val state by vm.state.collectAsStateWithLifecycle()
     val today by todayVm.state.collectAsStateWithLifecycle()
     HomeContent(

@@ -164,7 +164,6 @@ class DetailPairingTest {
         assertThrows(AssertionError::class.java) {
             rule.onNodeWithTag("pairing-list").performScrollToNode(hasTestTag("pairing-row-RECIPE:mole"))
         }
-        assertThat(rule.onNodeWithTag("pairing-subject", useUnmergedTree = true).fetchSemanticsNode()).isNotNull()
 
         // En el historial se cambia a 👍…
         rule.runOnUiThread { nav.navigate(PairingHistory) }

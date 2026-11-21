@@ -187,7 +187,9 @@ fun CompareRoute(
     onBack: () -> Unit,
     repository: PairingRepository = container.pairingRepository,
 ) {
-    val data by repository.observeData().collectAsStateWithLifecycle(initialValue = null)
+    // Un solo flujo por pantalla: recomponer no vuelve a suscribirse (como en `FullMenuRoute`).
+    val flow = remember(repository) { repository.observeData() }
+    val data by flow.collectAsStateWithLifecycle(initialValue = null)
     val d = data
     val a = d?.find(first.first, first.second)
     val b = d?.find(second.first, second.second)

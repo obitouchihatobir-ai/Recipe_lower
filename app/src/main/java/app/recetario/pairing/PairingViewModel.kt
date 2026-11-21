@@ -76,20 +76,27 @@ class PairingViewModel(
     private val query = handle.getStateFlow(QUERY_KEY, "")
     private val selected = handle.getStateFlow<String?>(SELECTED_KEY, null)
 
-    val state: StateFlow<PairingUiState> = combine(repository.observeData(), query, selected) { data, q, sel ->
+    /** Los datos con el elegido y sus sugerencias: solo cambian con los datos o con el elegido, no al escribir. */
+    private val chosen = combine(repository.observeData(), selected) { data, sel ->
         val subject = sel?.let { key -> key.split(":", limit = 2).takeIf { it.size == 2 }?.let { data.find(it[0], it[1]) } }
         val suggestions = subject?.let {
             suggest(it, data.all, data.ratings, PAIRING_TAB_LIMIT, data.weights)
         }.orEmpty()
+        Chosen(data, subject, suggestions)
+    }.flowOn(Dispatchers.Default)
+
+    val state: StateFlow<PairingUiState> = combine(chosen, query) { c, q ->
         PairingUiState(
             loaded = true,
             query = q,
-            matches = pairingMatches(q, data),
-            subject = subject,
-            own = suggestions.filter { it.item.kind == "RECIPE" },
-            ideas = suggestions.filter { it.item.kind != "RECIPE" },
+            matches = pairingMatches(q, c.data),
+            subject = c.subject,
+            own = c.suggestions.filter { it.item.kind == "RECIPE" },
+            ideas = c.suggestions.filter { it.item.kind != "RECIPE" },
         )
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PairingUiState())
+
+    private class Chosen(val data: PairingData, val subject: PairingItem?, val suggestions: List<Suggestion>)
 
     fun setQuery(text: String) {
         handle[QUERY_KEY] = text

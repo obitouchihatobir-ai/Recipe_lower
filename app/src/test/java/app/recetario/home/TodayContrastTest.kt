@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
@@ -54,8 +56,6 @@ class TodayContrastTest {
         "Chocolate caliente",
         "Bebida · 10 min",
         "Aún no tienes postres",
-        "+ Crear uno",
-        "9 °C · Madrid",
         "Empezar",
         "Otra idea",
     )
@@ -82,15 +82,25 @@ class TodayContrastTest {
         for (text in texts + TODAY_EMPTY_TEXT + "+ Nueva receta") {
             assertWithMessage("$theme: «$text» sobre su fondo").that(contrastOf(text)).isAtLeast(4.5)
         }
+        // Estos dos solo se leen por su descripción (sin nodo de texto): se mira el nodo entero. Del tiempo, solo la
+        // mitad derecha, donde va el texto y no el emoji.
+        assertWithMessage("$theme: «+ Crear uno» sobre su fondo")
+            .that(contrastOf(hasTestTag("today-create-dessert"))).isAtLeast(4.5)
+        assertWithMessage("$theme: «9 °C · Madrid» sobre su fondo")
+            .that(contrastOf(hasTestTag("today-weather"), fromFraction = 0.5f)).isAtLeast(4.5)
     }
 
     /**
      * Las esquinas de la caja del texto son su fondo (en un degradado, cada una el suyo): el contraste es el del trazo
      * pleno (el píxel más contrastado) frente a la esquina menos favorable.
      */
-    private fun contrastOf(text: String): Double {
-        val pixels = rule.onNode(hasText(text), useUnmergedTree = true).captureToImage().toPixelMap()
-        val all = (0 until pixels.width).flatMap { x -> (0 until pixels.height).map { y -> pixels[x, y] } }
+    private fun contrastOf(text: String): Double = contrastOf(hasText(text))
+
+    /** Igual, con el nodo de [matcher]; solo cuentan los píxeles a la derecha de [fromFraction] de su ancho. */
+    private fun contrastOf(matcher: SemanticsMatcher, fromFraction: Float = 0f): Double {
+        val pixels = rule.onNode(matcher, useUnmergedTree = true).captureToImage().toPixelMap()
+        val from = (pixels.width * fromFraction).toInt()
+        val all = (from until pixels.width).flatMap { x -> (0 until pixels.height).map { y -> pixels[x, y] } }
         val corners = listOf(
             pixels[0, 0], pixels[pixels.width - 1, 0], pixels[0, pixels.height - 1], pixels[pixels.width - 1, pixels.height - 1],
         )
