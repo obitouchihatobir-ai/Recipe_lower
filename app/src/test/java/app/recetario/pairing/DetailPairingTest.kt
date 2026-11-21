@@ -31,7 +31,9 @@ import app.recetario.testing.installTestContainer
 import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
+import androidx.compose.ui.test.performScrollToNode
 import org.junit.After
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -158,7 +160,11 @@ class DetailPairingTest {
         rule.runOnUiThread { nav.navigate(Pairing(subject = "RECIPE:limonada")) }
         rule.waitFor(hasTestTag("pairing-subject"))
         rule.scrollUntil("pairing-list", hasTestTag("pairing-row-RECIPE:flan"))
-        rule.onAllNodes(hasTestTag("pairing-row-RECIPE:mole")).assertCountEquals(0)
+        // No basta con lo compuesto: recorriendo toda la lista, el mole no aparece.
+        assertThrows(AssertionError::class.java) {
+            rule.onNodeWithTag("pairing-list").performScrollToNode(hasTestTag("pairing-row-RECIPE:mole"))
+        }
+        assertThat(rule.onNodeWithTag("pairing-subject", useUnmergedTree = true).fetchSemanticsNode()).isNotNull()
 
         // En el historial se cambia a 👍…
         rule.runOnUiThread { nav.navigate(PairingHistory) }

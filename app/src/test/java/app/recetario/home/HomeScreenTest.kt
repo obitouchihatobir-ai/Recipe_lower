@@ -23,6 +23,7 @@ import app.recetario.testing.testClock
 import app.recetario.testing.waitFor
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -92,6 +93,10 @@ class HomeScreenTest {
         }
         rule.onNodeWithTag("home-grid").performScrollToNode(hasText("Marca una receta como favorita y la tendrás siempre a mano aquí."))
         rule.onNodeWithText("Hace tiempo que no la haces").assertDoesNotExist()
+        // Tampoco más abajo: desplazarse hasta la sección falla.
+        assertThrows(AssertionError::class.java) {
+            rule.onNodeWithTag("home-grid").performScrollToNode(hasText("Hace tiempo que no la haces"))
+        }
     }
 
     @Test

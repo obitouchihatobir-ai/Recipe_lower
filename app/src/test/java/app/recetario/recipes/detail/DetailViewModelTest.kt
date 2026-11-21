@@ -12,7 +12,11 @@ import app.recetario.testing.sampleRecipe
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import app.recetario.recipes.model.Recipe
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -180,5 +184,24 @@ class DetailViewModelTest {
         vm.setServings(6)
         vm.await { it.servings == 6 }
         assertThat(vm.shareText()).contains("• Calabaza — 1,2 kg")
+    }
+
+    /** Cuenta cuántas veces se escucha `observeRecipe` (cada suscripción es una consulta más a Room). */
+    private class CountingRecipes(private val real: RecipeRepository) : RecipeRepository by real {
+        val subscriptions = AtomicInteger()
+        override fun observeRecipe(id: String): Flow<Recipe?> = real.observeRecipe(id).onStart { subscriptions.incrementAndGet() }
+    }
+
+    @Test
+    fun withPairing_theRecipeIsObservedOnce() {
+        save(ingredient("i1", "Chile poblano", 2.0, MeasureUnit.PIECE))
+        val recipes = CountingRecipes(container.recipeRepository)
+        val vm = DetailViewModel(
+            "r1", recipes, container.shoppingRepository, container.photoStore, SavedStateHandle(),
+            pairing = container.pairingRepository,
+        )
+        val s = vm.await { it.pairingSubject != null }
+        assertThat(s.recipe?.title).isEqualTo("Crema")
+        assertThat(recipes.subscriptions.get()).isEqualTo(1)
     }
 }

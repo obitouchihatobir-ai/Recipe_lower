@@ -58,6 +58,9 @@ class PairingViewModel(
     private val handle: SavedStateHandle,
     /** Donde se guardan las valoraciones: no se cortan al salir de la pantalla. */
     private val writeScope: CoroutineScope? = null,
+    /** El motor de sugerencias (las pruebas cuentan las llamadas). */
+    private val suggest: (PairingItem, List<PairingItem>, Map<String, Boolean>, Int, Map<Principle, Double>) -> List<Suggestion> =
+        ::suggestPairings,
 ) : ViewModel() {
 
     init {
@@ -76,7 +79,7 @@ class PairingViewModel(
     val state: StateFlow<PairingUiState> = combine(repository.observeData(), query, selected) { data, q, sel ->
         val subject = sel?.let { key -> key.split(":", limit = 2).takeIf { it.size == 2 }?.let { data.find(it[0], it[1]) } }
         val suggestions = subject?.let {
-            suggestPairings(it, data.all, data.ratings, PAIRING_TAB_LIMIT, data.weights)
+            suggest(it, data.all, data.ratings, PAIRING_TAB_LIMIT, data.weights)
         }.orEmpty()
         PairingUiState(
             loaded = true,

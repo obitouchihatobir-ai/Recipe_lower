@@ -137,6 +137,8 @@ class TodayViewModel(
     private val handle: SavedStateHandle,
     ticks: Flow<Unit> = minuteTicks(clock),
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** El motor de Hoy (las pruebas cuentan las llamadas). */
+    private val plan: (TodayContext, TodayInputs, List<String>, Random) -> TodayMenu = ::planToday,
 ) : ViewModel() {
     private val pick = MutableStateFlow(
         TodayPick(
@@ -204,7 +206,7 @@ class TodayViewModel(
             basics = d.basics,
             ratings = d.ratings,
         )
-        val menu = planToday(ctx, inputs, p.exclude, Random(todaySeed(local.toLocalDate(), moment, p.round)))
+        val menu = plan(ctx, inputs, p.exclude, Random(todaySeed(local.toLocalDate(), moment, p.round)))
         val byId = d.summaries.associateBy { it.id }
         val items = todaySlots(moment).map { slot ->
             TodayCardItem(

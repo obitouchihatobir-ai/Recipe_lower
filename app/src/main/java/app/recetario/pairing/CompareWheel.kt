@@ -185,8 +185,9 @@ fun CompareRoute(
     first: Pair<String, String>,
     second: Pair<String, String>,
     onBack: () -> Unit,
+    repository: PairingRepository = container.pairingRepository,
 ) {
-    val data by container.pairingRepository.observeData().collectAsStateWithLifecycle(initialValue = null)
+    val data by repository.observeData().collectAsStateWithLifecycle(initialValue = null)
     val d = data
     val a = d?.find(first.first, first.second)
     val b = d?.find(second.first, second.second)
@@ -201,7 +202,7 @@ fun CompareRoute(
         ratable = key != null,
         onRate = { liked ->
             if (a != null && b != null && key != null) {
-                container.applicationScope.launch { container.pairingRepository.rate(a, b, liked) }
+                container.applicationScope.launch { repository.rate(a, b, liked) }
             }
         },
         onBack = onBack,

@@ -24,7 +24,11 @@ import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.recipes.model.FlavorProfile
 import app.recetario.recipes.model.Intensity
 import app.recetario.recipes.model.ServeTemp
+import app.recetario.testing.installTestContainer
+import app.recetario.testing.waitFor
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.Flow
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -136,5 +140,31 @@ class CompareWheelTest {
         }
         rule.onNodeWithTag("compare-wheel").assertExists()
         rule.onAllNodes(hasContentDescription(LIKE_LABEL)).assertCountEquals(0)
+    }
+
+    @Test
+    fun compareRoute_observesTheDataOnce() {
+        val c = installTestContainer()
+        try {
+            seedPairingRecipes(c)
+            val calls = AtomicInteger()
+            val counting = object : PairingRepository by c.pairingRepository {
+                override fun observeData(): Flow<PairingData> {
+                    calls.incrementAndGet()
+                    return c.pairingRepository.observeData()
+                }
+            }
+            rule.setContent {
+                RecetarioTheme(ThemeChoice.CALIDO) {
+                    CompareRoute(c, "RECIPE" to "mole", "RECIPE" to "limonada", onBack = {}, repository = counting)
+                }
+            }
+            rule.waitFor(hasTestTag("compare-wheel"))
+            rule.waitForIdle()
+            // Recomponer (al llegar los datos) no vuelve a crear el flujo ni a suscribirse.
+            assertThat(calls.get()).isEqualTo(1)
+        } finally {
+            c.database.close()
+        }
     }
 }
