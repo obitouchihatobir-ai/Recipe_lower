@@ -86,7 +86,11 @@ class HomeScreenTest {
         launch()
 
         rule.waitFor(hasText("Tacos al pastor"))
-        rule.waitFor(hasText("Favoritas"))
+        // «Favoritas» puede quedar debajo de la tarjeta Hoy: se desplaza hasta el final de la cuadrícula.
+        rule.waitUntil(5_000) {
+            runCatching { rule.onNodeWithTag("home-grid").performScrollToNode(hasText("Favoritas")) }.isSuccess
+        }
+        rule.onNodeWithTag("home-grid").performScrollToNode(hasText("Marca una receta como favorita y la tendrás siempre a mano aquí."))
         rule.onNodeWithText("Hace tiempo que no la haces").assertDoesNotExist()
     }
 
