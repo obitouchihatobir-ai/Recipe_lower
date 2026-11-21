@@ -26,12 +26,21 @@ class PairingReviewFixesTest {
                 assertThat(r).doesNotContainMatch("\\bfrías\\b")
                 assertThat(r).doesNotContainMatch("\\bninguno\\b")
                 assertThat(r).doesNotContainMatch("\\bninguna\\b")
+                assertThat(r).doesNotContainMatch("\\b[Jj]unt[oa]s\\b")
+                assertThat(r).doesNotContainMatch("\\b[Jj]unt[oa]s\\b")
             }
         }
         val limonada = catalog.first { it.id == "cat-limonada" }
         assertThat(contribution(limonada, recipes[0], Principle.TEMPERATURE)!!.reason).contains("se sirven en frío")
         val same = contribution(item("a", intensity = Intensity.LIGHT), item("b", PairRole.DRINK, intensity = Intensity.LIGHT), Principle.INTENSITY)!!
         assertThat(same.reason).contains("sin que uno tape al otro")
+    }
+
+    @Test
+    fun saltyWithSalty_reasonWithoutGender() {
+        val r = contribution(item("tacos", salty = 3, name = "Tacos"), item("papas", salty = 2, name = "Papas"), Principle.SALTY_LIKES_SOUR_SWEET)!!
+        assertThat(r.points).isLessThan(0.0)
+        assertThat(r.reason).isEqualTo("Lo salado de tacos sumado a lo salado de papas puede cansar.")
     }
 
     @Test

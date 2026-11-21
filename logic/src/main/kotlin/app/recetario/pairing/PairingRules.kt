@@ -62,7 +62,7 @@ private fun acidCutsRich(a: PairingItem, b: PairingItem): Contribution? {
         return c(Principle.ACID_CUTS_RICH, -12, "Lo cremoso ${de(drink)} no combina con lo ácido ${de(food)}.")
     }
     if (a.flavor.rich && b.flavor.rich) {
-        return c(Principle.ACID_CUTS_RICH, -8, "Juntos, lo cremoso ${de(a)} y ${de(b)} puede resultar pesado.")
+        return c(Principle.ACID_CUTS_RICH, -8, "Lo cremoso ${de(a)} sumado a lo cremoso ${de(b)} puede resultar pesado.")
     }
     return null
 }
@@ -101,7 +101,7 @@ private fun spicyNeedsFresh(a: PairingItem, b: PairingItem): Contribution? {
     val hotA = a.flavor.spicy >= 2
     val hotB = b.flavor.spicy >= 2
     if (hotA && hotB) {
-        return c(Principle.SPICY_NEEDS_FRESH, -6, "Juntos, el picante ${de(a)} y el ${de(b)} se suman y pueden resultar excesivos.")
+        return c(Principle.SPICY_NEEDS_FRESH, -6, "El picante ${de(a)} y el ${de(b)} se suman y pueden resultar excesivos.")
     }
     val (hot, other) = when {
         hotA -> a to b
@@ -164,7 +164,7 @@ private fun saltyLikesSourSweet(a: PairingItem, b: PairingItem): Contribution? {
         }
     }.maxByOrNull { it.points }
     if (best != null) return best
-    if (options.size == 2) return c(Principle.SALTY_LIKES_SOUR_SWEET, -6, "Juntos, lo salado ${de(a)} y ${de(b)} puede cansar.")
+    if (options.size == 2) return c(Principle.SALTY_LIKES_SOUR_SWEET, -6, "Lo salado ${de(a)} sumado a lo salado ${de(b)} puede cansar.")
     return null
 }
 
