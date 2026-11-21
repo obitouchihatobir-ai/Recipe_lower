@@ -41,6 +41,8 @@ class OpenMeteoClient(
             connection.connectTimeout = TIMEOUT_MS
             connection.readTimeout = TIMEOUT_MS
             connection.setRequestProperty("User-Agent", "Sazon")
+            // Una redirección es un error: nunca se sigue a otro host.
+            connection.instanceFollowRedirects = false
             val code = connection.responseCode
             if (code !in 200..299) throw OpenMeteoHttpException(code)
             return connection.inputStream.use { input ->

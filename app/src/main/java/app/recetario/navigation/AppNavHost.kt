@@ -135,6 +135,8 @@ fun AppNavHost(
                                     onAppearance = { navController.from(from) { navigate(Appearance) } },
                                     onBackup = { navController.from(from) { navigate(Backup) } },
                                     onDiary = { navController.from(from) { navigate(Diary) } },
+                                    onAddIn = { categoryId -> navController.from(from) { navigate(RecipeEditor(categoryId = categoryId)) } },
+                                    onCooking = { id, servings -> navController.from(from) { navigate(Cooking(id, servings)) } },
                                 )
                             }
                         }

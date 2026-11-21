@@ -82,7 +82,7 @@ fun MealTimesContent(
         if (times == null) return@SettingsPage
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 32.dp)) {
             MutedText(
-                "Hoy los usa para saber qué toca. Fuera de ellos cuenta como noche.",
+                "Hoy los usa para saber qué toca. De la cena al desayuno es noche; si queda un hueco entre comidas, abajo ves qué cuenta.",
                 Modifier.padding(top = 4.dp, bottom = 4.dp),
                 fontSizeSp = 14,
             )

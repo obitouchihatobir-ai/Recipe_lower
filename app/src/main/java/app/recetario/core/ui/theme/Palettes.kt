@@ -22,6 +22,13 @@ data class RecetarioColors(
     val todayBrush: Brush,
     val todayInk: Color,
     val todayBorder: Color?,
+    /** Fondo de cada receta de la tarjeta Hoy y de su icono (en Cálido, más oscuros: el crema sobre un terracota más claro no llega a 4,5:1). */
+    val todayItem: Color,
+    val todayIcon: Color,
+    /** Botón principal de la tarjeta Hoy («Empezar») y la línea del secundario («Otra idea»). */
+    val todayButton: Color,
+    val todayButtonInk: Color,
+    val todayGhostLine: Color,
     val heroBrush: Brush,
 )
 
@@ -43,6 +50,11 @@ private val Calido = RecetarioColors(
     todayBrush = Brush.linearGradient(listOf(Color(0xFFA64932), Color(0xFFB5562E))),
     todayInk = Color(0xFFFFF8F0),
     todayBorder = null,
+    todayItem = Color(0x1F000000), // negro al 12 %
+    todayIcon = Color(0x14FFF8F0),
+    todayButton = Color(0xFFFFF8F0),
+    todayButtonInk = Color(0xFFA64932),
+    todayGhostLine = Color(0x80FFF8F0),
     heroBrush = Brush.linearGradient(listOf(Color(0xFFF6C58F), Color(0xFFE58A4E))),
 )
 
@@ -59,6 +71,11 @@ private val Fresco = RecetarioColors(
     todayBrush = SolidColor(Color(0xFFEAF3E9)),
     todayInk = Color(0xFF1E2A22),
     todayBorder = null,
+    todayItem = Color(0xFFFFFFFF),
+    todayIcon = Color(0xFFEAF3E9),
+    todayButton = Color(0xFF447850),
+    todayButtonInk = Color(0xFFFFFFFF),
+    todayGhostLine = Color(0xFFBCD3BE),
     heroBrush = Brush.linearGradient(listOf(Color(0xFFFFE3B8), Color(0xFFF9C08A))),
 )
 
@@ -75,6 +92,11 @@ private val Nocturno = RecetarioColors(
     todayBrush = Brush.linearGradient(listOf(Color(0xFF2A241B), Color(0xFF1C1C20))),
     todayInk = Color(0xFFF2EDE4),
     todayBorder = Color(0x59E0A458), // rgba(224,164,88,.35)
+    todayItem = Color(0x0AFFFFFF), // blanco al 4 %
+    todayIcon = Color(0x24E0A458),
+    todayButton = Color(0xFFE0A458),
+    todayButtonInk = Color(0xFF1A1408),
+    todayGhostLine = Color(0x40F2EDE4),
     heroBrush = Brush.linearGradient(listOf(Color(0xFF4A3420), Color(0xFF2A2018))),
 )
 

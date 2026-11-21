@@ -93,6 +93,10 @@ data class RecipeSummary(
     val tags: List<String>,
     val ingredientNames: List<String>,
     val updatedAt: Instant,
+    /** Entrada, principal o acompañamiento (null: sin apuntar). Lo usa Hoy. */
+    val course: Course? = null,
+    /** Porciones de la receta («Empezar» de Hoy abre el modo cocina con ellas). */
+    val servings: Int = 1,
 )
 
 data class Category(

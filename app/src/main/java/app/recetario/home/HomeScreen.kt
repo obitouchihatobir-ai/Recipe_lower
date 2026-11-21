@@ -24,28 +24,27 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.recetario.AppContainer
 import app.recetario.backup.BackupMessages
 import app.recetario.backup.BackupNotice
+import app.recetario.core.data.DefaultCategories
+import app.recetario.today.TodaySlot
 import app.recetario.core.ui.components.AddRecipeFab
 import app.recetario.core.ui.components.ChoiceChip
 import app.recetario.core.ui.components.EntranceTracker
@@ -71,17 +70,34 @@ fun HomeRoute(
     onAppearance: () -> Unit = {},
     onBackup: () -> Unit = {},
     onDiary: () -> Unit = {},
+    onAddIn: (categoryId: String) -> Unit = { onAdd() },
+    onCooking: (recipeId: String, servings: Int) -> Unit = { _, _ -> },
 ) {
     val vm: HomeViewModel = viewModel(
         factory = HomeViewModel.factory(
             container.recipeRepository, container.settingsRepository, container.clock, container.diaryRepository,
         ),
     )
+    val todayVm: TodayViewModel = viewModel(factory = TodayViewModel.factory(container))
+    // Cada vez que se entra en Inicio: el tiempo se pide en segundo plano (solo si la caché tiene más de 1 h).
+    LaunchedEffect(Unit) { todayVm.refreshWeather() }
     val state by vm.state.collectAsStateWithLifecycle()
+    val today by todayVm.state.collectAsStateWithLifecycle()
     HomeContent(
         state, container.photoStore, onCategory, onRecipe, onAdd, onSettings, onAppearance, onBackup,
         vm::dismissBackupNotice, onDiary = onDiary,
+        today = today,
+        onAnotherIdea = todayVm::anotherIdea,
+        onCooking = onCooking,
+        onCreate = { slot -> onAddIn(categoryFor(slot)) },
     )
+}
+
+/** La categoría de serie de lo que falta en Hoy (algo para picar es una comida). */
+private fun categoryFor(slot: TodaySlot): String = when (slot) {
+    TodaySlot.DRINK -> DefaultCategories.DRINK_ID
+    TodaySlot.DESSERT -> DefaultCategories.DESSERT_ID
+    TodaySlot.MAIN, TodaySlot.SNACK -> DefaultCategories.FOOD_ID
 }
 
 /** Inicio de la etapa 1: saludo, chips de categorías, recientes y favoritas (§6.3). */
@@ -98,6 +114,10 @@ fun HomeContent(
     onDismissNotice: () -> Unit = {},
     modifier: Modifier = Modifier,
     onDiary: () -> Unit = {},
+    today: TodayState = TodayState(),
+    onAnotherIdea: () -> Unit = {},
+    onCooking: (recipeId: String, servings: Int) -> Unit = { _, _ -> },
+    onCreate: (TodaySlot) -> Unit = { onAdd() },
 ) {
     val c = LocalRecetarioColors.current
     val tracker = rememberEntranceTracker()
@@ -121,13 +141,22 @@ fun HomeContent(
             when {
                 !state.loaded -> Unit
                 state.isEmpty -> fullWidth("empty") {
-                    EmptyHome(onAdd, Modifier.staggeredEntrance(1, "empty", tracker))
+                    TodayEmptyCard(onAdd, Modifier.staggeredEntrance(1, "empty", tracker))
                 }
                 else -> {
+                    // La tarjeta sale cuando el menú está listo (se calcula aparte): Inicio no la espera.
+                    if (today.loaded) {
+                        fullWidth("today") {
+                            TodayCard(
+                                today, onRecipe, onCooking, onAnotherIdea, onCreate,
+                                Modifier.staggeredEntrance(1, "today", tracker),
+                            )
+                        }
+                    }
                     if (state.categories.isNotEmpty()) {
                         fullWidth("chips") {
                             LazyRow(
-                                Modifier.staggeredEntrance(1, "chips", tracker).padding(top = 8.dp),
+                                Modifier.staggeredEntrance(2, "chips", tracker).padding(top = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 items(state.categories, key = { it.id }) { cat ->
@@ -266,30 +295,5 @@ private fun BackupNoticeCard(notice: BackupNotice, onBackup: () -> Unit, onDismi
         IconButton(onClick = onDismiss, modifier = Modifier.testTag("home-backup-dismiss")) {
             Icon(AppIcons.Close, contentDescription = "Ocultar el aviso hasta mañana", tint = c.muted, modifier = Modifier.size(20.dp))
         }
-    }
-}
-
-@Composable
-private fun EmptyHome(onAdd: () -> Unit, modifier: Modifier = Modifier) {
-    val c = LocalRecetarioColors.current
-    Column(
-        modifier.fillMaxWidth().padding(top = 72.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("🍳", fontSize = 56.sp)
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Aún no tienes recetas",
-            color = c.ink,
-            style = MaterialTheme.typography.titleLarge,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(6.dp))
-        MutedText("Apunta tu primera receta y aparecerá aquí.", fontSizeSp = 14)
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = onAdd,
-            colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
-        ) { Text("Añadir la primera") }
     }
 }

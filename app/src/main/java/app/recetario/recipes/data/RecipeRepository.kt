@@ -223,6 +223,8 @@ private fun RecipeListRow.toSummary() = RecipeSummary(
     favorite = recipe.favorite, tags = tags.names(),
     ingredientNames = ingredients.sortedBy { it.position }.map { it.name },
     updatedAt = recipe.updatedAt,
+    course = recipe.course,
+    servings = recipe.servings,
 )
 
 internal fun CategoryEntity.toModel() = Category(id, name, emoji, colorHex, baseType, sortOrder, isDefault)

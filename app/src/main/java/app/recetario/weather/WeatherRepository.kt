@@ -60,7 +60,10 @@ interface WeatherRepository {
     /** La caché si es del sitio de ahora y tiene menos de 6 h; si no, null. */
     val snapshot: Flow<WeatherSnapshot?>
 
-    /** La última previsión guardada (sea cual sea su edad) mientras haya ubicación: el tema según el sol mira sus días. */
+    /**
+     * La última previsión guardada del sitio de ahora (sea cual sea su edad); null sin ubicación o si es de otro sitio.
+     * El tema según el sol mira sus días.
+     */
     val forecast: Flow<WeatherSnapshot?>
 
     /** Pide a Open-Meteo solo si la caché tiene más de 1 h (o con [force]). */
@@ -101,8 +104,9 @@ class DefaultWeatherRepository(
         if (p == null || cache == null || !cache.isFor(p.latitude, p.longitude) || age(cache) >= OFFLINE_MAX_AGE) null else cache.parse()
     }.flowOn(Dispatchers.Default)
 
-    override val forecast: Flow<WeatherSnapshot?> = combine(settings.locationMode, settings.weatherCache) { mode, cache ->
-        if (mode == LocationMode.NONE) null else cache?.parse()
+    override val forecast: Flow<WeatherSnapshot?> = combine(place, settings.weatherCache) { p, cache ->
+        // Solo la del sitio de ahora: la salida y la puesta del sol de otra ciudad no valen.
+        if (p == null || cache == null || !cache.isFor(p.latitude, p.longitude)) null else cache.parse()
     }.flowOn(Dispatchers.Default)
 
     override suspend fun refresh(force: Boolean): WeatherResult = try {
@@ -117,17 +121,17 @@ class DefaultWeatherRepository(
     private suspend fun refreshLocked(force: Boolean): WeatherResult {
         val coordinates = currentCoordinates() ?: return WeatherResult.NoLocation
         val cache = settings.weatherCache.first()?.takeIf { it.isFor(coordinates.latitude, coordinates.longitude) }
-        if (!force && cache != null && age(cache) < FRESH_FOR) cache.parse()?.let { return WeatherResult.Ok(it) }
+        if (!force && cache != null && age(cache) < FRESH_FOR) withContext(io) { cache.parse() }?.let { return WeatherResult.Ok(it) }
         val now = clock.instant()
         val result = try {
             val json = withContext(io) { client.forecast(coordinates.latitude, coordinates.longitude) }
-            val parsed = parseForecast(json, now)
+            val parsed = withContext(io) { parseForecast(json, now) }
             quietly { settings.setWeatherCache(WeatherCache(json, now, coordinates.latitude, coordinates.longitude)) }
             WeatherResult.Ok(parsed)
         } catch (e: CancellationException) {
             throw e
         } catch (_: IOException) {
-            WeatherResult.Offline(cache?.takeIf { age(it) < OFFLINE_MAX_AGE }?.parse())
+            WeatherResult.Offline(cache?.takeIf { age(it) < OFFLINE_MAX_AGE }?.let { withContext(io) { it.parse() } })
         } catch (_: Exception) {
             // Un código de error de Open-Meteo o una respuesta que no se entiende.
             WeatherResult.Error("No se pudo leer el tiempo de Open-Meteo.")
