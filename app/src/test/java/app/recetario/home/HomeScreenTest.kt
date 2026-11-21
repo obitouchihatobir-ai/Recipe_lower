@@ -12,7 +12,12 @@ import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.diary.CookLogEntry
 import app.recetario.navigation.AppNavHost
+import app.recetario.testing.FakeOpenMeteo
 import app.recetario.testing.installTestContainer
+import app.recetario.weather.Place
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.unit.dp
+import com.google.common.truth.Truth.assertThat
 import app.recetario.testing.sampleRecipe
 import app.recetario.testing.testClock
 import app.recetario.testing.waitFor
@@ -83,5 +88,28 @@ class HomeScreenTest {
         rule.waitFor(hasText("Tacos al pastor"))
         rule.waitFor(hasText("Favoritas"))
         rule.onNodeWithText("Hace tiempo que no la haces").assertDoesNotExist()
+    }
+
+    @Test
+    fun todayCard_aboveChips_andWeatherAskedOnOpen() {
+        // Una capital conocida y Open-Meteo de mentira (nunca hay red).
+        val fake = FakeOpenMeteo()
+        container.database.close()
+        container = installTestContainer(openMeteo = fake)
+        runBlocking { container.settingsRepository.setCity(Place("Madrid", "Comunidad de Madrid", "España", 40.4168, -3.7038)) }
+        recipes("sopa" to "Sopa de tortilla", "tacos" to "Tacos al pastor")
+        launch()
+
+        rule.waitFor(hasTestTag("today-card"))
+        rule.waitFor(hasTestTag("today-weather"))
+        // La tarjeta va arriba, bajo el saludo, antes de los chips y de «Recientes».
+        val card = rule.onNodeWithTag("today-card").getBoundsInRoot()
+        val header = rule.onNodeWithTag("home-diary").getBoundsInRoot()
+        assertThat(card.top).isGreaterThan(header.bottom - 1.dp)
+        rule.waitFor(hasText("Recientes"))
+        val recent = rule.onNodeWithText("Recientes").getBoundsInRoot()
+        assertThat(recent.top).isGreaterThan(card.bottom - 1.dp)
+        // Al entrar se pidió el tiempo una vez (en segundo plano).
+        assertThat(fake.forecastRequests).hasSize(1)
     }
 }

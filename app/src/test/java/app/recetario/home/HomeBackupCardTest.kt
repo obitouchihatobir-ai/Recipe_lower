@@ -105,7 +105,7 @@ class HomeBackupCardTest {
     @Test
     fun noReminder_withoutRecipes() {
         rule.setContent { RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(container) } }
-        rule.waitFor(hasText("Aún no tienes recetas"))
+        rule.waitFor(hasText(TODAY_EMPTY_TEXT))
 
         rule.onNodeWithTag("home-backup-card").assertDoesNotExist()
     }

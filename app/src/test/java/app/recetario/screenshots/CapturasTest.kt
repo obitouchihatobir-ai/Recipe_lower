@@ -162,6 +162,8 @@ class CapturasTest {
         }
         val name = theme.name.lowercase()
         rule.waitFor(hasText("Limonada con hierbabuena"))
+        // La tarjeta Hoy con el tiempo de Madrid (de la caché).
+        rule.waitFor(hasTestTag("today-weather"))
         save("inicio-$name")
 
         rule.onNodeWithTag("tab-recipes").performClick()

@@ -36,7 +36,17 @@ class OpenMeteoClientTest {
             assertThat(c.connectTimeout).isEqualTo(10_000)
             assertThat(c.readTimeout).isEqualTo(10_000)
             assertThat(c.disconnected).isTrue()
+            // Una redirección no se sigue (nunca se sale a otro host).
+            assertThat(c.instanceFollowRedirects).isFalse()
         }
+    }
+
+    @Test
+    fun client_redirect_isAnError() {
+        val fake = FakeOpenMeteo(code = 301)
+        val e = assertThrows(OpenMeteoHttpException::class.java) { OpenMeteoClient(fake::open).forecast(1.0, 2.0) }
+        assertThat(e.code).isEqualTo(301)
+        assertThat(fake.connections.single().instanceFollowRedirects).isFalse()
     }
 
     @Test

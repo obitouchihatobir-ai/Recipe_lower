@@ -1,5 +1,6 @@
 package app.recetario.navigation
 
+import app.recetario.home.TODAY_EMPTY_TEXT
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
@@ -74,8 +75,8 @@ class NavigationTest {
     @Test
     fun emptyHome_showsAddFirst_andOpensEditor() {
         launch()
-        rule.waitFor(hasText("Aún no tienes recetas"))
-        rule.onNodeWithText("Añadir la primera").performClick()
+        rule.waitFor(hasText(TODAY_EMPTY_TEXT))
+        rule.onNodeWithText("+ Nueva receta").performClick()
         rule.onNodeWithText("Nueva receta").assertIsDisplayed()
         // La barra inferior solo está en las pestañas.
         rule.onNodeWithTag("tab-home").assertDoesNotExist()

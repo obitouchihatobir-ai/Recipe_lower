@@ -121,6 +121,18 @@ class WeatherRepositoryTest {
     }
 
     @Test
+    fun forecast_otherCityWithFailedRefresh_doesNotUseTheOldCitysSun() = runBlocking {
+        settings.setCity(bogota)
+        repo.refresh()
+        assertThat(repo.forecast.first()).isNotNull()
+        // Otra ciudad y sin red: la previsión de Bogotá (su salida y puesta del sol) no vale para Lima.
+        fake.offline = true
+        settings.setCity(Place("Lima", "Lima", "Perú", -12.04637, -77.04279))
+        repo.refresh()
+        assertThat(repo.forecast.first()).isNull()
+    }
+
+    @Test
     fun weather_badAnswers_areErrors_neverExceptions() = runBlocking {
         settings.setCity(bogota)
         fake.forecast = "esto no es json"
