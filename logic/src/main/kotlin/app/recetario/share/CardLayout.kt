@@ -11,6 +11,9 @@ package app.recetario.share
 const val MIN_CARD_SCALE = 0.75f
 
 /** Alto de línea respecto al tamaño de la letra. */
+/** Líneas máximas del título; uno más largo se corta con «…» (también en el PDF). */
+const val MAX_TITLE_LINES = 3
+
 const val CARD_LINE_SPACING = 1.3f
 
 private val IMAGE_SCALES = listOf(1f, 0.95f, 0.9f, 0.85f, 0.8f, MIN_CARD_SCALE)
@@ -47,7 +50,9 @@ enum class CardBlockKind {
 }
 
 /**
- * Un bloque ya colocado. [height] es exactamente [lines] × alto de línea (las fotos, su caja).
+ * Un bloque ya colocado, en px o pt del formato. [height] es exactamente [lines] × alto de línea (las
+ * fotos, su caja). En «Clásico» de los formatos anchos los ingredientes van en la columna izquierda y
+ * los pasos y las notas en la derecha: el [x] y el [width] de cada bloque ya lo dicen.
  * [overPhoto]: el título de «Foto grande», encima de la foto. [continuation]: en el PDF, sigue el
  * texto del bloque anterior de la página previa (unido con un espacio).
  */
@@ -62,8 +67,15 @@ data class CardBlock(
     val lines: Int = 0,
     val overPhoto: Boolean = false,
     val continuation: Boolean = false,
+    /** Con [continuation], lo que va entre el texto anterior y este: un espacio, o nada si se partió una palabra. */
+    val separator: String = " ",
 )
 
+/**
+ * La ficha en imagen. [scale] es la escala de la letra (1 a [MIN_CARD_SCALE]). [photoDropped]: la foto
+ * se quitó para que cupieran los ingredientes; solo pasa a la escala mínima, como último recurso (la
+ * vista previa puede explicarlo).
+ */
 data class ImageLayout(
     val format: CardFormat,
     val design: CardDesign,
@@ -72,6 +84,7 @@ data class ImageLayout(
     val hiddenIngredients: Int,
     val hiddenSteps: Int,
     val notesTruncated: Boolean,
+    val photoDropped: Boolean = false,
 )
 
 data class PdfPage(
@@ -92,9 +105,10 @@ private data class Item(
     val role: CardTextRole,
     val newSection: Boolean = false,
     val continuation: Boolean = false,
+    val separator: String = " ",
 )
 
-private class Geo(val format: CardFormat, scale: Float) {
+private class Geo(val format: CardFormat, val design: CardDesign, scale: Float) {
     val w = format.width
     val h = format.height
     val margin = w * (if (format.isPdf) 0.08f else 0.07f)
@@ -103,16 +117,32 @@ private class Geo(val format: CardFormat, scale: Float) {
     val itemGap = body * 0.25f
     val sectionGap = body * 0.8f
 
+    /** «Clásico» en dos columnas en los formatos anchos (la vertical y la tarjeta de 10 × 15 son estrechas). */
+    val twoColumns = design == CardDesign.CLASSIC &&
+        format in setOf(CardFormat.SQUARE, CardFormat.LANDSCAPE, CardFormat.PDF_A4, CardFormat.PDF_LETTER)
+    val gutter = body * 1.5f
+    val columnW = (contentW - gutter) / 2
+    val rightX = margin + columnW + gutter
+
+    fun style(role: CardTextRole) = CardTextStyle(role, body * role.factor)
+
     /** Alto de la foto: la de «Foto grande» va a sangre y es más alta. */
     fun photoHeight(big: Boolean): Float = h * when {
         format.isPdf -> if (big) 0.35f else 0.22f
         format == CardFormat.STORY -> if (big) 0.42f else 0.3f
         else -> if (big) 0.34f else 0.26f
     }
-    fun style(role: CardTextRole) = CardTextStyle(role, body * role.factor)
 }
 
-private class Stacker(val geo: Geo, val m: TextMeasurer, var y: Float, val bottom: Float) {
+/** Apila bloques en una columna ([x], [width]) desde [y] hasta [bottom]. */
+private class Stacker(
+    val geo: Geo,
+    val m: TextMeasurer,
+    var y: Float,
+    val bottom: Float,
+    val x: Float = geo.margin,
+    val width: Float = geo.contentW,
+) {
     val blocks = mutableListOf<CardBlock>()
     var empty = true
 
@@ -124,10 +154,10 @@ private class Stacker(val geo: Geo, val m: TextMeasurer, var y: Float, val botto
 
     fun measure(item: Item, at: Float): CardBlock {
         val style = geo.style(item.role)
-        val lines = m.lines(item.text, style, geo.contentW)
+        val lines = m.lines(item.text, style, width)
         return CardBlock(
-            item.kind, item.text, style, geo.margin, at, geo.contentW, lines * style.lineHeightPx, lines,
-            continuation = item.continuation,
+            item.kind, item.text, style, x, at, width, lines * style.lineHeightPx, lines,
+            continuation = item.continuation, separator = item.separator,
         )
     }
 
@@ -151,6 +181,41 @@ private class Stacker(val geo: Geo, val m: TextMeasurer, var y: Float, val botto
         y = at + b.height
         empty = false
     }
+
+    /** Coloca [items] mientras quepan (un título de sección, solo si cabe con el siguiente); devuelve el resto. */
+    fun pour(items: List<Item>): List<Item> {
+        var i = 0
+        while (i < items.size) {
+            val item = items[i]
+            val need = if (item.kind == CardBlockKind.HEADING) items.subList(i, minOf(i + 2, items.size)) else listOf(item)
+            if (!fits(need)) break
+            place(item)
+            i++
+        }
+        return items.drop(i)
+    }
+}
+
+/** Mayor n en 0..[max] con [ok] (que se supone creciente al revés: si n vale, valen los menores). */
+private fun largest(max: Int, ok: (Int) -> Boolean): Int {
+    var lo = 0
+    var hi = max
+    while (lo < hi) {
+        val mid = (lo + hi + 1) / 2
+        if (ok(mid)) lo = mid else hi = mid - 1
+    }
+    return lo
+}
+
+/** [text] cortado con «…» para que ocupe como mucho [maxLines]: por palabras y, si ni una cabe, por caracteres. */
+private fun capLines(text: String, style: CardTextStyle, width: Float, maxLines: Int, m: TextMeasurer): String {
+    if (m.lines(text, style, width) <= maxLines) return text
+    fun fits(t: String) = m.lines(t, style, width) <= maxLines
+    val words = text.split(' ')
+    val k = largest(words.size - 1) { fits(words.take(it).joinToString(" ").trimEnd() + "…") }
+    if (k >= 1) return words.take(k).joinToString(" ").trimEnd() + "…"
+    val c = largest(text.length - 1) { fits(text.take(it) + "…") }
+    return text.take(maxOf(c, 1)) + "…"
 }
 
 private fun footerBlock(geo: Geo, m: TextMeasurer, text: String): CardBlock {
@@ -160,7 +225,7 @@ private fun footerBlock(geo: Geo, m: TextMeasurer, text: String): CardBlock {
     return CardBlock(CardBlockKind.FOOTER, text, style, geo.margin, geo.h - geo.margin - height, geo.contentW, height, lines)
 }
 
-private fun photoBlock(geo: Geo, content: CardContent, design: CardDesign): CardBlock? = when (design) {
+private fun photoBlock(geo: Geo, content: CardContent): CardBlock? = when (geo.design) {
     CardDesign.MINIMAL -> null
     CardDesign.BIG_PHOTO -> {
         val kind = if (content.hasPhoto) CardBlockKind.PHOTO else CardBlockKind.EMOJI
@@ -169,31 +234,28 @@ private fun photoBlock(geo: Geo, content: CardContent, design: CardDesign): Card
     }
     CardDesign.CLASSIC, CardDesign.THEME ->
         if (content.hasPhoto) {
-            CardBlock(
-                CardBlockKind.PHOTO, "", null, geo.margin, geo.margin, geo.contentW,
-                geo.photoHeight(big = false),
-            )
+            CardBlock(CardBlockKind.PHOTO, "", null, geo.margin, geo.margin, geo.contentW, geo.photoHeight(big = false))
         } else {
             null
         }
 }
 
-/** Foto, título, porciones y sabor: lo que abre la ficha (o la primera página). */
-private class Start(val stacker: Stacker, val top: List<CardBlock>)
+/**
+ * Lo que abre la ficha (o la primera página), a todo el ancho: foto, título, porciones y sabor.
+ * Con dos columnas, [left] y [right] empiezan debajo; con una, [left] es [stacker] y [right] null.
+ */
+private class Start(val stacker: Stacker, val top: List<CardBlock>, val left: Stacker, val right: Stacker?) {
+    val blocks: List<CardBlock> get() = top + stacker.blocks + (if (left !== stacker) left.blocks else emptyList()) +
+        right?.blocks.orEmpty()
+}
 
-private fun start(
-    content: CardContent,
-    design: CardDesign,
-    geo: Geo,
-    m: TextMeasurer,
-    bottom: Float,
-    withPhoto: Boolean,
-): Start {
-    val photo = if (withPhoto) photoBlock(geo, content, design) else null
+private fun start(content: CardContent, geo: Geo, m: TextMeasurer, bottom: Float, withPhoto: Boolean): Start {
+    val photo = if (withPhoto) photoBlock(geo, content) else null
     val s = Stacker(geo, m, if (photo == null) geo.margin else photo.y + photo.height + geo.sectionGap, bottom)
     val top = listOfNotNull(photo).toMutableList()
-    val title = Item(CardBlockKind.TITLE, content.title, CardTextRole.TITLE)
-    if (photo != null && design == CardDesign.BIG_PHOTO) {
+    val titleStyle = geo.style(CardTextRole.TITLE)
+    val title = Item(CardBlockKind.TITLE, capLines(content.title, titleStyle, geo.contentW, MAX_TITLE_LINES, m), CardTextRole.TITLE)
+    if (photo != null && geo.design == CardDesign.BIG_PHOTO) {
         val b = s.measure(title, 0f)
         val y = photo.height - geo.margin * 0.5f - b.height
         if (y >= geo.margin) top += b.copy(y = y, overPhoto = true) else s.place(title)
@@ -202,13 +264,23 @@ private fun start(
     }
     s.place(Item(CardBlockKind.META, content.servingsLine, CardTextRole.META))
     content.flavorLine?.let { s.place(Item(CardBlockKind.FLAVOR, it, CardTextRole.META)) }
-    return Start(s, top)
+    if (!geo.twoColumns) return Start(s, top, s, null)
+    val y0 = s.y + geo.sectionGap
+    return Start(
+        s, top,
+        Stacker(geo, m, y0, bottom, geo.margin, geo.columnW),
+        Stacker(geo, m, y0, bottom, geo.rightX, geo.columnW),
+    )
 }
 
 private fun heading(text: String) = Item(CardBlockKind.HEADING, text, CardTextRole.HEADING, newSection = true)
 
 private fun ingredientItems(c: CardContent) =
-    listOf(heading("Ingredientes")) + c.ingredients.map { Item(CardBlockKind.INGREDIENT, "• $it", CardTextRole.BODY) }
+    if (c.ingredients.isEmpty()) {
+        emptyList()
+    } else {
+        listOf(heading("Ingredientes")) + c.ingredients.map { Item(CardBlockKind.INGREDIENT, "• $it", CardTextRole.BODY) }
+    }
 
 private fun stepItems(c: CardContent) =
     if (c.steps.isEmpty()) {
@@ -222,118 +294,145 @@ private fun more(text: String) = Item(CardBlockKind.MORE, text, CardTextRole.BOD
 /**
  * La ficha en imagen. Si no cabe, baja la letra hasta [MIN_CARD_SCALE]; si aún no cabe, recorta los
  * pasos («…y N pasos más») y las notas («…»), y en último caso quita la foto y recorta los
- * ingredientes («…y N ingredientes más»). Nunca corta un bloque a mitad de línea.
+ * ingredientes («…y N ingredientes más»). En «Clásico» de la cuadrada y la horizontal, los
+ * ingredientes van a la izquierda y los pasos y las notas a la derecha, y cada columna se recorta por
+ * su cuenta. Nunca corta un bloque a mitad de línea.
  */
 fun layoutImage(content: CardContent, format: CardFormat, design: CardDesign, measurer: TextMeasurer): ImageLayout {
     val notes = content.notes?.let { listOf(heading("Notas"), Item(CardBlockKind.NOTES, it, CardTextRole.BODY)) }.orEmpty()
-    val rest = ingredientItems(content) + stepItems(content) + notes
+    val left = ingredientItems(content)
+    val right = stepItems(content) + notes
     for (scale in IMAGE_SCALES) {
-        val geo = Geo(format, scale)
+        val geo = Geo(format, design, scale)
         val footer = footerBlock(geo, measurer, content.footer)
-        val st = start(content, design, geo, measurer, footer.y - geo.sectionGap, withPhoto = true)
-        if (st.stacker.fits(rest)) {
-            rest.forEach(st.stacker::place)
-            return ImageLayout(format, design, scale, st.top + st.stacker.blocks + footer, 0, 0, false)
+        val st = start(content, geo, measurer, footer.y - geo.sectionGap, withPhoto = true)
+        val fits = if (st.right == null) st.left.fits(left + right) else st.left.fits(left) && st.right.fits(right)
+        if (fits) {
+            if (st.right == null) {
+                (left + right).forEach(st.left::place)
+            } else {
+                left.forEach(st.left::place)
+                right.forEach(st.right::place)
+            }
+            return ImageLayout(format, design, scale, st.blocks + footer, 0, 0, false)
         }
     }
     return truncatedImage(content, format, design, measurer)
 }
 
 private fun truncatedImage(content: CardContent, format: CardFormat, design: CardDesign, m: TextMeasurer): ImageLayout {
-    val geo = Geo(format, MIN_CARD_SCALE)
+    val geo = Geo(format, design, MIN_CARD_SCALE)
     val footer = footerBlock(geo, m, content.footer)
     val bottom = footer.y - geo.sectionGap
     val ingredients = ingredientItems(content)
-    var st = start(content, design, geo, m, bottom, withPhoto = true)
-    if (!st.stacker.fits(ingredients) && st.top.isNotEmpty()) st = start(content, design, geo, m, bottom, withPhoto = false)
-    val s = st.stacker
-    fun done(hiddenIngredients: Int, hiddenSteps: Int, notesTruncated: Boolean) =
-        ImageLayout(format, design, MIN_CARD_SCALE, st.top + s.blocks + footer, hiddenIngredients, hiddenSteps, notesTruncated)
+    var st = start(content, geo, m, bottom, withPhoto = true)
+    var photoDropped = false
+    if (!st.left.fits(ingredients) && st.top.any { it.kind == CardBlockKind.PHOTO || it.kind == CardBlockKind.EMOJI }) {
+        st = start(content, geo, m, bottom, withPhoto = false)
+        photoDropped = true
+    }
+    fun done(hiddenIngredients: Int, hiddenSteps: Int, notesTruncated: Boolean) = ImageLayout(
+        format, design, MIN_CARD_SCALE, st.blocks + footer, hiddenIngredients, hiddenSteps, notesTruncated, photoDropped,
+    )
 
-    if (!s.fits(ingredients)) {
+    var hiddenIngredients = 0
+    if (st.left.fits(ingredients)) {
+        ingredients.forEach(st.left::place)
+    } else {
         val n = content.ingredients.size
-        val k = (n - 1 downTo 0).firstOrNull { k ->
-            s.fits(ingredients.take(1 + k) + more(moreIngredientsText(n - k)))
-        }
-        if (k != null) (ingredients.take(1 + k) + more(moreIngredientsText(n - k))).forEach(s::place)
-        return done(n - (k ?: 0), content.steps.size, content.notes != null)
+        val cut = { k: Int -> ingredients.take(1 + k) + more(moreIngredientsText(n - k)) }
+        val k = (n - 1 downTo 0).firstOrNull { st.left.fits(cut(it)) }
+        if (k != null) cut(k).forEach(st.left::place)
+        hiddenIngredients = n - (k ?: 0)
+        // En una sola columna no queda sitio para nada más.
+        if (st.right == null) return done(hiddenIngredients, content.steps.size, content.notes != null)
     }
-    ingredients.forEach(s::place)
+    val column = st.right ?: st.left
+    val hiddenSteps = fitSteps(content, column, m)
+    val notesTruncated = fitNotes(content, column)
+    return done(hiddenIngredients, hiddenSteps, notesTruncated)
+}
 
-    // Pasos: dejan sitio para el título de las notas y sus 3 primeras líneas.
-    var hiddenSteps = 0
+/** Pasos con «…y N pasos más», dejando sitio para el título de las notas y sus 3 primeras líneas. Devuelve los ocultos. */
+private fun fitSteps(content: CardContent, s: Stacker, m: TextMeasurer): Int {
     val steps = stepItems(content)
-    if (steps.isNotEmpty()) {
-        val reserve = content.notes?.let { text ->
-            val body = geo.style(CardTextRole.BODY)
-            val noteLines = minOf(3, m.lines(text, body, geo.contentW))
-            geo.sectionGap + s.measure(heading("Notas"), 0f).height + geo.itemGap + noteLines * body.lineHeightPx
-        } ?: 0f
-        val n = content.steps.size
-        val k = (n downTo 0).firstOrNull { k ->
-            s.fits(steps.take(1 + k) + listOfNotNull(if (k < n) more(moreStepsText(n - k)) else null), reserve)
-        }
-        if (k != null) {
-            (steps.take(1 + k) + listOfNotNull(if (k < n) more(moreStepsText(n - k)) else null)).forEach(s::place)
-        }
-        hiddenSteps = n - (k ?: 0)
-    }
+    if (steps.isEmpty()) return 0
+    val geo = s.geo
+    val reserve = content.notes?.let { text ->
+        val body = geo.style(CardTextRole.BODY)
+        val noteLines = minOf(3, m.lines(text, body, s.width))
+        geo.sectionGap + s.measure(heading("Notas"), 0f).height + geo.itemGap + noteLines * body.lineHeightPx
+    } ?: 0f
+    val n = content.steps.size
+    val cut = { k: Int -> steps.take(1 + k) + listOfNotNull(if (k < n) more(moreStepsText(n - k)) else null) }
+    val k = (n downTo 0).firstOrNull { s.fits(cut(it), reserve) }
+    if (k != null) cut(k).forEach(s::place)
+    return n - (k ?: 0)
+}
 
-    // Notas: enteras si caben; si no, las palabras que quepan y «…».
-    var notesTruncated = false
-    content.notes?.let { text ->
-        val whole = listOf(heading("Notas"), Item(CardBlockKind.NOTES, text, CardTextRole.BODY))
-        if (s.fits(whole)) {
-            whole.forEach(s::place)
-        } else {
-            notesTruncated = true
-            val words = text.split(' ')
-            fun cut(k: Int) = listOf(heading("Notas"), Item(CardBlockKind.NOTES, words.take(k).joinToString(" ").trimEnd() + "…", CardTextRole.BODY))
-            var lo = 0
-            var hi = words.size - 1
-            while (lo < hi) {
-                val mid = (lo + hi + 1) / 2
-                if (s.fits(cut(mid))) lo = mid else hi = mid - 1
-            }
-            if (lo >= 1) cut(lo).forEach(s::place)
-        }
+/** Notas enteras si caben; si no, las palabras que quepan y «…». Devuelve si se recortaron. */
+private fun fitNotes(content: CardContent, s: Stacker): Boolean {
+    val text = content.notes ?: return false
+    val whole = listOf(heading("Notas"), Item(CardBlockKind.NOTES, text, CardTextRole.BODY))
+    if (s.fits(whole)) {
+        whole.forEach(s::place)
+        return false
     }
-    return done(0, hiddenSteps, notesTruncated)
+    val words = text.split(' ')
+    val cut = { k: Int -> listOf(heading("Notas"), Item(CardBlockKind.NOTES, words.take(k).joinToString(" ").trimEnd() + "…", CardTextRole.BODY)) }
+    val k = largest(words.size - 1) { s.fits(cut(it)) }
+    if (k >= 1) cut(k).forEach(s::place)
+    return true
 }
 
 /**
- * La ficha en PDF: todo el texto, partido en páginas sin perder nada. Un título de sección nunca
- * queda solo al final de una página; un bloque que no cabe ni en una página entera se parte por
- * palabras (el resto lleva [CardBlock.continuation]). Cada página lleva el pie con «n/total» si hay
- * más de una.
+ * La ficha en PDF: todo el texto, partido en páginas sin perder nada (el título se corta a
+ * [MAX_TITLE_LINES]). En «Clásico» de A4 y Carta la primera página lleva dos columnas (ingredientes a
+ * la izquierda; pasos y notas a la derecha); lo que no cabe sigue en una columna en las páginas
+ * siguientes, primero los ingredientes. Un título de sección nunca queda solo al final de una
+ * columna; un bloque que no cabe ni en una página entera se parte por palabras y, si una palabra
+ * tampoco cabe, por caracteres (el resto lleva [CardBlock.continuation] y su [CardBlock.separator]).
+ * Cada página lleva el pie con «n/total» si hay más de una.
  */
 fun paginatePdf(content: CardContent, format: CardFormat, design: CardDesign, measurer: TextMeasurer): List<PdfPage> {
-    val geo = Geo(format, 1f)
+    val geo = Geo(format, design, 1f)
     // El hueco del pie se mide con el texto más largo posible.
     val bottom = footerBlock(geo, measurer, "${content.footer} · 99/99").y - geo.sectionGap
     val notes = content.notes?.let { text ->
         val paragraphs = text.split('\n').filter { it.isNotBlank() }
         listOf(heading("Notas")) + paragraphs.map { Item(CardBlockKind.NOTES, it, CardTextRole.BODY) }
     }.orEmpty()
-    val queue = ArrayDeque(ingredientItems(content) + stepItems(content) + notes)
+    val left = ingredientItems(content)
+    val right = stepItems(content) + notes
 
     val pages = mutableListOf<List<CardBlock>>()
-    val first = start(content, design, geo, measurer, bottom, withPhoto = true)
-    var top = first.top
-    var s = first.stacker
+    val first = start(content, geo, measurer, bottom, withPhoto = true)
+    val queue: ArrayDeque<Item>
+    var top: List<CardBlock>
+    var s: Stacker
+    fun fresh() = Stacker(geo, measurer, geo.margin, bottom)
+    if (first.right != null) {
+        val restLeft = first.left.pour(left)
+        val restRight = first.right.pour(right)
+        pages += first.blocks
+        queue = ArrayDeque(restLeft + restRight)
+        top = emptyList()
+        s = fresh()
+    } else {
+        queue = ArrayDeque(left + right)
+        top = first.top
+        s = first.stacker
+    }
     fun newPage() {
         pages += top + s.blocks
         top = emptyList()
-        s = Stacker(geo, measurer, geo.margin, bottom)
+        s = fresh()
     }
-    fun fitsFresh(item: Item) = Stacker(geo, measurer, geo.margin, bottom).fits(listOf(item))
 
     while (queue.isNotEmpty()) {
         val item = queue.removeFirst()
         if (item.kind == CardBlockKind.HEADING) {
-            val next = queue.firstOrNull()
-            val together = listOfNotNull(item, next)
-            if (!s.fits(together) && !s.empty) newPage()
+            if (!s.fits(listOfNotNull(item, queue.firstOrNull())) && !s.empty) newPage()
             s.place(item)
             continue
         }
@@ -341,30 +440,31 @@ fun paginatePdf(content: CardContent, format: CardFormat, design: CardDesign, me
             s.place(item)
             continue
         }
-        if (!s.empty && fitsFresh(item)) {
+        if (!s.empty && fresh().fits(listOf(item))) {
             newPage()
             s.place(item)
             continue
         }
         // Más alto que lo que queda: se parte por palabras.
         val words = item.text.split(' ')
-        fun part(k: Int) = item.copy(text = words.take(k).joinToString(" "))
-        var lo = 0
-        var hi = words.size - 1
-        while (lo < hi) {
-            val mid = (lo + hi + 1) / 2
-            if (s.fits(listOf(part(mid)))) lo = mid else hi = mid - 1
-        }
-        if (lo == 0 && s.empty) lo = 1 // Ni una palabra cabe en una página vacía: se pone igual.
-        if (lo >= 1) {
-            s.place(part(lo))
-            queue.addFirst(item.copy(text = words.drop(lo).joinToString(" "), continuation = true, newSection = false))
-        } else {
+        val k = largest(words.size - 1) { s.fits(listOf(item.copy(text = words.take(it).joinToString(" ")))) }
+        if (k >= 1) {
+            s.place(item.copy(text = words.take(k).joinToString(" ")))
+            val rest = words.drop(k).joinToString(" ")
+            if (rest.isNotEmpty()) {
+                queue.addFirst(item.copy(text = rest, newSection = false, continuation = true, separator = " "))
+            }
+        } else if (!s.empty) {
             queue.addFirst(item)
+        } else {
+            // Ni la primera palabra cabe en una página vacía: se parte por caracteres.
+            val c = maxOf(1, largest(item.text.length - 1) { s.fits(listOf(item.copy(text = item.text.take(it)))) })
+            s.place(item.copy(text = item.text.take(c)))
+            queue.addFirst(item.copy(text = item.text.drop(c), newSection = false, continuation = true, separator = ""))
         }
         newPage()
     }
-    pages += top + s.blocks
+    if (top.isNotEmpty() || s.blocks.isNotEmpty() || pages.isEmpty()) pages += top + s.blocks
     val total = pages.size
     return pages.mapIndexed { i, blocks ->
         val text = if (total > 1) "${content.footer} · ${i + 1}/$total" else content.footer
