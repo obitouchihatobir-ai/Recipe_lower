@@ -24,6 +24,8 @@ import app.recetario.recipes.data.RoomRecipeRepository
 import app.recetario.pairing.PairingRepository
 import app.recetario.pairing.RoomPairingRepository
 import app.recetario.pantry.PantryRepository
+import app.recetario.plan.MealPlanRepository
+import app.recetario.plan.RoomMealPlanRepository
 import app.recetario.pantry.RoomPantryRepository
 import app.recetario.shopping.RoomShoppingRepository
 import app.recetario.shopping.ShoppingRepository
@@ -137,6 +139,9 @@ class AppContainer(
 
     /** La despensa (pestaña Despensa de Compra); sus básicos están en los ajustes. */
     val pantryRepository: PantryRepository = RoomPantryRepository(database, clock)
+
+    /** El menú de la semana (pestaña Semana de Compra), en `meal_plan`. */
+    val mealPlanRepository: MealPlanRepository = RoomMealPlanRepository(database)
 
     /**
      * Copias de seguridad: temporales de importar y exportar en la caché, copias del teléfono (semanales y previas a
