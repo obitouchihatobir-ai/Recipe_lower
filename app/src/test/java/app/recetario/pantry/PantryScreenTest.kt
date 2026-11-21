@@ -133,11 +133,11 @@ class PantryScreenTest {
     }
 
     @Test
-    fun weekTab_saysItIsComing() {
+    fun weekTab_opensTheWeek() {
         rule.setContent { RecetarioTheme(ThemeChoice.CALIDO) { ShoppingRoute(container) } }
         rule.waitFor(hasTestTag("shopping-tab-week"))
         rule.onNodeWithTag("shopping-tab-week").performClick()
-        rule.waitFor(hasText("Llega pronto: el menú de la semana"))
+        rule.waitFor(hasTestTag("week-screen"))
     }
 
     @Test

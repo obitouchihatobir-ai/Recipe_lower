@@ -12,7 +12,12 @@ import java.time.LocalDate
 /**
  * Los ingredientes de los platos desde [today], escalados a sus porciones y sumados, sin lo que cubren la despensa
  * ([pantry]) y los básicos ([basics]). Cada línea tiene la forma de las de «Lo que necesito» (el mismo escalado y
- * la misma sección), lista para `mergeInto` con la compra; el id y la fecha los pone quien las guarda.
+ * la misma sección), lista para `mergeInto` con la compra; las masas y los volúmenes se suman con la taza de
+ * [cupMl] (el ajuste de Unidades, como al fundir con la lista).
+ *
+ * **Contrato:** cada línea lleva un id provisional (`"<plato>:<ingrediente>"`) y `createdAt = Instant.EPOCH`. Quien
+ * las guarde debe darles antes un id nuevo (UUID) y la hora del reloj: con el id provisional, generar la lista dos
+ * veces pisaría las filas de la primera vez (quizá ya marcadas como compradas).
  */
 fun weekIngredients(
     meals: List<PlannedMeal>,
@@ -20,6 +25,7 @@ fun weekIngredients(
     recipes: Map<String, Recipe>,
     pantry: List<String>,
     basics: List<String>,
+    cupMl: Int = 240,
 ): List<ShoppingItem> {
     val have = pantry + basics
     val incoming = meals.filter { it.date >= today }.flatMap { meal ->
@@ -40,5 +46,5 @@ fun weekIngredients(
                 )
             }
     }
-    return mergeInto(emptyList(), incoming)
+    return mergeInto(emptyList(), incoming, cupMl)
 }

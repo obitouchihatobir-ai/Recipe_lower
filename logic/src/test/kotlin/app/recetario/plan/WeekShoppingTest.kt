@@ -10,6 +10,7 @@ import java.time.Instant
 import java.time.LocalDate
 import org.junit.Test
 import org.junit.Assert.assertEquals
+import app.recetario.shopping.ShopSection
 
 class WeekShoppingTest {
     private val today = LocalDate.of(2026, 11, 18)
@@ -60,5 +61,53 @@ class WeekShoppingTest {
         )
         assertEquals(listOf("Arroz"), items.map { it.name })
         assertEquals(400.0, items.single().quantity!!, 0.001)
+    }
+
+    @Test
+    fun weekIngredients_keepSourceRecipe_andSection() {
+        val items = weekIngredients(listOf(meal("1", today, "a", 2)), today, recipes, emptyList(), emptyList())
+        val rice = items.single { it.name == "Arroz" }
+        assertEquals("a", rice.sourceRecipeId)
+        assertEquals(ShopSection.PANTRY, rice.section)
+        assertEquals(ShopSection.FRUITS_VEG, items.single { it.name == "Tomate" }.section)
+    }
+
+    @Test
+    fun weekIngredients_mixedMassUnits_areSummedInGrams() {
+        val withKilo = recipes + ("k" to recipe("k", 2, ing("Arroz", 1.0, MeasureUnit.KILOGRAM)))
+        val items = weekIngredients(
+            listOf(meal("1", today, "a", 2), meal("2", today.plusDays(1), "k", 2)),
+            today, withKilo, emptyList(), emptyList(),
+        )
+        val rice = items.single { it.name == "Arroz" }
+        assertEquals(MeasureUnit.GRAM, rice.unit)
+        assertEquals(1200.0, rice.quantity!!, 0.001)
+    }
+
+    @Test
+    fun weekIngredients_sameRecipeTwice_withDifferentServings() {
+        val items = weekIngredients(
+            listOf(meal("1", today, "a", 2), meal("2", today.plusDays(2), "a", 6)),
+            today, recipes, emptyList(), emptyList(),
+        )
+        // 200 g para 2 + 600 g para 6; 2 + 6 tomates.
+        assertEquals(800.0, items.single { it.name == "Arroz" }.quantity!!, 0.001)
+        assertEquals(8.0, items.single { it.name == "Tomate" }.quantity!!, 0.001)
+        assertEquals(1, items.count { it.name == "Sal" })
+    }
+
+    @Test
+    fun weekIngredients_cupSize_comesFromTheSetting() {
+        val milk = mapOf(
+            "c" to recipe("c", 1, ing("Leche", 1.0, MeasureUnit.CUP)),
+            "m" to recipe("m", 1, ing("Leche", 100.0, MeasureUnit.MILLILITER)),
+        )
+        val items = weekIngredients(
+            listOf(meal("1", today, "c", 1), meal("2", today, "m", 1)),
+            today, milk, emptyList(), emptyList(), cupMl = 250,
+        )
+        val line = items.single()
+        assertEquals(MeasureUnit.MILLILITER, line.unit)
+        assertEquals(350.0, line.quantity!!, 0.001)
     }
 }
