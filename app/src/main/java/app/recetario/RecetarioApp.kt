@@ -32,6 +32,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import app.recetario.settings.SettingsRepository
 import app.recetario.settings.createSettingsDataStore
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -110,7 +111,11 @@ class AppContainer(
      * Trabajo que no debe cortarse al cerrar una pantalla (guardar en el diario desde «¡Listo!» y salir enseguida,
      * borrar las fotos de una entrada cuando caduca «Deshacer»).
      */
-    val applicationScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val applicationScope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            // Un fallo al escribir (p. ej. disco lleno) se anota y no cierra la app.
+            CoroutineExceptionHandler { _, e -> android.util.Log.e("Sazon", "Fallo en segundo plano", e) },
+    )
 
     val diaryRepository: DiaryRepository = RoomDiaryRepository(database, photoStore, clock)
 

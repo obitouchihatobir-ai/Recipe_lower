@@ -90,7 +90,7 @@ fun AboutContent(versionName: String, onBack: () -> Unit, modifier: Modifier = M
                 },
                 Modifier
                     .heightIn(min = 48.dp)
-                    .clickable(role = Role.Button, onClickLabel = "Abrir open-meteo.com") { uriHandler.openUri(OPEN_METEO_URL) }
+                    .clickable(role = Role.Button, onClickLabel = "Abrir open-meteo.com") { runCatching { uriHandler.openUri(OPEN_METEO_URL) } /* sin navegador no se cierra la app */ }
                     .padding(vertical = 12.dp)
                     .testTag("about-open-meteo"),
                 color = c.ink,
