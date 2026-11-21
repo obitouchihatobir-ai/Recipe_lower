@@ -1,5 +1,7 @@
 package app.recetario.home
 
+import org.junit.Rule
+import app.recetario.testing.MainDispatcherRule
 import app.recetario.recipes.data.RecipeRepository
 import app.recetario.recipes.model.Category
 import app.recetario.recipes.model.Recipe
@@ -10,19 +12,14 @@ import app.recetario.settings.BackupStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
-import org.junit.Before
 import org.junit.Test
 import java.time.Clock
 import java.time.Instant
@@ -55,17 +52,14 @@ private class MovableClock(var now: Instant) : Clock() {
 class HomeViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
-    @Before
-    fun setUp() = Dispatchers.setMain(dispatcher)
-
-    @After
-    fun tearDown() = Dispatchers.resetMain()
+    @get:Rule
+    val main = MainDispatcherRule(dispatcher)
 
     @Test
     fun greeting_isReevaluatedOnEachTick() = runTest(dispatcher) {
         val clock = MovableClock(Instant.parse("2026-11-13T11:59:00Z"))
         val ticks = MutableSharedFlow<Unit>()
-        val vm = HomeViewModel(EmptyRepository(), flowOf(BackupStatus()), clock, ticks = ticks, dispatcher = dispatcher, dismissNotice = {})
+        val vm = main.track(HomeViewModel(EmptyRepository(), flowOf(BackupStatus()), clock, ticks = ticks, dispatcher = dispatcher, dismissNotice = {}))
         backgroundScope.launch { vm.state.collect {} }
         runCurrent()
         assertThat(vm.state.value.greeting).isEqualTo("Buenos días")
@@ -87,7 +81,7 @@ class HomeViewModelTest {
         val ticks = MutableSharedFlow<Unit>()
         val firstRecipeAt = MutableStateFlow<Instant?>(null)
         val status = MutableStateFlow(BackupStatus(lastExternal = Instant.parse("2026-10-20T10:00:00Z")))
-        val vm = HomeViewModel(EmptyRepository(firstRecipeAt), status, clock, ticks = ticks, dispatcher = dispatcher, dismissNotice = {})
+        val vm = main.track(HomeViewModel(EmptyRepository(firstRecipeAt), status, clock, ticks = ticks, dispatcher = dispatcher, dismissNotice = {}))
         backgroundScope.launch { vm.state.collect {} }
         runCurrent()
         // Sin recetas no hay nada que recordar.
@@ -126,11 +120,11 @@ class HomeViewModelTest {
         val clock = MovableClock(Instant.parse("2026-11-20T10:00:00Z"))
         val status = MutableStateFlow(BackupStatus())
         val saved = mutableListOf<String>()
-        val vm = HomeViewModel(
+        val vm = main.track(HomeViewModel(
             EmptyRepository(flowOf(Instant.parse("2026-01-01T10:00:00Z"))), status, clock,
             ticks = MutableSharedFlow(), dispatcher = dispatcher,
             dismissNotice = { key -> saved += key; status.value = status.value.copy(noticeDismissed = key) },
-        )
+        ))
         backgroundScope.launch { vm.state.collect {} }
         runCurrent()
         assertThat(vm.state.value.backupNotice).isEqualTo(BackupNotice.Reminder)

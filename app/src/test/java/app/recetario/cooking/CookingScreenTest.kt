@@ -1,5 +1,6 @@
 package app.recetario.cooking
 
+import app.recetario.testing.CloseDatabaseRule
 import android.Manifest
 import android.app.Application
 import android.os.Looper
@@ -51,7 +52,6 @@ import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -62,7 +62,15 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class CookingScreenTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule {
+        // Sin temporizadores en marcha, el bucle de este contenedor deja de avanzar.
+        container.timerManager.timers.value.forEach { container.timerManager.cancel(it.id) }
+        container.database.close()
+    }
+
+    @get:Rule(order = 1)
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var container: AppContainer
@@ -92,13 +100,6 @@ class CookingScreenTest {
                 ),
             )
         }
-    }
-
-    @After
-    fun tearDown() {
-        // Sin temporizadores en marcha, el bucle de este contenedor deja de avanzar.
-        container.timerManager.timers.value.forEach { container.timerManager.cancel(it.id) }
-        container.database.close()
     }
 
     /** [wrap] rodea la app (para cambiar un CompositionLocal en una prueba). */

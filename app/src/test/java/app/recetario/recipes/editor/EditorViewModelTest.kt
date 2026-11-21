@@ -1,5 +1,6 @@
 package app.recetario.recipes.editor
 
+import app.recetario.testing.MainDispatcherRule
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.core.data.DefaultCategories
@@ -13,7 +14,6 @@ import app.recetario.recipes.model.RecipeSummary
 import app.recetario.recipes.model.ServeTemp
 import app.recetario.recipes.quantity.MeasureUnit
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,11 +25,8 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -77,6 +74,9 @@ class EditorViewModelTest {
     val tmp = TemporaryFolder()
 
     private val dispatcher = StandardTestDispatcher()
+
+    @get:Rule
+    val main = MainDispatcherRule(dispatcher)
     private val now = Instant.parse("2026-11-13T10:00:00Z")
     private val clock = TestClock(now)
     private lateinit var repo: FakeRecipeRepository
@@ -85,14 +85,10 @@ class EditorViewModelTest {
 
     @Before
     fun setUp() {
-        Dispatchers.setMain(dispatcher)
         repo = FakeRecipeRepository()
         photos = PhotoStore(tmp.newFolder("photos"))
         draftsDir = File(tmp.root, "drafts")
     }
-
-    @After
-    fun tearDown() = Dispatchers.resetMain()
 
     private fun TestScope.newVm(recipeId: String? = null, categoryId: String? = null): EditorViewModel {
         val args = buildMap<String, Any?> {
@@ -100,7 +96,7 @@ class EditorViewModelTest {
             categoryId?.let { put("categoryId", it) }
         }
         val handle = SavedStateHandle(args)
-        val vm = EditorViewModel(handle, repo, photos, DraftStore(draftsDir), clock, ioDispatcher = dispatcher)
+        val vm = main.track(EditorViewModel(handle, repo, photos, DraftStore(draftsDir), clock, ioDispatcher = dispatcher))
         runCurrent()
         return vm
     }
@@ -158,7 +154,7 @@ class EditorViewModelTest {
     @Test
     fun save_ofANewRecipe_remembersItsIdInTheSavedState_soAfterProcessDeathItReopensThatRecipe() = runTest(dispatcher) {
         val handle = SavedStateHandle()
-        val vm = EditorViewModel(handle, repo, photos, DraftStore(draftsDir), clock, ioDispatcher = dispatcher)
+        val vm = main.track(EditorViewModel(handle, repo, photos, DraftStore(draftsDir), clock, ioDispatcher = dispatcher))
         runCurrent()
         vm.fillValid()
 
@@ -166,10 +162,10 @@ class EditorViewModelTest {
 
         assertThat(handle.get<String>("id")).isEqualTo(id)
         // Android cerró la app: el editor vuelve con ese estado y abre la receta guardada, no un formulario vacío.
-        val restored = EditorViewModel(
+        val restored = main.track(EditorViewModel(
             SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) }), repo, photos, DraftStore(draftsDir), clock,
             ioDispatcher = dispatcher,
-        )
+        ))
         runCurrent()
         assertThat(restored.state.value.recipeId).isEqualTo(id)
         assertThat(restored.state.value.title).isEqualTo("Tarta")

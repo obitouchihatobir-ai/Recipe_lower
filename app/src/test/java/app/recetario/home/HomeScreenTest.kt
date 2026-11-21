@@ -1,5 +1,6 @@
 package app.recetario.home
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -22,7 +23,6 @@ import app.recetario.testing.sampleRecipe
 import app.recetario.testing.testClock
 import app.recetario.testing.waitFor
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
@@ -36,7 +36,11 @@ import java.time.LocalDate
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class HomeScreenTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -46,9 +50,6 @@ class HomeScreenTest {
     fun setUp() {
         container = installTestContainer()
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     private fun recipes(vararg titles: Pair<String, String>) = runBlocking {
         titles.forEachIndexed { i, (id, title) -> container.recipeRepository.save(sampleRecipe(id, title, updatedAt = i.toLong())) }

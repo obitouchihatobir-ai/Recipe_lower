@@ -1,5 +1,6 @@
 package app.recetario.pantry
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -19,18 +20,15 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import org.junit.rules.ExternalResource
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class WhatCanIMakeTest {
-    /** Cierra la base de datos después de desechar la composición (como en ShoppingScreenTest). */
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
     @get:Rule(order = 0)
-    val closeDatabase = object : ExternalResource() {
-        override fun after() = container.database.close()
-    }
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
 
     @get:Rule(order = 1)
     val rule = createComposeRule()

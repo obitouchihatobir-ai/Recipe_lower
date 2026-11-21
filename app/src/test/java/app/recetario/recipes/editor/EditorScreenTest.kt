@@ -1,5 +1,6 @@
 package app.recetario.recipes.editor
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
@@ -23,7 +24,6 @@ import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -33,7 +33,11 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class EditorScreenTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -42,9 +46,6 @@ class EditorScreenTest {
     fun setUp() {
         container = installTestContainer()
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     /** Abre el editor de una receta nueva desde la pestaña Recetas. */
     private fun openNewRecipe() {

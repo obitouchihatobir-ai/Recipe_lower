@@ -1,5 +1,6 @@
 package app.recetario.pairing
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -32,7 +33,6 @@ import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import androidx.compose.ui.test.performScrollToNode
-import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
@@ -44,7 +44,11 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class DetailPairingTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -56,9 +60,6 @@ class DetailPairingTest {
         container = installTestContainer()
         seedPairingRecipes(container)
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     private fun launchDetail(id: String) = rule.setContent {
         RecetarioTheme(ThemeChoice.CALIDO) {

@@ -1,5 +1,8 @@
 package app.recetario.recipes.detail
 
+import org.junit.Rule
+import app.recetario.testing.CloseDatabaseRule
+import app.recetario.testing.MainDispatcherRule
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
@@ -10,7 +13,6 @@ import app.recetario.testing.ingredient
 import app.recetario.testing.installTestContainer
 import app.recetario.testing.sampleRecipe
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import app.recetario.recipes.model.Recipe
 import kotlinx.coroutines.flow.Flow
@@ -18,11 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,18 +28,18 @@ import org.junit.runner.RunWith
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(AndroidJUnit4::class)
 class DetailViewModelTest {
+    /** Se cierra al final: después de desechar los ViewModel (`main`). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
+    val main = MainDispatcherRule()
+
     private lateinit var container: AppContainer
 
     @Before
     fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
         container = installTestContainer()
-    }
-
-    @After
-    fun tearDown() {
-        container.database.close()
-        Dispatchers.resetMain()
     }
 
     private fun eight() = (1..8).map { ingredient("i$it", "Ingrediente $it", 100.0 * it, MeasureUnit.GRAM) }
@@ -51,7 +49,7 @@ class DetailViewModelTest {
     }
 
     private fun vm(handle: SavedStateHandle = SavedStateHandle()) =
-        DetailViewModel("r1", container.recipeRepository, container.shoppingRepository, container.photoStore, handle)
+        main.track(DetailViewModel("r1", container.recipeRepository, container.shoppingRepository, container.photoStore, handle))
 
     private fun DetailViewModel.loaded(): DetailUiState =
         runBlocking { withTimeout(10_000) { state.first { !it.loading } } }
@@ -153,7 +151,7 @@ class DetailViewModelTest {
         val failing = object : RecipeRepository by container.recipeRepository {
             override suspend fun delete(id: String) = throw IllegalStateException("disk I/O error")
         }
-        val vm = DetailViewModel("r1", failing, container.shoppingRepository, container.photoStore, SavedStateHandle())
+        val vm = main.track(DetailViewModel("r1", failing, container.shoppingRepository, container.photoStore, SavedStateHandle()))
         vm.loaded()
         vm.delete()
         assertThat(runBlocking { withTimeout(10_000) { vm.events.first() } }).isEqualTo(DetailEvent.DeleteFailed)
@@ -196,10 +194,10 @@ class DetailViewModelTest {
     fun withPairing_theRecipeIsObservedOnce() {
         save(ingredient("i1", "Chile poblano", 2.0, MeasureUnit.PIECE))
         val recipes = CountingRecipes(container.recipeRepository)
-        val vm = DetailViewModel(
+        val vm = main.track(DetailViewModel(
             "r1", recipes, container.shoppingRepository, container.photoStore, SavedStateHandle(),
             pairing = container.pairingRepository,
-        )
+        ))
         val s = vm.await { it.pairingSubject != null }
         assertThat(s.recipe?.title).isEqualTo("Crema")
         assertThat(recipes.subscriptions.get()).isEqualTo(1)
