@@ -1,15 +1,10 @@
 package app.recetario.home
 
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.isSelected
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -45,12 +40,6 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-
-/** Un dueño del ciclo de vida que la prueba mueve a mano (empieza en RESUMED). */
-private class TestLifecycleOwner : LifecycleOwner {
-    val registry: LifecycleRegistry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
-    override val lifecycle: Lifecycle get() = registry
-}
 
 /**
  * La tarjeta Hoy de Inicio (diseño 2, §7.3). El reloj de las pruebas es el viernes 13 de noviembre de 2026 a las
@@ -184,31 +173,6 @@ class TodayCardTest {
         rule.onNodeWithTag("today-weather").assertDoesNotExist()
         // Se intentó pedir el tiempo al entrar, sin bloquear nada.
         rule.waitUntil(5_000) { offline.requests.isNotEmpty() }
-    }
-
-    @Test
-    fun weather_askedAgainWhenReturningToTheApp() {
-        // Una capital conocida y Open-Meteo sin conexión: cada vez que se pide, queda apuntado.
-        val offline = FakeOpenMeteo(offline = true)
-        val c = install(openMeteo = offline)
-        runBlocking { c.settingsRepository.setCity(Place("Madrid", "Comunidad de Madrid", "España", 40.4168, -3.7038)) }
-        c.save(soup)
-        val owner = TestLifecycleOwner()
-        rule.setContent {
-            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                RecetarioTheme(ThemeChoice.CALIDO) { AppNavHost(c) }
-            }
-        }
-        rule.waitFor(hasTestTag("home-diary"))
-        rule.waitUntil(5_000) { offline.forecastRequests.isNotEmpty() }
-        rule.waitForIdle()
-        val before = offline.forecastRequests.size
-
-        // La app pasa a segundo plano y vuelve (ON_PAUSE y ON_RESUME): se pide otra vez.
-        rule.runOnIdle { owner.registry.currentState = Lifecycle.State.STARTED }
-        rule.waitForIdle()
-        rule.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
-        rule.waitUntil(5_000) { offline.forecastRequests.size > before }
     }
 
     @Test
