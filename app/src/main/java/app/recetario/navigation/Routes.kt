@@ -60,3 +60,11 @@ data object WhatCanIMake
 /** Ajustes › Despensa › Básicos. */
 @Serializable
 data object PantryBasics
+
+/** Ajustes › Ubicación y clima. */
+@Serializable
+data object LocationWeather
+
+/** Ajustes › Horarios de comidas. */
+@Serializable
+data object MealTimesSettings

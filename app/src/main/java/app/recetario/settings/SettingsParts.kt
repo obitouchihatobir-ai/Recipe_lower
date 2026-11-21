@@ -23,6 +23,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -118,6 +128,53 @@ fun BoxScope.BottomPanel(onDismiss: () -> Unit, tag: String, content: @Composabl
         verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content,
     )
+}
+
+/**
+ * Una fila con un valor y sus botones «−» y «+» (horas de noche, horarios de comidas, umbrales). Los botones llevan
+ * las etiquetas `<tag>-minus` y `<tag>-plus` y se leen por su descripción.
+ */
+@Composable
+fun StepperRow(
+    label: String,
+    value: String,
+    tag: String,
+    minusDescription: String,
+    plusDescription: String,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+    modifier: Modifier = Modifier,
+    minusEnabled: Boolean = true,
+    plusEnabled: Boolean = true,
+) {
+    val c = LocalRecetarioColors.current
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 52.dp).testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), color = c.ink, style = MaterialTheme.typography.bodyLarge)
+        Surface(shape = CircleShape, color = c.surface, border = BorderStroke(1.dp, c.line)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = onMinus,
+                    enabled = minusEnabled,
+                    modifier = Modifier.semantics { contentDescription = minusDescription }.testTag("$tag-minus"),
+                ) { Text("−", style = MaterialTheme.typography.titleMedium) }
+                Text(
+                    value,
+                    Modifier.widthIn(min = 56.dp),
+                    textAlign = TextAlign.Center,
+                    color = c.ink,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                TextButton(
+                    onClick = onPlus,
+                    enabled = plusEnabled,
+                    modifier = Modifier.semantics { contentDescription = plusDescription }.testTag("$tag-plus"),
+                ) { Text("+", style = MaterialTheme.typography.titleMedium) }
+            }
+        }
+    }
 }
 
 /** Ejecuta [block]; si falla (salvo cancelación) avisa con [message] en vez de tumbar la app. */

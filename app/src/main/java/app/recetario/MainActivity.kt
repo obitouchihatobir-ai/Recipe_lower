@@ -32,6 +32,7 @@ import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.core.ui.theme.ThemeRevealHost
 import app.recetario.navigation.AppNavHost
 import app.recetario.settings.rememberResolvedTheme
+import app.recetario.settings.themeInputs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -87,7 +88,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 startup = openDatabase(app, container)
-                container.settingsRepository.themeSettings.first()
+                // Los mismos datos que espera el tema (ajustes y, con el tema según el sol, la previsión guardada).
+                container.themeInputs().first()
             } finally {
                 contentReady = true
             }

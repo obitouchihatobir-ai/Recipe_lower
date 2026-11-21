@@ -63,6 +63,7 @@ import app.recetario.core.ui.theme.ThemeSettings
 import app.recetario.core.ui.theme.paletteFor
 import app.recetario.core.ui.theme.resolveTheme
 import app.recetario.core.ui.theme.typographyFor
+import app.recetario.weather.LocationMode
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -95,6 +96,9 @@ internal suspend fun SettingsRepository.pickTheme(current: ThemeSettings, choice
 fun AppearanceRoute(container: AppContainer, onBack: () -> Unit) {
     val repo = container.settingsRepository
     val settings by repo.themeSettings.collectAsStateWithLifecycle(initialValue = null)
+    val inputs by remember(container) { container.themeInputs() }.collectAsStateWithLifecycle(initialValue = null)
+    val bySun by repo.themeBySun.collectAsStateWithLifecycle(initialValue = false)
+    val mode by repo.locationMode.collectAsStateWithLifecycle(initialValue = LocationMode.NONE)
     val current = settings
     val now = rememberNow(container.clock)
     val systemDark = isSystemInDarkTheme()
@@ -106,7 +110,7 @@ fun AppearanceRoute(container: AppContainer, onBack: () -> Unit) {
         if (current != null) {
             AppearanceContent(
                 settings = current,
-                effective = resolveTheme(current, now, systemDark),
+                effective = inputs?.resolve(now, systemDark, container.clock) ?: resolveTheme(current, now, systemDark),
                 onTheme = { choice, origin ->
                     reveal(origin)
                     scope.launch { snackbar.reportFailure(THEME_SAVE_FAILED) { repo.pickTheme(current, choice) } }
@@ -116,7 +120,7 @@ fun AppearanceRoute(container: AppContainer, onBack: () -> Unit) {
                     scope.launch {
                         snackbar.reportFailure(THEME_SAVE_FAILED) {
                             // Al apagarlo se queda lo que se ve ahora, sin cambio de tema.
-                            if (!enabled) repo.setTheme(resolveTheme(current, now, systemDark))
+                            if (!enabled) repo.setTheme(inputs?.resolve(now, systemDark, container.clock) ?: resolveTheme(current, now, systemDark))
                             repo.setAuto(enabled)
                         }
                     }
@@ -124,6 +128,9 @@ fun AppearanceRoute(container: AppContainer, onBack: () -> Unit) {
                 onNightWindow = { start, end ->
                     scope.launch { snackbar.reportFailure("No se pudo guardar el horario de noche.") { repo.setNightWindow(start, end) } }
                 },
+                sunAvailable = mode != LocationMode.NONE,
+                bySun = bySun,
+                onBySun = { enabled -> scope.launch { snackbar.reportFailure(THEME_SAVE_FAILED) { repo.setThemeBySun(enabled) } } },
             )
         }
     }
@@ -138,6 +145,9 @@ fun AppearanceContent(
     onAuto: (Boolean, Offset) -> Unit,
     onNightWindow: (LocalTime, LocalTime) -> Unit,
     modifier: Modifier = Modifier,
+    sunAvailable: Boolean = false,
+    bySun: Boolean = false,
+    onBySun: (Boolean) -> Unit = {},
 ) {
     val c = LocalRecetarioColors.current
     Column(
@@ -160,6 +170,11 @@ fun AppearanceContent(
                 fontSizeSp = 12,
             )
             Spacer(Modifier.height(10.dp))
+            // Solo con ubicación: sin ella no hay salida ni puesta del sol (diseño 2, §7.4).
+            if (sunAvailable) {
+                SunRow(bySun, onBySun)
+                Spacer(Modifier.height(6.dp))
+            }
             NightHours(settings, onNightWindow)
         }
     }
@@ -240,6 +255,29 @@ private fun AutoRow(auto: Boolean, onToggle: (Boolean, Offset) -> Unit) {
     }
 }
 
+@Composable
+private fun SunRow(bySun: Boolean, onToggle: (Boolean) -> Unit) {
+    val c = LocalRecetarioColors.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(c.bg)
+            .border(1.dp, c.line, RoundedCornerShape(16.dp))
+            .toggleable(value = bySun, role = Role.Switch, onValueChange = onToggle)
+            .padding(12.dp)
+            .testTag("sun-switch"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Noche según la salida y puesta del sol", color = c.ink, style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.5.sp))
+            MutedText("Con el tiempo de tu ubicación. Sin datos de los últimos 3 días, se usan las horas de abajo.", fontSizeSp = 12)
+        }
+        Switch(checked = bySun, onCheckedChange = null, colors = appSwitchColors())
+    }
+}
+
 /** Horas de noche: cada una con «−» y «+» de media hora. */
 @Composable
 private fun NightHours(settings: ThemeSettings, onChange: (LocalTime, LocalTime) -> Unit) {
@@ -263,33 +301,16 @@ private fun NightHours(settings: ThemeSettings, onChange: (LocalTime, LocalTime)
 
 @Composable
 private fun HourStepper(label: String, time: LocalTime, other: LocalTime, tag: String, onTime: (LocalTime) -> Unit) {
-    val c = LocalRecetarioColors.current
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag(tag),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, Modifier.weight(1f), color = c.ink, style = MaterialTheme.typography.bodyLarge)
-        Surface(shape = CircleShape, color = c.surface, border = BorderStroke(1.dp, c.line)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Si empiezo y termino a la misma hora, la noche queda vacía y Automático nunca la alcanza.
-                TextButton(
-                    onClick = { onTime(time.minusMinutes(NIGHT_STEP_MINUTES)) },
-                    enabled = time.minusMinutes(NIGHT_STEP_MINUTES) != other,
-                    modifier = Modifier.semantics { contentDescription = "$label: media hora antes" }.testTag("$tag-minus"),
-                ) { Text("−", style = MaterialTheme.typography.titleMedium) }
-                Text(
-                    time.format(hourFormat),
-                    Modifier.widthIn(min = 56.dp),
-                    textAlign = TextAlign.Center,
-                    color = c.ink,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                TextButton(
-                    onClick = { onTime(time.plusMinutes(NIGHT_STEP_MINUTES)) },
-                    enabled = time.plusMinutes(NIGHT_STEP_MINUTES) != other,
-                    modifier = Modifier.semantics { contentDescription = "$label: media hora después" }.testTag("$tag-plus"),
-                ) { Text("+", style = MaterialTheme.typography.titleMedium) }
-            }
-        }
-    }
+    // Si empiezo y termino a la misma hora, la noche queda vacía y Automático nunca la alcanza.
+    StepperRow(
+        label = label,
+        value = time.format(hourFormat),
+        tag = tag,
+        minusDescription = "$label: media hora antes",
+        plusDescription = "$label: media hora después",
+        onMinus = { onTime(time.minusMinutes(NIGHT_STEP_MINUTES)) },
+        onPlus = { onTime(time.plusMinutes(NIGHT_STEP_MINUTES)) },
+        minusEnabled = time.minusMinutes(NIGHT_STEP_MINUTES) != other,
+        plusEnabled = time.plusMinutes(NIGHT_STEP_MINUTES) != other,
+    )
 }

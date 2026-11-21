@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.core.app.ActivityOptionsCompat
 import androidx.navigation.NavHostController
@@ -505,7 +506,7 @@ class BackupScreenTest {
         }
         rule.runOnIdle { nav.navigate(Settings) }
         rule.waitFor(hasTestTag("settings-backup"))
-        rule.onNodeWithTag("settings-backup").performClick()
+        rule.onNodeWithTag("settings-backup").performScrollTo().performClick()
         rule.waitFor(hasTestTag("backup-screen"))
     }
 

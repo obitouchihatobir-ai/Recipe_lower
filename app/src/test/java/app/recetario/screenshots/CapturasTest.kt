@@ -44,6 +44,13 @@ import app.recetario.core.ui.motion.SAVED_CHECK_MS
 import app.recetario.core.ui.theme.RecetarioTheme
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.navigation.About
+import app.recetario.navigation.LocationWeather
+import app.recetario.navigation.MealTimesSettings
+import app.recetario.testing.FakeOpenMeteo
+import app.recetario.testing.forecastJson
+import app.recetario.weather.Place
+import app.recetario.weather.WeatherCache
+import androidx.compose.ui.test.performTextInput
 import app.recetario.navigation.AppNavHost
 import app.recetario.navigation.Appearance
 import app.recetario.navigation.Backup
@@ -133,9 +140,15 @@ class CapturasTest {
     fun nocturno() = captureAll(ThemeChoice.NOCTURNO)
 
     private fun captureAll(theme: ThemeChoice) {
-        val c = installTestContainer().also { container = it }
+        val c = installTestContainer(openMeteo = FakeOpenMeteo()).also { container = it }
         runBlocking {
             sampleRecipes().forEach { c.recipeRepository.save(it) }
+            // Una capital conocida (nunca la ubicación del usuario) con el tiempo recién pedido.
+            val madrid = Place("Madrid", "Comunidad de Madrid", "España", 40.4168, -3.7038)
+            c.settingsRepository.setCity(madrid)
+            c.settingsRepository.setWeatherCache(
+                WeatherCache(forecastJson(LocalDate.of(2026, 11, 13)), c.clock.instant(), madrid.latitude, madrid.longitude),
+            )
             // Una copia reciente fuera del teléfono: Inicio sin tarjeta de aviso (la tarjeta va en captureHomeNotice).
             c.settingsRepository.updateBackupStatus { it.copy(lastExternal = Instant.parse("2026-11-10T18:05:00Z")) }
         }
@@ -196,6 +209,7 @@ class CapturasTest {
         rule.waitFor(hasTestTag("category-panel"))
         save("categorias-nueva-$name")
 
+        captureWeather(nav, name)
         captureConverter(nav, name)
         captureBackup(c, nav, name)
         captureCooking(c, nav, name)
@@ -443,6 +457,25 @@ class CapturasTest {
     }
 
     /** Conversor (1 taza de harina) y la hoja de equivalencias del detalle al tocar «1½ tazas». */
+    /** Ubicación y clima (con el tiempo guardado y la búsqueda de ciudad) y los horarios de comidas. */
+    private fun captureWeather(nav: NavHostController, name: String) {
+        rule.runOnIdle { nav.navigate(LocationWeather) }
+        rule.waitFor(hasText("Actualizado a las 21:40"))
+        save("ubicacion-clima-$name")
+        rule.onNodeWithTag("loc-city").performClick()
+        rule.waitFor(hasTestTag("city-panel"))
+        rule.onNodeWithTag("city-field").performTextInput("Bogotá")
+        rule.onNodeWithTag("city-search").performClick()
+        rule.waitFor(hasText("Bogotá, Bogotá D.C., Colombia"))
+        save("ubicacion-ciudad-$name")
+        rule.runOnIdle { nav.popBackStack() }
+        rule.waitForGone(hasTestTag("location-weather-screen"))
+
+        rule.runOnIdle { nav.navigate(MealTimesSettings) }
+        rule.waitFor(hasTestTag("meal-BREAKFAST-end"))
+        save("horarios-$name")
+    }
+
     private fun captureConverter(nav: NavHostController, name: String) {
         rule.runOnIdle { nav.navigate(Converter) }
         rule.waitFor(hasTestTag("converter-screen"))

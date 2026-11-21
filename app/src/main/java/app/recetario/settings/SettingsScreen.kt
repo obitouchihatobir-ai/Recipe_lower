@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.recetario.AppContainer
 import app.recetario.core.ui.components.ChoiceChip
 import app.recetario.core.ui.theme.ThemeSettings
+import app.recetario.weather.label
 import kotlinx.coroutines.launch
 
 @Composable
@@ -32,8 +33,11 @@ fun SettingsRoute(
     onBackup: () -> Unit,
     onAbout: () -> Unit,
     onPantryBasics: () -> Unit = {},
+    onLocationWeather: () -> Unit = {},
+    onMealTimes: () -> Unit = {},
 ) {
     val repo = container.settingsRepository
+    val place by container.weatherRepository.location().collectAsStateWithLifecycle(initialValue = null)
     val basics by repo.pantryBasics.collectAsStateWithLifecycle(initialValue = null)
     val theme by repo.themeSettings.collectAsStateWithLifecycle(initialValue = ThemeSettings())
     val cupMl by repo.cupMl.collectAsStateWithLifecycle(initialValue = 240)
@@ -52,6 +56,9 @@ fun SettingsRoute(
         onAbout = onAbout,
         pantryBasicsSummary = basics?.let(::basicsSummary).orEmpty(),
         onPantryBasics = onPantryBasics,
+        locationSummary = place?.label() ?: "Sin ubicación",
+        onLocationWeather = onLocationWeather,
+        onMealTimes = onMealTimes,
     )
 }
 
@@ -62,7 +69,7 @@ private fun basicsSummary(basics: List<String>): String = when {
     else -> basics.take(4).joinToString(", ") + "…"
 }
 
-/** Ajustes (§6.3): apariencia, unidades, básicos de la despensa, categorías, etiquetas, copias de seguridad y «Acerca de». */
+/** Ajustes (§6.3): apariencia, unidades, ubicación y clima, horarios de comidas, básicos de la despensa, categorías, etiquetas, copias de seguridad y «Acerca de». */
 @Composable
 fun SettingsContent(
     appearanceSummary: String,
@@ -78,6 +85,9 @@ fun SettingsContent(
     snackbar: SnackbarHostState? = null,
     pantryBasicsSummary: String = "",
     onPantryBasics: () -> Unit = {},
+    locationSummary: String = "",
+    onLocationWeather: () -> Unit = {},
+    onMealTimes: () -> Unit = {},
 ) {
     SettingsPage("Ajustes", onBack, tag = "settings-screen", modifier = modifier, snackbar = snackbar) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 4.dp)) {
@@ -95,6 +105,18 @@ fun SettingsContent(
                     }
                 }
             }
+            SettingsRow(
+                "Ubicación y clima",
+                locationSummary.ifEmpty { null },
+                Modifier.testTag("settings-location"),
+                onClick = onLocationWeather,
+            )
+            SettingsRow(
+                "Horarios de comidas",
+                "Desayuno, comida, merienda y cena",
+                Modifier.testTag("settings-meal-times"),
+                onClick = onMealTimes,
+            )
             SettingsRow(
                 "Despensa › Básicos",
                 pantryBasicsSummary.ifEmpty { null },

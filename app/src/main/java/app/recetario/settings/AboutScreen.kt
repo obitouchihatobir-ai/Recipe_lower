@@ -16,7 +16,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -26,6 +34,8 @@ import app.recetario.core.ui.components.SectionTitle
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+private const val OPEN_METEO_URL = "https://open-meteo.com/"
 
 /** Fuentes incluidas y el archivo de su licencia en `assets/licenses/`. */
 private val fontLicenses = listOf(
@@ -45,6 +55,7 @@ fun AboutRoute(onBack: () -> Unit) {
 @Composable
 fun AboutContent(versionName: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val c = LocalRecetarioColors.current
+    val uriHandler = LocalUriHandler.current
     var openLicense by remember { mutableStateOf<String?>(null) }
     val selected = openLicense
     if (selected != null) {
@@ -68,6 +79,22 @@ fun AboutContent(versionName: String, onBack: () -> Unit, modifier: Modifier = M
             MutedText(
                 "Fuentes: Fraunces, Inter, Nunito, Playfair Display (SIL Open Font License 1.1)",
                 Modifier.padding(top = 16.dp).testTag("about-credits"),
+            )
+            // Atribución que exige Open-Meteo (CC BY 4.0), con enlace a su web.
+            SectionTitle("Datos del tiempo", Modifier.padding(top = 24.dp, bottom = 4.dp))
+            Text(
+                buildAnnotatedString {
+                    append("Datos del tiempo: ")
+                    withStyle(SpanStyle(color = c.accent, textDecoration = TextDecoration.Underline)) { append("Open-Meteo.com") }
+                    append(", CC BY 4.0")
+                },
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Button, onClickLabel = "Abrir open-meteo.com") { uriHandler.openUri(OPEN_METEO_URL) }
+                    .padding(vertical = 12.dp)
+                    .testTag("about-open-meteo"),
+                color = c.ink,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }

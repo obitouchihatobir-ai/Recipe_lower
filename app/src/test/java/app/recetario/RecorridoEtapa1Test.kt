@@ -343,7 +343,7 @@ class RecorridoEtapa1Test {
         rule.onNodeWithTag("home-settings").performClick()
         rule.waitFor(hasTestTag("settings-backup"))
         rule.waitForIdle()
-        rule.onNodeWithTag("settings-backup").performClick()
+        rule.onNodeWithTag("settings-backup").performScrollTo().performClick()
         rule.waitFor(hasTestTag("backup-export"))
         rule.waitForIdle()
 

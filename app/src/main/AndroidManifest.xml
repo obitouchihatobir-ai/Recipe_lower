@@ -10,6 +10,11 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Clima de Open-Meteo (solo api.open-meteo.com y geocoding-api.open-meteo.com). La ubicación aproximada se pide
+         solo al tocar «Usar mi ubicación aproximada»; la precisa, nunca. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- Copia de seguridad de Android (§8.5): solo la base de datos y los ajustes, sin fotos ni copias del teléfono.
          fullBackupContent hasta Android 11; dataExtractionRules desde Android 12 (nube y paso a otro teléfono). -->
     <application

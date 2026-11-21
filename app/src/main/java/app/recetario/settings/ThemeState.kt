@@ -14,6 +14,12 @@ import app.recetario.AppContainer
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.core.ui.theme.ThemeSettings
 import app.recetario.core.ui.theme.resolveTheme
+import app.recetario.core.ui.theme.sunTimesFor
+import app.recetario.weather.WeatherSnapshot
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import java.time.LocalDate
 import app.recetario.home.minuteTicks
 import java.time.Clock
 import java.time.LocalTime
@@ -31,11 +37,29 @@ fun rememberNow(clock: Clock): LocalTime {
     return now
 }
 
-/** El tema que toca ahora (§6.1), o null mientras se leen los ajustes. */
+/**
+ * Lo que decide el tema: los ajustes y, con «Noche según la salida y puesta del sol» ([bySun]), la última previsión
+ * guardada ([forecast]; solo mientras haya ubicación).
+ */
+data class ThemeInputs(val settings: ThemeSettings, val bySun: Boolean, val forecast: WeatherSnapshot?) {
+    /** Salida y puesta del sol de hoy, si toca usarlas: con Automático, el ajuste encendido y una previsión de menos de 3 días. */
+    fun sun(clock: Clock): Pair<LocalTime, LocalTime>? =
+        if (settings.auto && bySun) sunTimesFor(forecast, LocalDate.now(clock), clock.instant()) else null
+
+    fun resolve(now: LocalTime, systemDark: Boolean, clock: Clock): ThemeChoice = resolveTheme(settings, now, systemDark, sun(clock))
+}
+
+/** Los ajustes del tema y, si hace falta, la previsión. `MainActivity` espera a que lleguen antes de pintar. */
+fun AppContainer.themeInputs(): Flow<ThemeInputs> =
+    combine(settingsRepository.themeSettings, settingsRepository.themeBySun, weatherRepository.forecast) { settings, bySun, forecast ->
+        ThemeInputs(settings, bySun, forecast.takeIf { bySun })
+    }.distinctUntilChanged()
+
+/** El tema que toca ahora (§6.1 y diseño 2, §7.4), o null mientras se leen los ajustes. */
 @Composable
 fun rememberResolvedTheme(container: AppContainer): ThemeChoice? {
-    val settings by container.settingsRepository.themeSettings.collectAsState<ThemeSettings, ThemeSettings?>(initial = null)
+    val inputs by remember(container) { container.themeInputs() }.collectAsState<ThemeInputs, ThemeInputs?>(initial = null)
     val now = rememberNow(container.clock)
     val dark = isSystemInDarkTheme()
-    return settings?.let { resolveTheme(it, now, dark) }
+    return inputs?.resolve(now, dark, container.clock)
 }

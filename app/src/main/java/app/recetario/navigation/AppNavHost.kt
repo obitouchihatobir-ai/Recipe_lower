@@ -60,6 +60,8 @@ import app.recetario.settings.TagsRoute
 import app.recetario.shopping.ShoppingRoute
 import app.recetario.pantry.WhatCanIMakeRoute
 import app.recetario.settings.PantryBasicsRoute
+import app.recetario.settings.LocationWeatherRoute
+import app.recetario.settings.MealTimesRoute
 
 private const val FADE_MS = 250
 
@@ -158,6 +160,12 @@ fun AppNavHost(
                                 onRecipe = { id -> navController.from(from) { navigate(RecipeDetail(id)) } },
                             )
                         }
+                        composable<LocationWeather> { from ->
+                            LocationWeatherRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<MealTimesSettings> { from ->
+                            MealTimesRoute(container, onBack = { navController.from(from) { popBackStack() } })
+                        }
                         composable<PantryBasics> { from ->
                             PantryBasicsRoute(container, onBack = { navController.from(from) { popBackStack() } })
                         }
@@ -190,6 +198,8 @@ fun AppNavHost(
                                 onBackup = { navController.from(from) { navigate(Backup) } },
                                 onAbout = { navController.from(from) { navigate(About) } },
                                 onPantryBasics = { navController.from(from) { navigate(PantryBasics) } },
+                                onLocationWeather = { navController.from(from) { navigate(LocationWeather) } },
+                                onMealTimes = { navController.from(from) { navigate(MealTimesSettings) } },
                             )
                         }
                         composable<Appearance> { from ->

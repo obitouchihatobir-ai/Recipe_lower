@@ -88,6 +88,10 @@ internal class BackupExporter(
             mealPlan = tables.mealPlan.map { PlannedMeal(it.id, LocalDate.parse(it.date), it.slot, it.recipeId, it.servings) },
             pairingRatings = tables.ratings.map { PairingRating(it.pairKey, it.aKind, it.aId, it.bKind, it.bId, it.liked, it.ratedAt) },
             pantryBasics = settings.pantryBasics.first(),
+            // La ubicación no va en la copia (es un dato personal y el archivo puede compartirse).
+            mealTimes = settings.mealTimes.first(),
+            thermalThresholds = settings.thermalThresholds.first(),
+            themeBySun = settings.themeBySun.first(),
         )
     }
 

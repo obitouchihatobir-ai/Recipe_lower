@@ -33,7 +33,14 @@ import app.recetario.settings.createSettingsDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import app.recetario.weather.AndroidLocationProvider
+import app.recetario.weather.DefaultWeatherRepository
+import app.recetario.weather.LocationProvider
+import app.recetario.weather.OpenMeteoClient
+import app.recetario.weather.WeatherRepository
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Clock
 
 class RecetarioApp : Application() {
@@ -88,6 +95,10 @@ class AppContainer(
     val databaseFile: File? = context.getDatabasePath(AppDatabase.FILE_NAME),
     /** Reinicia el proceso tras restaurar la base de datos; las pruebas pasan uno falso (no pueden cerrar la JVM). */
     restartApp: () -> Unit = { restartProcess(context.applicationContext) },
+    /** Abre las conexiones a Open-Meteo; las pruebas pasan una falsa (nunca salen a la red). */
+    openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+    /** Ubicación aproximada del teléfono (sin Play Services); las pruebas pasan una falsa. */
+    locationProvider: LocationProvider = AndroidLocationProvider(context),
 ) {
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")
@@ -106,6 +117,10 @@ class AppContainer(
         LogEntryEditor(diaryRepository, photoStore, clock, scope, applicationScope)
 
     val settingsRepository = SettingsRepository(settingsDataStore, localStateDataStore)
+
+    /** El clima de Open-Meteo (Hoy, Ajustes › Ubicación y clima y el tema según el sol), con su caché en `estado-local`. */
+    val weatherRepository: WeatherRepository =
+        DefaultWeatherRepository(settingsRepository, OpenMeteoClient(openConnection), locationProvider, clock)
 
     /** El tamaño de la taza sale de los ajustes. */
     val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, settingsRepository.cupMl)

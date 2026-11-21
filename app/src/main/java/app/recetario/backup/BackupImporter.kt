@@ -239,7 +239,10 @@ internal class BackupImporter(
             // Solo las que usaban las recetas sustituidas: las de un borrador del editor no se tocan.
             if (referenced != null) deletePhotos(previousPhotos - referenced)
             try {
-                settings.restoreFromBackup(data.themeSettings, data.cupMl, data.pantryBasics)
+                settings.restoreFromBackup(
+                    data.themeSettings, data.cupMl, data.pantryBasics,
+                    mealTimes = data.mealTimes, thermalThresholds = data.thermalThresholds, themeBySun = data.themeBySun,
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "No se pudieron aplicar los ajustes de la copia", e)
             }
