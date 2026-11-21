@@ -82,7 +82,7 @@ fun HomeRoute(
     val todayVm: TodayViewModel = viewModel(factory = TodayViewModel.factory(container))
     // Cada vez que se entra en Inicio y cada vez que se vuelve a la app (ON_RESUME): el tiempo se pide en segundo
     // plano (solo si la caché tiene más de 1 h).
-    androidx.compose.runtime.LaunchedEffect(Unit) { todayVm.refreshWeather() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { todayVm.refreshWeather() }
     val state by vm.state.collectAsStateWithLifecycle()
     val today by todayVm.state.collectAsStateWithLifecycle()
     HomeContent(
