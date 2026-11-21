@@ -1,0 +1,7 @@
+{"results":[
+{"id":1,"name":"Villa Ejemplo","latitude":19.43,"longitude":-99.13,"country":"México","admin1":"Estado Uno"},
+{"id":2,"name":"Villa Ejemplo","latitude":10.5,"longitude":-66.9,"country":"Venezuela","admin1":"Distrito Dos"},
+{"id":3,"name":"Villa Ejemplo","latitude":-34.6,"longitude":-58.4,"country":"Argentina"},
+{"id":4,"name":"Villa Ejemplo","latitude":40.4,"longitude":-3.7,"country_code":"ES"},
+{"id":5,"name":"Villa Ejemplo","latitude":4.7,"longitude":-74.0,"country":"Colombia","admin1":"Región Cinco"}],
+"generationtime_ms":0.6}

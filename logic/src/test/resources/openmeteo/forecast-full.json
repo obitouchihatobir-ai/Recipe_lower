@@ -1,0 +1,9 @@
+{"latitude":19.5,"longitude":-99.25,"generationtime_ms":0.4,"utc_offset_seconds":-21600,"timezone":"America/Mexico_City",
+"current":{"time":"2026-07-15T14:00","interval":900,"apparent_temperature":27.3,"precipitation":0.4,"weather_code":61,"is_day":1},
+"daily":{"time":["2026-07-15","2026-07-16","2026-07-17"],
+"weather_code":[61,3,0],
+"temperature_2m_max":[26.1,24.8,28.0],
+"temperature_2m_min":[13.2,12.9,14.0],
+"precipitation_probability_max":[80,null,10],
+"sunrise":["2026-07-15T06:58","2026-07-16T06:59","2026-07-17T06:59"],
+"sunset":["2026-07-15T20:02","2026-07-16T20:01","2026-07-17T20:01"]}}

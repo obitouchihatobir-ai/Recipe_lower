@@ -43,3 +43,43 @@ class ThemeResolverTest {
         assertThat(resolveTheme(s, LocalTime.of(23, 0), systemDark = false)).isEqualTo(ThemeChoice.CALIDO)
     }
 }
+
+class ThemeBySunTest {
+    private val sun = LocalTime.of(6, 58) to LocalTime.of(20, 2)
+
+    @Test
+    fun resolveTheme_bySun_nightAfterSunset() {
+        val s = ThemeSettings(auto = true, dayTheme = ThemeChoice.FRESCO)
+        assertThat(resolveTheme(s, LocalTime.of(20, 3), systemDark = false, sun = sun)).isEqualTo(ThemeChoice.NOCTURNO)
+        assertThat(resolveTheme(s, LocalTime.of(6, 57), systemDark = false, sun = sun)).isEqualTo(ThemeChoice.NOCTURNO)
+        // 20:00 sería noche por horas, pero el sol aún no se ha puesto.
+        assertThat(resolveTheme(s, LocalTime.of(20, 0), systemDark = false, sun = sun)).isEqualTo(ThemeChoice.FRESCO)
+        assertThat(resolveTheme(s, LocalTime.of(12, 0), systemDark = false, sun = sun)).isEqualTo(ThemeChoice.FRESCO)
+    }
+
+    @Test
+    fun resolveTheme_bySun_nullFallsBackToHours() {
+        val s = ThemeSettings(auto = true, dayTheme = ThemeChoice.FRESCO)
+        assertThat(resolveTheme(s, LocalTime.of(20, 0), systemDark = false, sun = null)).isEqualTo(ThemeChoice.NOCTURNO)
+        assertThat(resolveTheme(s, LocalTime.of(12, 0), systemDark = false, sun = null)).isEqualTo(ThemeChoice.FRESCO)
+    }
+
+    @Test
+    fun resolveTheme_bySun_manualAndSystemDarkStillWin() {
+        val manual = ThemeSettings(auto = false, choice = ThemeChoice.CALIDO)
+        assertThat(resolveTheme(manual, LocalTime.of(23, 0), systemDark = false, sun = sun)).isEqualTo(ThemeChoice.CALIDO)
+        val auto = ThemeSettings(auto = true)
+        assertThat(resolveTheme(auto, LocalTime.of(12, 0), systemDark = true, sun = sun)).isEqualTo(ThemeChoice.NOCTURNO)
+    }
+
+    @Test
+    fun isNightBySun_boundaries() {
+        val rise = LocalTime.of(7, 0)
+        val set = LocalTime.of(20, 0)
+        assertThat(isNightBySun(LocalTime.of(7, 0), rise, set)).isFalse()
+        assertThat(isNightBySun(LocalTime.of(6, 59), rise, set)).isTrue()
+        assertThat(isNightBySun(LocalTime.of(19, 59), rise, set)).isFalse()
+        assertThat(isNightBySun(LocalTime.of(20, 0), rise, set)).isTrue()
+        assertThat(isNightBySun(LocalTime.MIDNIGHT, rise, set)).isTrue()
+    }
+}
