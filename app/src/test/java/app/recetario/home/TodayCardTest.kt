@@ -186,6 +186,9 @@ class TodayCardTest {
         rule.waitFor(hasTestTag("today-start"))
         rule.onNodeWithTag("today-start").performClick()
         rule.waitFor(hasTestTag("cooking-list"))
+        // Que la receta termine de cargar antes de cerrar la base de datos.
+        rule.waitFor(hasText("Pela la calabaza."))
+        rule.waitForIdle()
     }
 
     @Test
