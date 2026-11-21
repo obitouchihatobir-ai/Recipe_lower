@@ -2,6 +2,8 @@ package app.recetario.diary
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -95,6 +97,15 @@ class DiaryScreenTest {
         assertThat(top("diary-entry-nov-10")).isLessThan(top("diary-entry-nov-3"))
         assertThat(top("diary-entry-nov-3")).isLessThan(october)
         assertThat(october).isLessThan(top("diary-entry-oct"))
+    }
+
+    /** TalkBack lee la valoración con la fila (no es una parada aparte dentro de la entrada). */
+    @Test
+    fun rating_isReadTogetherWithTheRow() {
+        log("e1", "r1", "Crema de calabaza", LocalDate.of(2026, 11, 10))
+        open()
+        rule.waitFor(hasTestTag("diary-entry-e1"))
+        rule.onNodeWithTag("diary-entry-e1").assert(hasContentDescription("4 de 5 estrellas"))
     }
 
     @Test

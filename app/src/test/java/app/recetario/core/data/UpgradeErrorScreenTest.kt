@@ -131,6 +131,34 @@ class UpgradeErrorScreenTest {
         assertThat(container.database.isOpen).isFalse()
     }
 
+    /**
+     * La guarda falló en `Application.onCreate` (sin espacio) y el proceso sigue vivo: al volver a abrir la pantalla,
+     * cuando ya se puede copiar, la guarda se repite, la copia se hace y la app abre (no se queda en el error).
+     */
+    @Test
+    fun copyFailedEarlier_retriesOnReopen_andOpensOnceItCanCopy() {
+        createV1Database(helper, dbName)
+        val dbFile = app.getDatabasePath(dbName)
+        val backupsDir = File(app.filesDir, BackupManager.BACKUPS_DIR)
+        // Como un disco lleno: la carpeta de copias no se puede crear.
+        backupsDir.parentFile!!.mkdirs()
+        backupsDir.writeText("no soy una carpeta")
+        app.upgrade = GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED)
+        container = installTestContainer(documents = documents, database = AppDatabase.create(app, dbName), databaseFile = dbFile)
+        launch()
+        rule.waitFor(hasText(BackupMessages.UPDATE_COPY_FAILED))
+        assertThat(container.database.isOpen).isFalse()
+
+        // El usuario libera espacio y vuelve a la app, con el mismo proceso.
+        backupsDir.delete()
+        scenario!!.recreate()
+
+        rule.waitFor(hasText("¿Qué cocinamos hoy?"), 10_000)
+        assertThat(app.upgrade).isEqualTo(GuardResult.Copied("antes-de-actualizar-v1-2026-11-13-2140.db"))
+        assertThat(backupsDir.list()!!.toList()).contains("antes-de-actualizar-v1-2026-11-13-2140.db")
+        assertThat(container.database.openHelper.readableDatabase.version).isEqualTo(AppDatabase.VERSION)
+    }
+
     @Test
     fun normalStart_opensTheDatabase_andShowsHome() {
         container = installTestContainer(documents = documents)

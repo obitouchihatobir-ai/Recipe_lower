@@ -2,6 +2,7 @@ package app.recetario.core.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteCantOpenDatabaseException
+import android.database.sqlite.SQLiteDatabase
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -179,5 +180,69 @@ class DatabaseUpgradeGuardTest {
         assertThat(backupsDir.list()!!.toList())
             .containsExactlyElementsIn(others + expectedCopy + "antes-de-actualizar-v1-2026-11-13-2140-2.db")
         assertThat(File(backupsDir, expectedCopy).readText()).isEqualTo("del mismo minuto")
+    }
+
+    /** Abre [file] como la abre Room (WAL) y sin puntos de control automáticos: lo nuevo se queda en el `-wal`. */
+    private fun openWal(file: File): SQLiteDatabase =
+        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING, KEEP_ON_CORRUPTION)
+            .also { db -> db.rawQuery("PRAGMA wal_autocheckpoint=0", null).use { it.moveToFirst() } }
+
+    private fun insertRecipe(db: SQLiteDatabase, id: String, title: String) = db.execSQL(
+        "INSERT INTO recipes (id, title, categoryId, coverPhoto, description, totalMinutes, servings, " +
+            "difficulty, sweet, salty, sour, bitter, spicy, intensity, rich, serveTemp, moments, alcoholic, " +
+            "course, notes, favorite, sourceUrl, aiGenerated, createdAt, updatedAt) VALUES " +
+            "('$id', '$title', 'cat-propia', NULL, '', 30, 4, 'EASY', 0, 0, 0, 0, 0, 'MEDIUM', 0, NULL, '', NULL, " +
+            "NULL, '', 0, NULL, 0, 1763500000000, 1763510000000)",
+    )
+
+    /**
+     * Android mató el proceso con datos solo en el `-wal` (sin punto de control): la guarda los pasa al archivo
+     * principal antes de copiarlo, así que la copia los tiene y Room, al migrar, los conserva.
+     */
+    @Test
+    fun guard_walOnlyData_isInTheCopy() {
+        val sourceName = "guarda-origen.db"
+        createV1Database(helper, sourceName)
+        val source = context.getDatabasePath(sourceName)
+        val writer = openWal(source)
+        try {
+            insertRecipe(writer, "r2", "Pozole")
+            assertThat(File(source.path + "-wal").length()).isGreaterThan(0L)
+            // Copia en caliente de los tres archivos, sin cerrar: como si el proceso hubiera muerto ahí.
+            for (suffix in listOf("", "-wal", "-shm")) {
+                File(source.path + suffix).copyTo(File(dbFile.path + suffix), overwrite = true)
+            }
+        } finally {
+            writer.close()
+        }
+
+        assertThat(guard().prepare()).isEqualTo(GuardResult.Copied(expectedCopy))
+
+        assertThat(readDatabaseFile(File(backupsDir, expectedCopy))).isEqualTo(1 to listOf("Sopa de tortilla", "Pozole"))
+        val db = AppDatabase.create(context, dbName)
+        try {
+            runBlocking { assertThat(db.recipeDao().observeRecipe("r2").first()?.recipe?.title).isEqualTo("Pozole") }
+        } finally {
+            db.close()
+        }
+    }
+
+    /** Otra conexión tiene la base de datos ocupada: el punto de control no se completa y es un fallo de copia. */
+    @Test
+    fun guard_busyCheckpoint_isACopyFailure_notUnreadable() {
+        createV1Database(helper, dbName)
+        val holder = openWal(dbFile)
+        try {
+            insertRecipe(holder, "r2", "Pozole")
+            // Una escritura a medias que no termina mientras la guarda intenta el punto de control.
+            holder.beginTransaction()
+            insertRecipe(holder, "r3", "Tamales")
+
+            assertThat(guard().prepare()).isEqualTo(GuardResult.Failed(BackupMessages.UPDATE_COPY_FAILED))
+        } finally {
+            if (holder.inTransaction()) holder.endTransaction()
+            holder.close()
+        }
+        assertThat(backupsDir.list().orEmpty().filter { it.endsWith(".db") }).isEmpty()
     }
 }
