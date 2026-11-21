@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -153,10 +154,7 @@ class LocationWeatherScreenTest {
         runBlocking { c.settingsRepository.setThermalThresholds(ThermalThresholds(22, 23)) }
         rule.waitFor(hasText("22 °C"))
         // Frío por debajo de 23 y calor por encima de 23 no tiene sentido: los botones no lo dejan.
-        rule.onNodeWithTag("cold-plus").assertIsNotEnabledCompat()
-        rule.onNodeWithTag("hot-minus").assertIsNotEnabledCompat()
+        rule.onNodeWithTag("cold-plus").assertIsNotEnabled()
+        rule.onNodeWithTag("hot-minus").assertIsNotEnabled()
     }
 }
-
-private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertIsNotEnabledCompat() =
-    assert(androidx.compose.ui.test.isNotEnabled())

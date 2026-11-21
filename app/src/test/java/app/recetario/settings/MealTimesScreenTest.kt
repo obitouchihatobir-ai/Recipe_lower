@@ -1,5 +1,6 @@
 package app.recetario.settings
 
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -56,6 +57,8 @@ class MealTimesScreenTest {
         for (expected in listOf("11:30", "12:00", "12:30", "13:00")) {
             rule.onNodeWithTag("meal-BREAKFAST-end-plus").performClick()
             rule.waitUntil(5_000) { c.times().breakfast.end.toString() == expected }
+            // La pantalla ya muestra la hora nueva: el siguiente toque parte de ella.
+            rule.waitFor(hasText(expected) and hasAnyAncestor(hasTestTag("meal-BREAKFAST-end")))
         }
         rule.waitForGone(hasText("De 11:00 a 13:00 cuenta como comida."))
         // Media hora más y se solapan: se avisa y no se guarda.
@@ -69,6 +72,7 @@ class MealTimesScreenTest {
         val c = launch()
         rule.onNodeWithTag("meal-DINNER-end-plus").performScrollTo().performClick()
         rule.waitUntil(5_000) { c.times().dinner.end == LocalTime.of(23, 30) }
+        rule.waitFor(hasText("23:30") and hasAnyAncestor(hasTestTag("meal-DINNER-end")))
         rule.onNodeWithTag("meal-DINNER-end-plus").performClick()
         rule.waitFor(hasText("La cena no puede pasar de la medianoche."))
         assertThat(c.times().dinner.end).isEqualTo(LocalTime.of(23, 30))

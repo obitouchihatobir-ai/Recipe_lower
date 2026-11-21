@@ -57,7 +57,8 @@ data class BackupStatus(
 /**
  * Ajustes de la app en un DataStore de preferencias (archivo `ajustes`, que viaja con la copia de Android) y el
  * estado de este teléfono en otro (`estado-local`, que no viaja: el archivo de Drive y su permiso, las fechas y
- * errores de las copias, el aviso oculto de Inicio y si ya se pidió el permiso de notificaciones).
+ * errores de las copias, el aviso oculto de Inicio, si ya se pidió el permiso de notificaciones y, desde la 2B, la
+ * última ubicación aproximada, el último tiempo de Open-Meteo y su último fallo y si se denegó el permiso de ubicación).
  */
 class SettingsRepository(private val dataStore: DataStore<Preferences>, private val localState: DataStore<Preferences>) {
     private val defaults = ThemeSettings()
