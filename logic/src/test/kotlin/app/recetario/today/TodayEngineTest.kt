@@ -1,12 +1,15 @@
 package app.recetario.today
 
 import app.recetario.diary.CookStats
+import app.recetario.pairing.LIKED_BONUS
 import app.recetario.pairing.PairRole
+import app.recetario.pairing.pairKey
 import app.recetario.pairing.scorePair
 import app.recetario.recipes.model.Course
 import app.recetario.recipes.model.Intensity
 import app.recetario.recipes.model.Moment
 import app.recetario.recipes.model.ServeTemp
+import app.recetario.weather.WeatherKind
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import kotlin.random.Random
@@ -18,7 +21,7 @@ class TodayEngineTest {
     /** Comprueba con 30 semillas: el azar no debe cambiar una preferencia clara. */
     private fun forSeeds(block: (Random) -> Unit) = repeat(30) { block(Random(it)) }
 
-    private fun mainOf(c: TodayContext, i: TodayInputs, r: Random) = planToday(c, i, emptySet(), r).main?.id
+    private fun mainOf(c: TodayContext, i: TodayInputs, r: Random) = planToday(c, i, emptyList(), r).main?.id
 
     @Test
     fun cold_prefersHot() = forSeeds { r ->
@@ -108,7 +111,7 @@ class TodayEngineTest {
         val jamaica = recipe("jamaica", PairRole.DRINK, sour = 2, sweet = 2, serveTemp = ServeTemp.COLD, alcoholic = false)
         val mezcal = recipe("mezcal", PairRole.DRINK, bitter = 2, intensity = Intensity.INTENSE, alcoholic = true)
         val flan = recipe("flan", PairRole.DESSERT, sweet = 3, rich = true, serveTemp = ServeTemp.COLD)
-        val menu = planToday(ctx(), inputs(jamaica, mezcal, flan, mole), emptySet(), Random(3))
+        val menu = planToday(ctx(), inputs(jamaica, mezcal, flan, mole), emptyList(), Random(3))
         assertThat(menu.moment).isEqualTo(Moment.LUNCH)
         assertThat(menu.main).isEqualTo(mole)
         val best = listOf(jamaica, mezcal).maxBy { scorePair(it.asPairingItem(), mole.asPairingItem()).score }
@@ -123,7 +126,7 @@ class TodayEngineTest {
         val eggs = recipe("huevos", moments = setOf(Moment.BREAKFAST), serveTemp = ServeTemp.HOT)
         val coffee = recipe("cafe", PairRole.DRINK, bitter = 2, serveTemp = ServeTemp.HOT, alcoholic = false)
         val flan = recipe("flan", PairRole.DESSERT, sweet = 3)
-        val menu = planToday(ctx(moment = Moment.BREAKFAST), inputs(eggs, coffee, flan), emptySet(), Random(1))
+        val menu = planToday(ctx(moment = Moment.BREAKFAST), inputs(eggs, coffee, flan), emptyList(), Random(1))
         assertThat(menu.main).isEqualTo(eggs)
         assertThat(menu.drink).isEqualTo(coffee)
         assertThat(menu.dessert).isNull()
@@ -134,7 +137,7 @@ class TodayEngineTest {
     fun snackTime_plateAndDrink() {
         val bread = recipe("conchas", PairRole.DESSERT, sweet = 2)
         val chocolate = recipe("chocolate", PairRole.DRINK, sweet = 2, rich = true, serveTemp = ServeTemp.HOT)
-        val menu = planToday(ctx(moment = Moment.SNACK), inputs(bread, chocolate), emptySet(), Random(1))
+        val menu = planToday(ctx(moment = Moment.SNACK), inputs(bread, chocolate), emptyList(), Random(1))
         assertThat(menu.main).isEqualTo(bread)
         assertThat(menu.drink).isEqualTo(chocolate)
         assertThat(menu.dessert).isNull()
@@ -145,7 +148,7 @@ class TodayEngineTest {
         val wine = recipe("vino", PairRole.DRINK, sour = 2, alcoholic = true)
         val olives = recipe("aceitunas", PairRole.SIDE, salty = 2)
         val stew = recipe("guisado", course = Course.MAIN)
-        val menu = planToday(ctx(moment = Moment.NIGHT), inputs(stew, olives, wine), emptySet(), Random(1))
+        val menu = planToday(ctx(moment = Moment.NIGHT), inputs(stew, olives, wine), emptyList(), Random(1))
         assertThat(menu.main).isNull()
         assertThat(menu.drink).isEqualTo(wine)
         assertThat(menu.snack).isEqualTo(olives)
@@ -154,7 +157,7 @@ class TodayEngineTest {
 
     @Test
     fun today_noDessert_leavesSlotEmpty() {
-        val menu = planToday(ctx(), inputs(soup, recipe("agua", PairRole.DRINK)), emptySet(), Random(1))
+        val menu = planToday(ctx(), inputs(soup, recipe("agua", PairRole.DRINK)), emptyList(), Random(1))
         assertThat(menu.main).isEqualTo(soup)
         assertThat(menu.drink!!.id).isEqualTo("agua")
         assertThat(menu.dessert).isNull()
@@ -162,7 +165,7 @@ class TodayEngineTest {
 
     @Test
     fun today_onlyDrinks_drinkLeads() {
-        val menu = planToday(ctx(), inputs(recipe("agua", PairRole.DRINK)), emptySet(), Random(1))
+        val menu = planToday(ctx(), inputs(recipe("agua", PairRole.DRINK)), emptyList(), Random(1))
         assertThat(menu.main).isNull()
         assertThat(menu.drink!!.id).isEqualTo("agua")
         assertThat(menu.lead!!.id).isEqualTo("agua")
@@ -171,11 +174,11 @@ class TodayEngineTest {
     @Test
     fun today_noRecipes_allNull() {
         for (m in Moment.entries) {
-            val menu = planToday(ctx(moment = m), inputs(), emptySet(), Random(1))
+            val menu = planToday(ctx(moment = m), inputs(), emptyList(), Random(1))
             assertThat(menu.moment).isEqualTo(m)
             assertThat(listOf(menu.main, menu.drink, menu.dessert, menu.snack)).containsExactly(null, null, null, null)
             assertThat(menu.reason).isNotEmpty()
-            assertThat(menu.nextExclude(setOf("x"))).containsExactly("x")
+            assertThat(menu.nextExclude(listOf("x"))).containsExactly("x")
         }
     }
 
@@ -183,7 +186,7 @@ class TodayEngineTest {
     fun anotherIdea_cyclesWithoutRepeats() {
         val i = inputs(recipe("a"), recipe("b"), recipe("c"), recipe("agua", PairRole.DRINK))
         val random = Random(7)
-        var shown = emptySet<String>()
+        var shown = emptyList<String>()
         val picks = (1..6).map {
             val menu = planToday(ctx(), i, shown, random)
             shown = menu.nextExclude(shown)
@@ -197,7 +200,7 @@ class TodayEngineTest {
     @Test
     fun anotherIdea_nightCyclesTheDrink() {
         val i = inputs(recipe("vino", PairRole.DRINK), recipe("cerveza", PairRole.DRINK), recipe("cacahuates", PairRole.SIDE))
-        var shown = emptySet<String>()
+        var shown = emptyList<String>()
         val picks = (1..4).map {
             val menu = planToday(ctx(moment = Moment.NIGHT), i, shown, Random(it))
             shown = menu.nextExclude(shown)
@@ -211,9 +214,122 @@ class TodayEngineTest {
     @Test
     fun deterministic_withSeed() {
         val i = inputs(*(1..8).map { recipe("r$it", minutes = it * 10) }.toTypedArray(), recipe("agua", PairRole.DRINK))
-        val first = planToday(ctx(), i, emptySet(), Random(42))
-        repeat(5) { assertThat(planToday(ctx(), i, emptySet(), Random(42))).isEqualTo(first) }
-        val mains = (0 until 40).map { planToday(ctx(), i, emptySet(), Random(it)).main!!.id }.toSet()
+        val first = planToday(ctx(), i, emptyList(), Random(42))
+        repeat(5) { assertThat(planToday(ctx(), i, emptyList(), Random(42))).isEqualTo(first) }
+        val mains = (0 until 40).map { planToday(ctx(), i, emptyList(), Random(it)).main!!.id }.toSet()
         assertThat(mains.size).isGreaterThan(1)
+    }
+
+    @Test
+    fun anotherIdea_restartNeverRepeatsTheLastLead() = repeat(50) { seed ->
+        val i = inputs(recipe("a"), recipe("b"), recipe("c"), recipe("agua", PairRole.DRINK))
+        val random = Random(seed)
+        var shown = emptyList<String>()
+        val picks = (1..7).map {
+            val menu = planToday(ctx(), i, shown, random)
+            shown = menu.nextExclude(shown)
+            menu.main!!.id
+        }
+        picks.zipWithNext().forEach { (x, y) -> assertThat(y).isNotEqualTo(x) }
+        assertThat(picks.subList(0, 3).toSet()).hasSize(3)
+        assertThat(picks.subList(3, 6).toSet()).hasSize(3)
+    }
+
+    @Test
+    fun anotherIdea_nightRestartNeverRepeatsTheLastDrink() = repeat(50) { seed ->
+        val i = inputs(
+            recipe("vino", PairRole.DRINK), recipe("cerveza", PairRole.DRINK), recipe("mezcal", PairRole.DRINK),
+            recipe("cacahuates", PairRole.SIDE),
+        )
+        val random = Random(seed)
+        var shown = emptyList<String>()
+        val picks = (1..7).map {
+            val menu = planToday(ctx(moment = Moment.NIGHT), i, shown, random)
+            shown = menu.nextExclude(shown)
+            menu.drink!!.id
+        }
+        picks.zipWithNext().forEach { (x, y) -> assertThat(y).isNotEqualTo(x) }
+        assertThat(picks.subList(0, 3).toSet()).hasSize(3)
+        assertThat(picks.subList(3, 6).toSet()).hasSize(3)
+    }
+
+    @Test
+    fun anotherIdea_singleOption_repeatsIt() {
+        val i = inputs(recipe("a"))
+        var shown = emptyList<String>()
+        repeat(3) {
+            val menu = planToday(ctx(), i, shown, Random(it))
+            assertThat(menu.main!!.id).isEqualTo("a")
+            shown = menu.nextExclude(shown)
+        }
+    }
+
+    @Test
+    fun breakfastAndSnack_neverAlcohol_unlessOnlyDrink() {
+        val beer = recipe("cerveza", PairRole.DRINK, salty = 2, sour = 2, bitter = 2, favorite = true, alcoholic = true)
+        val juice = recipe("jugo", PairRole.DRINK, sweet = 1)
+        val eggs = recipe("huevos", moments = setOf(Moment.BREAKFAST, Moment.SNACK), salty = 2)
+        for (m in listOf(Moment.BREAKFAST, Moment.SNACK)) {
+            forSeeds { r ->
+                assertThat(planToday(ctx(moment = m), inputs(eggs, beer, juice), emptyList(), r).drink!!.id).isEqualTo("jugo")
+                assertThat(planToday(ctx(moment = m), inputs(eggs, beer), emptyList(), r).drink!!.id).isEqualTo("cerveza")
+            }
+        }
+    }
+
+    @Test
+    fun recentlyCooked_boundary_dayBeforeYesterdayPenalised_threeDaysNot() {
+        val a = recipe("a", favorite = true)
+        val b = recipe("b")
+        val today = WEDNESDAY.toLocalDate()
+        fun cookedDaysAgo(days: Long) = inputs(a, b).copy(stats = mapOf("a" to CookStats(1, today.minusDays(days), null)))
+        forSeeds { r -> assertThat(mainOf(ctx(), cookedDaysAgo(0), r)).isEqualTo("b") }
+        forSeeds { r -> assertThat(mainOf(ctx(), cookedDaysAgo(2), r)).isEqualTo("b") }
+        forSeeds { r -> assertThat(mainOf(ctx(), cookedDaysAgo(3), r)).isEqualTo("a") }
+    }
+
+    @Test
+    fun mildDrizzle_withoutRainingNow_prefersHot() = forSeeds { r ->
+        val c = ctx(thermal = Thermal.MILD, apparentC = 18.0, weatherKind = WeatherKind.RAIN, rainingNow = false)
+        assertThat(mainOf(c, inputs(salad, soup), r)).isEqualTo("sopa")
+        val storm = ctx(thermal = Thermal.MILD, apparentC = 18.0, weatherKind = WeatherKind.STORM)
+        assertThat(mainOf(storm, inputs(salad, soup), r)).isEqualTo("sopa")
+    }
+
+    @Test
+    fun dislikedPair_neverChosenWithThatMain() {
+        val mole = recipe("mole", course = Course.MAIN, rich = true, spicy = 2, intensity = Intensity.INTENSE, serveTemp = ServeTemp.HOT)
+        val jamaica = recipe("jamaica", PairRole.DRINK, sour = 2, sweet = 2, serveTemp = ServeTemp.COLD, alcoholic = false)
+        val water = recipe("agua", PairRole.DRINK)
+        val flan = recipe("flan", PairRole.DESSERT, sweet = 3, rich = true, serveTemp = ServeTemp.COLD)
+        val base = inputs(mole, jamaica, water, flan)
+        val best = planToday(ctx(), base, emptyList(), Random(1))
+        assertThat(best.drink).isEqualTo(jamaica)
+        val disliked = base.copy(
+            ratings = mapOf(
+                pairKey(jamaica.asPairingItem(), mole.asPairingItem()) to false,
+                pairKey(flan.asPairingItem(), mole.asPairingItem()) to false,
+            ),
+        )
+        forSeeds { r ->
+            val menu = planToday(ctx(), disliked, emptyList(), r)
+            assertThat(menu.main).isEqualTo(mole)
+            assertThat(menu.drink).isEqualTo(water)
+            assertThat(menu.dessert).isNull()
+        }
+    }
+
+    @Test
+    fun likedPair_getsABonus() {
+        val mole = recipe("mole", course = Course.MAIN, rich = true, spicy = 2, intensity = Intensity.INTENSE, serveTemp = ServeTemp.HOT)
+        val jamaica = recipe("jamaica", PairRole.DRINK, sour = 2, sweet = 2, serveTemp = ServeTemp.COLD, alcoholic = false)
+        val lemonade = recipe("limonada", PairRole.DRINK, sour = 2, serveTemp = ServeTemp.COLD, alcoholic = false)
+        val gap = scorePair(jamaica.asPairingItem(), mole.asPairingItem()).score -
+            scorePair(lemonade.asPairingItem(), mole.asPairingItem()).score
+        assertThat(gap).isIn(com.google.common.collect.Range.open(0, LIKED_BONUS))
+        val plain = inputs(mole, jamaica, lemonade)
+        assertThat(planToday(ctx(), plain, emptyList(), Random(1)).drink).isEqualTo(jamaica)
+        val liked = plain.copy(ratings = mapOf(pairKey(lemonade.asPairingItem(), mole.asPairingItem()) to true))
+        assertThat(planToday(ctx(), liked, emptyList(), Random(1)).drink).isEqualTo(lemonade)
     }
 }

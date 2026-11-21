@@ -39,7 +39,8 @@ fun TodayRecipe.asPairingItem(): PairingItem = PairingItem(
 
 /**
  * El momento, la estación y, si hay datos del tiempo, la clase térmica, el tipo de tiempo y la temperatura aparente.
- * Sin clima, [thermal], [weatherKind] y [apparentC] son null y [rainingNow] es false.
+ * Sin clima, [thermal], [weatherKind] y [apparentC] son null y [rainingNow] es false. [isDay] dice si el sol está
+ * arriba (null si no se sabe): con false no se habla del sol.
  */
 data class TodayContext(
     val now: LocalDateTime,
@@ -50,11 +51,12 @@ data class TodayContext(
     val apparentC: Double?,
     val rainingNow: Boolean,
     val weekend: Boolean,
+    val isDay: Boolean? = null,
 )
 
 /**
  * Recetas, estadísticas del diario por id de receta, la despensa, los básicos (no cuentan en la cobertura) y el empujón
- * de temporada (vacío hasta la 2D).
+ * de temporada (vacío hasta la 2D). [ratings] son las valoraciones de maridaje (👍 true, 👎 false) por `pairKey`.
  */
 data class TodayInputs(
     val recipes: List<TodayRecipe>,
@@ -62,6 +64,7 @@ data class TodayInputs(
     val pantry: List<String>,
     val basics: List<String>,
     val inSeasonBonus: (TodayRecipe) -> Double = { 0.0 },
+    val ratings: Map<String, Boolean> = emptyMap(),
 )
 
 /**
@@ -85,10 +88,11 @@ val TodayMenu.lead: TodayRecipe?
     get() = if (moment == Moment.NIGHT) drink ?: snack else main ?: drink ?: dessert
 
 /**
- * Los ids ya mostrados después de este menú, para la siguiente «Otra idea»: se añade [lead]; si ya estaba (se habían
- * acabado las opciones y empezó otra vuelta), la vuelta nueva empieza solo con él.
+ * Los ids ya mostrados después de este menú, en el orden en que salieron (el último es el que se ve ahora), para la
+ * siguiente «Otra idea»: se añade [lead]; si ya estaba (se habían acabado las opciones y empezó otra vuelta), la vuelta
+ * nueva empieza solo con él. Al empezar otra vuelta, `planToday` no repite el último.
  */
-fun TodayMenu.nextExclude(previous: Set<String>): Set<String> {
+fun TodayMenu.nextExclude(previous: List<String>): List<String> {
     val id = lead?.id ?: return previous
-    return if (id in previous) setOf(id) else previous + id
+    return if (id in previous) listOf(id) else previous + id
 }

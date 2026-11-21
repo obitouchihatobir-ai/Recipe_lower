@@ -40,6 +40,14 @@ class TodayTextsTest {
             Triple(ctx(thermal = Thermal.COLD, apparentC = 9.0, moment = Moment.DINNER), salad,
                 "Hace 9 °C: algo rápido para la cena"),
             Triple(ctx(thermal = Thermal.HOT, apparentC = 31.0, now = SATURDAY), longSoup, "Hace 31 °C: una idea para la comida"),
+            // De noche no hay sol, tampoco a la hora de comer si ya se puso.
+            Triple(ctx(thermal = Thermal.HOT, apparentC = 31.0, weatherKind = WeatherKind.CLEAR, isDay = false), salad,
+                "Hace 31 °C: algo fresco"),
+            Triple(ctx(thermal = Thermal.HOT, apparentC = 31.0, weatherKind = WeatherKind.CLEAR, isDay = true), salad,
+                "Hace 31 °C y hay sol: algo fresco"),
+            // Llovizna sin «llueve ahora»: el texto dice lo mismo que pesa en la elección.
+            Triple(ctx(thermal = Thermal.MILD, apparentC = 18.0, weatherKind = WeatherKind.RAIN), soup,
+                "Hace 18 °C y llueve: algo calientito"),
             // De noche no hay sol.
             Triple(ctx(thermal = Thermal.MILD, apparentC = 20.0, weatherKind = WeatherKind.CLEAR, moment = Moment.DINNER, now = SATURDAY), plain,
                 "Hace 20 °C: una idea para la cena"),
@@ -67,7 +75,7 @@ class TodayTextsTest {
     @Test
     fun planToday_usesTheReasonOfItsLead() {
         val c = ctx(thermal = Thermal.COLD, apparentC = 9.0, weatherKind = WeatherKind.RAIN, rainingNow = true)
-        val menu = planToday(c, inputs(soup, salad), emptySet(), kotlin.random.Random(1))
+        val menu = planToday(c, inputs(soup, salad), emptyList(), kotlin.random.Random(1))
         assertThat(menu.reason).isEqualTo("Hace 9 °C y llueve: algo caliente y reconfortante")
     }
 }

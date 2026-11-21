@@ -5,16 +5,16 @@ import app.recetario.recipes.model.ServeTemp
 import app.recetario.weather.WeatherKind
 import kotlin.math.roundToLong
 
-/** «Hace 9 °C y llueve» (de noche y en la cena no se habla del sol). */
+/** «Hace 9 °C y llueve» (de noche, en la cena o con el sol ya puesto, [TodayContext.isDay] false, no se habla del sol). */
 private fun weatherPart(ctx: TodayContext, apparentC: Double): String {
     val daytime = ctx.moment == Moment.BREAKFAST || ctx.moment == Moment.LUNCH || ctx.moment == Moment.SNACK
     val what = when {
         ctx.weatherKind == WeatherKind.STORM -> " y hay tormenta"
         ctx.weatherKind == WeatherKind.SNOW -> " y nieva"
-        ctx.rainingNow || ctx.weatherKind == WeatherKind.RAIN -> " y llueve"
+        ctx.raining -> " y llueve"
         ctx.weatherKind == WeatherKind.FOG -> " y hay niebla"
         ctx.weatherKind == WeatherKind.CLOUDY -> " y está nublado"
-        ctx.weatherKind == WeatherKind.CLEAR && daytime -> " y hay sol"
+        ctx.weatherKind == WeatherKind.CLEAR && daytime && ctx.isDay != false -> " y hay sol"
         else -> ""
     }
     return "Hace ${apparentC.roundToLong()} °C$what"
@@ -49,7 +49,7 @@ fun todayReason(ctx: TodayContext, lead: TodayRecipe?): String {
     val apparentC = ctx.apparentC
 
     if (apparentC != null) {
-        val raining = ctx.rainingNow || ctx.weatherKind == WeatherKind.RAIN || ctx.weatherKind == WeatherKind.STORM
+        val raining = ctx.raining
         val wish = when {
             ctx.thermal == Thermal.COLD && hot -> "algo caliente y reconfortante"
             ctx.thermal == Thermal.HOT && cold -> "algo fresco"

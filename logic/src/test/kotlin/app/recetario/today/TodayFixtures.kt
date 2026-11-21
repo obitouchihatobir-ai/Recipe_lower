@@ -57,7 +57,8 @@ internal fun ctx(
     apparentC: Double? = null,
     rainingNow: Boolean = false,
     weekend: Boolean = now.dayOfWeek.value >= 6,
-) = TodayContext(now, moment, season, thermal, weatherKind, apparentC, rainingNow, weekend)
+    isDay: Boolean? = null,
+) = TodayContext(now, moment, season, thermal, weatherKind, apparentC, rainingNow, weekend, isDay)
 
 internal fun inputs(vararg recipes: TodayRecipe) = TodayInputs(
     recipes = recipes.toList(),
