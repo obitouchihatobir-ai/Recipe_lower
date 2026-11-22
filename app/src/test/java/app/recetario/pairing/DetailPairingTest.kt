@@ -155,7 +155,8 @@ class DetailPairingTest {
         // 👎 en el detalle del mole: la limonada desaparece.
         rule.onNode(hasContentDescription(DISLIKE_LABEL) and inRow(limonadaRow)).performClick()
         rule.waitForGone(hasTestTag(limonadaRow))
-        assertThat(ratings(container)).containsExactly("RECIPE:limonada|RECIPE:mole", false)
+        // La valoración se escribe en applicationScope: la fila puede irse antes de que la lectura la vea.
+        rule.waitUntil(5_000) { ratings(container) == mapOf("RECIPE:limonada|RECIPE:mole" to false) }
 
         // Al revés: partiendo de la limonada, el mole no sale (el flan sí).
         rule.runOnUiThread { nav.navigate(Pairing(subject = "RECIPE:limonada")) }
