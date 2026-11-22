@@ -219,7 +219,8 @@ class CardViewModel(
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.e("Ficha", "No se pudo preparar la ficha", e)
                 CardEvent.Message(CARD_SHARE_FAILED)
             } finally {
                 busy.value = false

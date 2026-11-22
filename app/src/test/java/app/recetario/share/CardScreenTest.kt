@@ -66,6 +66,7 @@ class CardScreenTest {
 
     @Before
     fun setUp() {
+        org.robolectric.shadows.ShadowLog.stream = System.out
         container = installTestContainer(documents = documents)
     }
 
@@ -140,7 +141,11 @@ class CardScreenTest {
 
     private fun awaitChooser(): Intent {
         var found: Intent? = null
-        rule.waitUntil(10_000) { found = nextChooser(); found != null }
+        rule.waitUntil(10_000) {
+            check(rule.onAllNodes(hasText(CARD_SHARE_FAILED), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) { CARD_SHARE_FAILED }
+            found = nextChooser()
+            found != null
+        }
         val chooser = checkNotNull(found)
         assertThat(chooser.action).isEqualTo(Intent.ACTION_CHOOSER)
         @Suppress("DEPRECATION")

@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
@@ -122,7 +123,7 @@ fun CardRoute(
                 is CardEvent.ShareFile -> {
                     val intent = runCatching {
                         cardShareIntent(context, e.file, e.mimeType, uriFor ?: { cardFileUri(context, it) })
-                    }.getOrNull()
+                    }.onFailure { Log.e("Ficha", "No se pudo publicar la ficha", it) }.getOrNull()
                     if (intent == null) snackbar.showSnackbar(CARD_SHARE_FAILED) else startChooser(context, intent)
                 }
                 is CardEvent.ShareText -> startChooser(context, textShareIntent(e.text))
@@ -155,6 +156,9 @@ private fun startChooser(context: Context, intent: Intent) {
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (_: ActivityNotFoundException) {
         // Sin apps para compartir: no hay nada que hacer.
+    } catch (e: RuntimeException) {
+        // Un selector que no se puede abrir (p. ej. SecurityException) no cierra la app.
+        Log.e("Ficha", "No se pudo abrir el selector para compartir", e)
     }
 }
 
