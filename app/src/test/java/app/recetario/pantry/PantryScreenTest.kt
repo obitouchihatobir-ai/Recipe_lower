@@ -1,5 +1,6 @@
 package app.recetario.pantry
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -25,7 +26,6 @@ import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.rules.ExternalResource
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -35,14 +35,9 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class PantryScreenTest {
-    /**
-     * Cierra la base de datos después de que la regla de Compose deseche la composición: con un `@After`, una consulta
-     * tardía de un `Flow` falla con «connection pool has been closed» (CLAUDE.md, problemas conocidos).
-     */
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
     @get:Rule(order = 0)
-    val closeDatabase = object : ExternalResource() {
-        override fun after() = container.database.close()
-    }
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
 
     @get:Rule(order = 1)
     val rule = createComposeRule()
@@ -138,11 +133,11 @@ class PantryScreenTest {
     }
 
     @Test
-    fun weekTab_saysItIsComing() {
+    fun weekTab_opensTheWeek() {
         rule.setContent { RecetarioTheme(ThemeChoice.CALIDO) { ShoppingRoute(container) } }
         rule.waitFor(hasTestTag("shopping-tab-week"))
         rule.onNodeWithTag("shopping-tab-week").performClick()
-        rule.waitFor(hasText("Llega pronto: el menú de la semana"))
+        rule.waitFor(hasTestTag("week-screen"))
     }
 
     @Test

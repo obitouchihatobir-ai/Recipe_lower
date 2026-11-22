@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Upsert
@@ -54,4 +56,29 @@ interface MealPlanDao {
 
     @Query("DELETE FROM meal_plan")
     suspend fun deleteAll()
+
+    /** Los platos entre [from] y [to] (fechas ISO, ambas incluidas). */
+    @Query("SELECT * FROM meal_plan WHERE date BETWEEN :from AND :to ORDER BY date, slot")
+    fun observeRange(from: String, to: String): Flow<List<MealPlanEntity>>
+
+    @Query("SELECT * FROM meal_plan WHERE date = :date AND slot = :slot")
+    suspend fun getSlot(date: String, slot: String): MealPlanEntity?
+
+    /** Cambia la receta y las porciones de un hueco ya ocupado (mismo id). */
+    @Query("UPDATE meal_plan SET recipeId = :recipeId, servings = :servings WHERE id = :id")
+    suspend fun updateSlot(id: String, recipeId: String, servings: Int)
+
+    /** Inserta si el hueco `(date, slot)` (y el id) están libres; -1 si no. Nunca pisa otro plato. */
+    /** Suma [delta] a las porciones del hueco, entre [min] y [max], en la base de datos (dos toques seguidos suman dos). */
+    @Query("UPDATE meal_plan SET servings = MAX(:min, MIN(:max, servings + :delta)) WHERE date = :date AND slot = :slot")
+    suspend fun addServings(date: String, slot: String, delta: Int, min: Int, max: Int)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfFree(item: MealPlanEntity): Long
+
+    @Query("DELETE FROM meal_plan WHERE id IN (:ids)")
+    suspend fun deleteIds(ids: List<String>)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM recipes WHERE id = :recipeId)")
+    suspend fun recipeExists(recipeId: String): Boolean
 }

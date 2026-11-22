@@ -1,5 +1,6 @@
 package app.recetario.shopping
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasAnyAncestor
@@ -27,7 +28,6 @@ import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import kotlinx.coroutines.runBlocking
 import com.google.common.truth.Truth.assertThat
-import org.junit.rules.ExternalResource
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -37,14 +37,9 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class ShoppingScreenTest {
-    /**
-     * Cierra la base de datos después de que la regla de Compose deseche la composición: con un `@After`, una consulta
-     * tardía de un `Flow` falla con «connection pool has been closed» (CLAUDE.md, problemas conocidos).
-     */
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
     @get:Rule(order = 0)
-    val closeDatabase = object : ExternalResource() {
-        override fun after() = container.database.close()
-    }
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
 
     @get:Rule(order = 1)
     val rule = createComposeRule()

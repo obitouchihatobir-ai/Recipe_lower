@@ -40,6 +40,10 @@ data class RecipeEditor(val id: String? = null, val categoryId: String? = null)
 @Serializable
 data class Cooking(val recipeId: String, val servings: Int)
 
+/** La ficha para compartir una receta con las porciones elegidas en el detalle («Compartir»). */
+@Serializable
+data class Card(val recipeId: String, val servings: Int)
+
 // Destinos que registran tareas posteriores.
 @Serializable
 data object Converter

@@ -23,10 +23,9 @@ import app.recetario.today.momentAt
 import app.recetario.today.nextExclude
 import app.recetario.today.planToday
 import app.recetario.today.recipeIn
-import app.recetario.today.seasonFor
-import app.recetario.today.thermalClass
-import app.recetario.today.toTodayRecipe
+import app.recetario.today.todayContext
 import app.recetario.today.todayEyebrow
+import app.recetario.today.todayInputs
 import app.recetario.today.todaySeed
 import app.recetario.today.todaySlots
 import app.recetario.today.weatherChipDescription
@@ -52,7 +51,6 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Clock
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -210,33 +208,15 @@ class TodayViewModel(
         val d = k.data
         val stored = k.pick
         val moment = k.moment
-        // El motor solo usa la fecha de `now`: el principio del día basta y no cambia con los minutos.
-        val local = k.day.atStartOfDay()
         val key = "${k.day}|$moment"
         // Otro día u otro momento: empieza de cero.
         val p = stored.takeIf { it.key == key } ?: TodayPick(key, emptyList(), 0)
         val current = d.weather?.current
-        val season = seasonFor(local.toLocalDate(), d.place?.latitude)
-        val ctx = TodayContext(
-            now = local,
-            moment = moment,
-            season = season,
-            thermal = current?.let { thermalClass(it.apparentC, d.thresholds) },
-            weatherKind = current?.let { weatherKind(it.weatherCode) },
-            apparentC = current?.apparentC,
-            rainingNow = current != null && current.precipitationMm > 0,
-            weekend = local.dayOfWeek == DayOfWeek.SATURDAY || local.dayOfWeek == DayOfWeek.SUNDAY,
-            isDay = current?.isDay,
-        )
+        val ctx = todayContext(k.day, moment, d.place?.latitude, d.thresholds, current)
+        val season = ctx.season
         val byCategory = d.categories.associateBy { it.id }
-        val inputs = TodayInputs(
-            recipes = d.summaries.map { it.toTodayRecipe(byCategory[it.categoryId]?.baseType) },
-            stats = d.stats,
-            pantry = d.pantry,
-            basics = d.basics,
-            ratings = d.ratings,
-        )
-        val menu = plan(ctx, inputs, p.exclude, Random(todaySeed(local.toLocalDate(), moment, p.round)))
+        val inputs = todayInputs(d.summaries, d.categories, d.stats, d.pantry, d.basics, d.ratings)
+        val menu = plan(ctx, inputs, p.exclude, Random(todaySeed(k.day, moment, p.round)))
         val byId = d.summaries.associateBy { it.id }
         val items = todaySlots(moment).map { slot ->
             TodayCardItem(

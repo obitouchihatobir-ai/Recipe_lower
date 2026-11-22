@@ -216,13 +216,6 @@ class DetailViewModel(
         }
     }
 
-    /** Texto para compartir con las porciones elegidas; vacío si la receta no está cargada. */
-    fun shareText(): String {
-        val s = state.value
-        val recipe = s.recipe ?: return ""
-        return formatRecipeAsText(recipe, s.servings, s.categoryEmoji)
-    }
-
     companion object {
         const val MIN_SERVINGS = 1
         const val MAX_SERVINGS = 99

@@ -1,5 +1,7 @@
 package app.recetario.home
 
+import org.junit.Rule
+import app.recetario.testing.MainDispatcherRule
 import androidx.lifecycle.SavedStateHandle
 import app.recetario.core.data.DefaultCategories
 import app.recetario.recipes.model.BaseType
@@ -13,7 +15,6 @@ import app.recetario.today.ThermalThresholds
 import app.recetario.today.TodaySlot
 import app.recetario.today.planToday
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,12 +22,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
-import org.junit.Before
 import org.junit.Test
 import java.time.Clock
 import java.time.Instant
@@ -47,11 +44,8 @@ private class TodayClock(var now: Instant) : Clock() {
 class TodayViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
-    @Before
-    fun setUp() = Dispatchers.setMain(dispatcher)
-
-    @After
-    fun tearDown() = Dispatchers.resetMain()
+    @get:Rule
+    val main = MainDispatcherRule(dispatcher)
 
     private val categories = listOf(
         Category(DefaultCategories.FOOD_ID, "Comidas", "🍲", "#C8553D", BaseType.FOOD, 0, true),
@@ -80,7 +74,7 @@ class TodayViewModelTest {
     private val ticks = MutableSharedFlow<Unit>()
     private val ratings = MutableStateFlow<Map<String, Boolean>>(emptyMap())
 
-    private fun vm(recipes: List<RecipeSummary> = threeMains, handle: SavedStateHandle = SavedStateHandle()) = TodayViewModel(
+    private fun vm(recipes: List<RecipeSummary> = threeMains, handle: SavedStateHandle = SavedStateHandle()) = main.track(TodayViewModel(
         summaries = flowOf(recipes),
         categories = flowOf(categories),
         stats = flowOf(emptyMap()),
@@ -97,7 +91,7 @@ class TodayViewModelTest {
         ticks = ticks,
         dispatcher = dispatcher,
         plan = { ctx, inputs, exclude, random -> calls += exclude; planToday(ctx, inputs, exclude, random) },
-    )
+    ))
 
     private fun TestScope.collect(vm: TodayViewModel) {
         backgroundScope.launch { vm.state.collect {} }

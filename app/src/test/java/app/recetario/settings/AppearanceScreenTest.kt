@@ -1,5 +1,6 @@
 package app.recetario.settings
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -25,7 +26,6 @@ import app.recetario.testing.installTestContainer
 import app.recetario.testing.waitFor
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Before
@@ -44,7 +44,11 @@ private val dayClock: Clock = Clock.fixed(Instant.parse("2026-11-13T12:10:00Z"),
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class AppearanceScreenTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -55,9 +59,6 @@ class AppearanceScreenTest {
     fun setUp() {
         container = installTestContainer(dayClock)
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     /** El mismo montaje que MainActivity: el tema sale de los ajustes y la pantalla se pinta dentro del host. */
     private fun launch() = rule.setContent {

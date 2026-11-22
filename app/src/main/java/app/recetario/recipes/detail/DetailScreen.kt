@@ -1,8 +1,5 @@
 package app.recetario.recipes.detail
 
-import android.content.ActivityNotFoundException
-import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -101,6 +97,8 @@ fun DetailRoute(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onCooking: (servings: Int) -> Unit,
+    /** «Compartir»: la pantalla Ficha con las porciones elegidas. */
+    onShare: (servings: Int) -> Unit = {},
     /** «Ver más» del maridaje (null: sin el botón). */
     onMorePairings: (() -> Unit)? = null,
     /** Tocar una pareja del maridaje: la rueda comparativa. */
@@ -115,7 +113,6 @@ fun DetailRoute(
     val state = last ?: live
 
     val cupMl by container.settingsRepository.cupMl.collectAsStateWithLifecycle(initialValue = 240)
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var toast by rememberSaveable { mutableStateOf<String?>(null) }
     // Se reinicia con cada aviso terminado (aunque el texto sea el mismo): la clave es el contador, no el texto.
@@ -150,7 +147,7 @@ fun DetailRoute(
         onBack = onBack,
         onFavorite = vm::toggleFavorite,
         onEdit = onEdit,
-        onShare = { shareRecipe(context, vm.shareText()) },
+        onShare = { onShare(state.servings) },
         onDelete = vm::delete,
         onServings = vm::setServings,
         onToggleIngredient = vm::toggleIngredient,
@@ -177,19 +174,6 @@ fun DetailRoute(
         onComparePairing = onComparePairing,
         onMorePairings = onMorePairings,
     )
-}
-
-private fun shareRecipe(context: Context, text: String) {
-    if (text.isBlank()) return
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
-    }
-    try {
-        context.startActivity(Intent.createChooser(send, "Compartir receta").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (_: ActivityNotFoundException) {
-        // Sin apps para compartir: no hay nada que hacer.
-    }
 }
 
 /**

@@ -24,7 +24,10 @@ import app.recetario.recipes.data.RoomRecipeRepository
 import app.recetario.pairing.PairingRepository
 import app.recetario.pairing.RoomPairingRepository
 import app.recetario.pantry.PantryRepository
+import app.recetario.plan.MealPlanRepository
+import app.recetario.plan.RoomMealPlanRepository
 import app.recetario.pantry.RoomPantryRepository
+import app.recetario.share.clearCardFiles
 import app.recetario.shopping.RoomShoppingRepository
 import app.recetario.shopping.ShoppingRepository
 import androidx.datastore.core.DataStore
@@ -69,6 +72,8 @@ class RecetarioApp : Application() {
             clock = Clock.systemDefaultZone(),
         ).prepare()
         container = AppContainer(this)
+        // Las fichas compartidas la vez anterior ya no hacen falta (las apps que las recibieron ya las copiaron).
+        clearCardFiles(cacheDir)
         // WorkManager se inicia solo (androidx.startup) antes de onCreate. En las pruebas de Robolectric no se
         // ejecutan los proveedores del manifiesto: ahí no está iniciado y no se programa nada.
         if (WorkManager.isInitialized()) {
@@ -137,6 +142,9 @@ class AppContainer(
 
     /** La despensa (pestaña Despensa de Compra); sus básicos están en los ajustes. */
     val pantryRepository: PantryRepository = RoomPantryRepository(database, clock)
+
+    /** El menú de la semana (pestaña Semana de Compra), en `meal_plan`. */
+    val mealPlanRepository: MealPlanRepository = RoomMealPlanRepository(database)
 
     /**
      * Copias de seguridad: temporales de importar y exportar en la caché, copias del teléfono (semanales y previas a

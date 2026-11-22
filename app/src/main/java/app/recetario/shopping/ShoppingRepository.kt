@@ -18,6 +18,13 @@ interface ShoppingRepository {
     /** Añade los ingredientes de [recipe] escalados a [servings], salvo [excludeIngredientIds]; devuelve cuántos. */
     suspend fun addFromRecipe(recipe: Recipe, servings: Int, excludeIngredientIds: Set<String>): Int
     suspend fun addManual(name: String, quantity: Double?, unit: MeasureUnit)
+
+    /**
+     * Funde [lines] con la lista como «Lo que necesito» (una transacción) y devuelve cuántas eran. Cada línea recibe
+     * antes un id nuevo y la hora del reloj: los ids provisionales (los de `weekIngredients`) nunca llegan a la base de
+     * datos, así que añadir dos veces suma o añade y nunca pisa una fila (tampoco una marcada).
+     */
+    suspend fun addLines(lines: List<ShoppingItem>): Int
     suspend fun toggle(id: String)
 
     /** Borra el artículo y devuelve su estado actual (leído en la misma transacción) para poder deshacerlo. */
@@ -78,6 +85,13 @@ class RoomShoppingRepository(
                 ),
             ),
         )
+    }
+
+    override suspend fun addLines(lines: List<ShoppingItem>): Int {
+        val now = clock.instant()
+        val incoming = lines.map { it.copy(id = UUID.randomUUID().toString(), checked = false, createdAt = now) }
+        if (incoming.isNotEmpty()) merge(incoming)
+        return incoming.size
     }
 
     /** Funde en una sola transacción y guarda solo lo que cambia. */

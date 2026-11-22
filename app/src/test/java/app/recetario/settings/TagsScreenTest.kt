@@ -1,5 +1,6 @@
 package app.recetario.settings
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -13,7 +14,6 @@ import app.recetario.testing.installTestContainer
 import app.recetario.testing.sampleRecipe
 import app.recetario.testing.waitFor
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -24,7 +24,11 @@ import java.io.IOException
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class TagsScreenTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -33,9 +37,6 @@ class TagsScreenTest {
     fun setUp() {
         container = installTestContainer()
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     @Test
     fun tags_deleteFailure_showsASnackbarInsteadOfCrashing() {

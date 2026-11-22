@@ -1,5 +1,6 @@
 package app.recetario.cooking
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
@@ -30,7 +31,6 @@ import app.recetario.testing.sampleRecipe
 import app.recetario.testing.waitFor
 import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -46,7 +46,11 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h780dp-xhdpi")
 class CookingContrastTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var container: AppContainer
@@ -71,9 +75,6 @@ class CookingContrastTest {
             )
         }
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     @Test
     fun calido() = checkContrast(ThemeChoice.CALIDO)

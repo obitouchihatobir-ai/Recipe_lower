@@ -8,6 +8,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.height
@@ -88,6 +89,7 @@ import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.core.ui.theme.LocalRecetarioShapes
 import app.recetario.pantry.PantryRoute
+import app.recetario.plan.WeekRoute
 import app.recetario.recipes.quantity.MeasureUnit
 import app.recetario.recipes.quantity.formatQuantity
 import app.recetario.recipes.quantity.parseQuantity
@@ -108,7 +110,7 @@ fun ShoppingRoute(container: AppContainer, onWhatCanIMake: () -> Unit = {}) {
     when (tab) {
         ShoppingTab.LIST -> ShoppingListRoute(container, tabs)
         ShoppingTab.PANTRY -> PantryRoute(container, tabs, onWhatCanIMake)
-        ShoppingTab.WEEK -> WeekPlaceholder(tabs)
+        ShoppingTab.WEEK -> WeekRoute(container, tabs)
     }
 }
 
@@ -147,6 +149,8 @@ fun ShoppingTabPage(
     tag: String,
     modifier: Modifier = Modifier,
     snackbar: SnackbarHostState? = null,
+    /** Encima de todo (un panel inferior), dentro de la página. */
+    overlay: @Composable BoxScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val c = LocalRecetarioColors.current
@@ -159,20 +163,7 @@ fun ShoppingTabPage(
             content()
         }
         if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(12.dp))
-    }
-}
-
-@Composable
-private fun WeekPlaceholder(tabs: @Composable () -> Unit) {
-    ShoppingTabPage(tabs, tag = "shopping-week") {
-        Box(Modifier.fillMaxSize().padding(horizontal = 32.dp), contentAlignment = Alignment.Center) {
-            Text(
-                "Llega pronto: el menú de la semana",
-                color = LocalRecetarioColors.current.muted,
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-            )
-        }
+        overlay()
     }
 }
 

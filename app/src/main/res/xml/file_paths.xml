@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solo se comparte la carpeta temporal de la cámara; las fotos de las recetas no salen de la app. -->
+<!-- Solo se comparten la carpeta temporal de la cámara y las fichas para compartir (cacheDir/fichas, se vacía al
+     iniciar la app); las fotos de las recetas no salen de la app. -->
 <paths>
     <cache-path name="camera" path="camera/" />
+    <cache-path name="fichas" path="fichas/" />
 </paths>

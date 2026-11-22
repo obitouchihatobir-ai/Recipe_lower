@@ -1,5 +1,6 @@
 package app.recetario.screenshots
 
+import app.recetario.testing.CloseDatabaseRule
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -102,7 +103,6 @@ import app.recetario.core.data.createV1Database
 import app.recetario.diary.CookLogEntry
 import app.recetario.navigation.Diary
 import app.recetario.testing.testClock
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -123,7 +123,11 @@ import java.time.LocalDate
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h780dp-xhdpi")
 class CapturasTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container?.database?.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     @get:Rule
@@ -132,11 +136,6 @@ class CapturasTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     private var container: AppContainer? = null
-
-    @After
-    fun tearDown() {
-        container?.database?.close()
-    }
 
     @Test
     fun calido() = captureAll(ThemeChoice.CALIDO)

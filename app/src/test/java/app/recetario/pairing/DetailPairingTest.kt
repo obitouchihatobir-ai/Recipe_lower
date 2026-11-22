@@ -1,5 +1,6 @@
 package app.recetario.pairing
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -32,7 +33,6 @@ import app.recetario.testing.waitFor
 import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import androidx.compose.ui.test.performScrollToNode
-import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
@@ -44,7 +44,11 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class DetailPairingTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -56,9 +60,6 @@ class DetailPairingTest {
         container = installTestContainer()
         seedPairingRecipes(container)
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     private fun launchDetail(id: String) = rule.setContent {
         RecetarioTheme(ThemeChoice.CALIDO) {
@@ -154,7 +155,8 @@ class DetailPairingTest {
         // 👎 en el detalle del mole: la limonada desaparece.
         rule.onNode(hasContentDescription(DISLIKE_LABEL) and inRow(limonadaRow)).performClick()
         rule.waitForGone(hasTestTag(limonadaRow))
-        assertThat(ratings(container)).containsExactly("RECIPE:limonada|RECIPE:mole", false)
+        // La valoración se escribe en applicationScope: la fila puede irse antes de que la lectura la vea.
+        rule.waitUntil(5_000) { ratings(container) == mapOf("RECIPE:limonada|RECIPE:mole" to false) }
 
         // Al revés: partiendo de la limonada, el mole no sale (el flan sí).
         rule.runOnUiThread { nav.navigate(Pairing(subject = "RECIPE:limonada")) }

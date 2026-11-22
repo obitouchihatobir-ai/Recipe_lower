@@ -1,5 +1,6 @@
 package app.recetario.cooking
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
@@ -30,7 +31,6 @@ import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -42,7 +42,11 @@ import java.time.LocalDate
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class CookingDiaryTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var container: AppContainer
@@ -63,9 +67,6 @@ class CookingDiaryTest {
             )
         }
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     private fun scrollTo(matcher: SemanticsMatcher) = rule.onNodeWithTag("cooking-list").performScrollToNode(matcher)
 

@@ -1,5 +1,6 @@
 package app.recetario.backup
 
+import app.recetario.testing.CloseDatabaseRule
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
@@ -35,7 +36,6 @@ import app.recetario.testing.waitFor
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,7 +47,11 @@ import java.util.concurrent.atomic.AtomicInteger
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class BeforeUpdateBackupsTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     @get:Rule
@@ -61,11 +65,6 @@ class BeforeUpdateBackupsTest {
     private lateinit var container: AppContainer
 
     private val copyName = "antes-de-actualizar-v1-2026-11-13-2140.db"
-
-    @After
-    fun tearDown() {
-        if (::container.isInitialized) container.database.close()
-    }
 
     /**
      * Un teléfono que pasó de la 0.1.0 a esta versión: la guarda copió la v1 (con «Sopa de tortilla») y Room la

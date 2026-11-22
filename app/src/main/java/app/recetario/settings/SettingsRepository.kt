@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.pantry.DEFAULT_PANTRY_BASICS
+import app.recetario.share.CardOptions
 import app.recetario.core.ui.theme.ThemeSettings
 import app.recetario.today.MealTimes
 import app.recetario.today.ThermalThresholds
@@ -187,6 +188,21 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>, private 
 
     suspend fun setThemeBySun(enabled: Boolean) {
         dataStore.edit { it[THEME_BY_SUN] = enabled }
+    }
+
+    /**
+     * Las últimas opciones de la ficha para compartir (en `ajustes`, no en las copias): formato, diseño e
+     * interruptores; [CardSettings.asText] si lo último elegido fue «Texto» (el formato de la imagen se conserva).
+     */
+    val cardSettings: Flow<CardSettings> = data.map { p ->
+        val text = p[CARD_OPTIONS]
+        val asText = text?.startsWith(CARD_TEXT_PREFIX) == true
+        CardSettings(CardOptions.decode(if (asText) text?.removePrefix(CARD_TEXT_PREFIX) else text), asText)
+    }.distinctUntilChanged()
+
+    suspend fun setCardSettings(settings: CardSettings) {
+        val encoded = settings.options.encode()
+        dataStore.edit { it[CARD_OPTIONS] = if (settings.asText) CARD_TEXT_PREFIX + encoded else encoded }
     }
 
     /** De dónde sale el tiempo (en `ajustes`). */
@@ -375,8 +391,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>, private 
         val WEATHER_LON = doublePreferencesKey("weather_longitude")
         val WEATHER_FAILED = longPreferencesKey("weather_failed_at")
         val LOCATION_DENIED = booleanPreferencesKey("location_permission_denied")
+        val CARD_OPTIONS = stringPreferencesKey("card_options")
+        const val CARD_TEXT_PREFIX = "TEXT>"
     }
 }
+
+/** Las opciones de la ficha que se recuerdan: las de la imagen o el PDF y si se eligió «Texto». */
+data class CardSettings(val options: CardOptions = CardOptions(), val asText: Boolean = false)
 
 /** DataStore de los ajustes (o del estado del teléfono); si el archivo está corrupto se sustituye por uno vacío. */
 fun createSettingsDataStore(scope: CoroutineScope, produceFile: () -> File): DataStore<Preferences> =

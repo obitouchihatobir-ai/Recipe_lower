@@ -1,5 +1,6 @@
 package app.recetario.backup
 
+import app.recetario.testing.CloseDatabaseRule
 import android.net.Uri
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
@@ -39,7 +40,6 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -50,7 +50,11 @@ import java.io.ByteArrayInputStream
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class BackupScreenTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
@@ -62,9 +66,6 @@ class BackupScreenTest {
     fun setUp() {
         container = installTestContainer(documents = documents)
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     /** Selector de archivos del sistema falso: responde al momento con [uri] y anota lo que se le pidió. */
     private class FakePicker(private val uri: Uri) : ActivityResultRegistryOwner {

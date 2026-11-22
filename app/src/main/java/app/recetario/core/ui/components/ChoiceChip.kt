@@ -48,20 +48,30 @@ fun ChoiceChip(
     role: Role = Role.Checkbox,
     leading: String? = null,
     stateDescription: String? = null,
+    /** Apagado no se puede tocar y va con el texto en gris secundario (por ejemplo, «Foto» en una receta sin foto). */
+    enabled: Boolean = true,
     trailing: (@Composable (Color) -> Unit)? = null,
 ) {
     val c = LocalRecetarioColors.current
     val reduced = LocalReducedMotion.current
-    val bg by animateColorAsState(if (selected) c.accent else c.surface, if (reduced) snap() else tween(200), label = "chipBg")
-    val fg by animateColorAsState(if (selected) c.onAccent else c.muted, if (reduced) snap() else tween(200), label = "chipFg")
-    val line by animateColorAsState(if (selected) c.accent else c.line, if (reduced) snap() else tween(200), label = "chipLine")
+    val on = selected && enabled
+    val bg by animateColorAsState(if (on) c.accent else c.surface, if (reduced) snap() else tween(200), label = "chipBg")
+    val fg by animateColorAsState(if (on) c.onAccent else c.muted, if (reduced) snap() else tween(200), label = "chipFg")
+    val line by animateColorAsState(if (on) c.accent else c.line, if (reduced) snap() else tween(200), label = "chipLine")
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && !reduced) 0.95f else 1f, tween(150), label = "chipScale")
     Box(
         modifier
             .heightIn(min = 48.dp)
-            .selectable(selected = selected, interactionSource = interaction, indication = null, role = role, onClick = onClick)
+            .selectable(
+                selected = selected,
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                role = role,
+                onClick = onClick,
+            )
             .semantics { if (stateDescription != null) this.stateDescription = stateDescription },
         contentAlignment = Alignment.Center,
     ) {

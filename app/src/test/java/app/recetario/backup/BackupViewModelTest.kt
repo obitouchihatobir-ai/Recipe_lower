@@ -1,19 +1,16 @@
 package app.recetario.backup
 
+import app.recetario.testing.CloseDatabaseRule
+import app.recetario.testing.MainDispatcherRule
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.testing.sampleRecipe
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -28,22 +25,22 @@ class BackupViewModelTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
+    /** Se cierra al final: después de desechar los ViewModel (`main`). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { env.close() }
+
+    @get:Rule(order = 1)
+    val main = MainDispatcherRule()
+
     private lateinit var env: BackupTestEnv
     private val created = "content://descargas/antes-de-importar-2026-11-13-2140.zip"
 
     @Before
     fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
         env = BackupTestEnv(tmp)
     }
 
-    @After
-    fun tearDown() {
-        env.close()
-        Dispatchers.resetMain()
-    }
-
-    private fun viewModel(handle: SavedStateHandle) = BackupViewModel(env.manager, env.settings, env.clock, env.documents, handle)
+    private fun viewModel(handle: SavedStateHandle) = main.track(BackupViewModel(env.manager, env.settings, env.clock, env.documents, handle))
 
     private fun BackupViewModel.nextMessage(): String = runBlocking { withTimeout(10_000) { messages.first() } }
 

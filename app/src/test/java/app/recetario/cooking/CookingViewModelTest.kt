@@ -1,5 +1,8 @@
 package app.recetario.cooking
 
+import org.junit.Rule
+import app.recetario.testing.CloseDatabaseRule
+import app.recetario.testing.MainDispatcherRule
 import android.os.Bundle
 import android.os.Parcel
 import androidx.core.os.bundleOf
@@ -12,15 +15,10 @@ import app.recetario.testing.ingredient
 import app.recetario.testing.installTestContainer
 import app.recetario.testing.sampleRecipe
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,13 +26,19 @@ import org.junit.runner.RunWith
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(AndroidJUnit4::class)
 class CookingViewModelTest {
+    /** Se cierra al final: después de desechar los ViewModel (`main`). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
+    val main = MainDispatcherRule()
+
     private lateinit var container: AppContainer
     private var clock = 5_000L
     private val timers = TimerManager { clock }
 
     @Before
     fun setUp() {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
         container = installTestContainer()
         runBlocking {
             container.recipeRepository.save(
@@ -55,16 +59,10 @@ class CookingViewModelTest {
         }
     }
 
-    @After
-    fun tearDown() {
-        container.database.close()
-        Dispatchers.resetMain()
-    }
-
     private fun handle(recipeId: String = "r1", servings: Int = 4) =
         SavedStateHandle(mapOf(CookingViewModel.RECIPE_ID_ARG to recipeId, CookingViewModel.SERVINGS_ARG to servings))
 
-    private fun vm(handle: SavedStateHandle = handle()) = CookingViewModel(handle, container.recipeRepository, timers)
+    private fun vm(handle: SavedStateHandle = handle()) = main.track(CookingViewModel(handle, container.recipeRepository, timers))
 
     private fun CookingViewModel.await(predicate: (CookingUiState) -> Boolean): CookingUiState =
         runBlocking { withTimeout(10_000) { state.first(predicate) } }
@@ -180,7 +178,7 @@ class CookingViewModelTest {
 
     @Test
     fun missingServingsArg_usesTheRecipeServings() {
-        val s = CookingViewModel(SavedStateHandle(mapOf(CookingViewModel.RECIPE_ID_ARG to "r1")), container.recipeRepository, timers).loaded()
+        val s = main.track(CookingViewModel(SavedStateHandle(mapOf(CookingViewModel.RECIPE_ID_ARG to "r1")), container.recipeRepository, timers)).loaded()
         assertThat(s.servings).isEqualTo(4)
         assertThat(s.quantities["i1"]).isEqualTo("800 g")
     }

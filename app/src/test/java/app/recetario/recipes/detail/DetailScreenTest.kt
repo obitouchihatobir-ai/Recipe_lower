@@ -1,5 +1,6 @@
 package app.recetario.recipes.detail
 
+import app.recetario.testing.CloseDatabaseRule
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -35,7 +36,6 @@ import app.recetario.testing.waitForGone
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -45,21 +45,23 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w411dp-h891dp")
 class DetailScreenTest {
-    @get:Rule
+    /** Cierra la base de datos cuando la regla de Compose ya desechó la composición (CLAUDE.md, problemas conocidos). */
+    @get:Rule(order = 0)
+    val closeDatabase = CloseDatabaseRule { container.database.close() }
+
+    @get:Rule(order = 1)
     val rule = createComposeRule()
 
     private lateinit var container: AppContainer
     private var backs = 0
     private var edits = 0
     private var cookingServings: Int? = null
+    private var shareServings: Int? = null
 
     @Before
     fun setUp() {
         container = installTestContainer()
     }
-
-    @After
-    fun tearDown() = container.database.close()
 
     private fun launch() = rule.setContent {
         RecetarioTheme(ThemeChoice.CALIDO) {
@@ -68,6 +70,7 @@ class DetailScreenTest {
                 onBack = { backs++ },
                 onEdit = { edits++ },
                 onCooking = { cookingServings = it },
+                onShare = { shareServings = it },
             )
         }
     }
@@ -190,6 +193,21 @@ class DetailScreenTest {
         rule.onNodeWithContentDescription("Más opciones").performClick()
         rule.onNodeWithText("Editar").performClick()
         assertThat(edits).isEqualTo(1)
+    }
+
+    /** «Compartir» ya no abre el texto directamente: abre la Ficha con las porciones elegidas. */
+    @Test
+    fun menu_share_opensTheCardWithTheChosenServings() {
+        save()
+        launch()
+        rule.waitFor(hasText("800 g"))
+        rule.onNodeWithContentDescription("Añadir una porción").performClick()
+        rule.onNodeWithContentDescription("Añadir una porción").performClick()
+        rule.waitFor(hasText("1,2 kg"))
+        rule.onNodeWithContentDescription("Más opciones").performClick()
+        rule.onNodeWithText("Compartir").performClick()
+        rule.waitUntil(5_000) { shareServings != null }
+        assertThat(shareServings).isEqualTo(6)
     }
 
     @Test
