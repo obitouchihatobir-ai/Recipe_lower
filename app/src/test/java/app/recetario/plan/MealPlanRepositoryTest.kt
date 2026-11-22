@@ -59,6 +59,19 @@ class MealPlanRepositoryTest {
     }
 
     @Test
+    fun changeServings_addsInTheDatabase_withinRange() = runBlocking<Unit> {
+        repo.set(friday, MealSlot.LUNCH, "r1", 2)
+        repo.changeServings(friday, MealSlot.LUNCH, -1)
+        repo.changeServings(friday, MealSlot.LUNCH, -1)
+        assertThat(week().single().servings).isEqualTo(1)
+        repo.changeServings(friday, MealSlot.LUNCH, 1)
+        repo.changeServings(friday, MealSlot.LUNCH, 1)
+        assertThat(week().single().servings).isEqualTo(3)
+        repo.changeServings(friday, MealSlot.DINNER, 1)
+        assertThat(week()).hasSize(1)
+    }
+
+    @Test
     fun clear_returnsForUndo() = runBlocking<Unit> {
         repo.set(friday, MealSlot.DINNER, "r1", 3)
         val before = week()

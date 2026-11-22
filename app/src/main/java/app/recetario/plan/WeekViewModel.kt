@@ -157,6 +157,9 @@ class WeekViewModel(
 
     suspend fun set(date: LocalDate, slot: MealSlot, recipeId: String, servings: Int) = plan.set(date, slot, recipeId, servings)
 
+    /** «−/+» del panel: suma en la base de datos, así dos toques rápidos cuentan los dos. */
+    suspend fun changeServings(date: LocalDate, slot: MealSlot, delta: Int) = plan.changeServings(date, slot, delta)
+
     /** Vacía el hueco y devuelve lo que había, para «Deshacer». */
     suspend fun clear(date: LocalDate, slot: MealSlot): PlannedMeal? = plan.clear(date, slot)
 

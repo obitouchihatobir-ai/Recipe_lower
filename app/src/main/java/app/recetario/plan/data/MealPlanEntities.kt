@@ -69,6 +69,10 @@ interface MealPlanDao {
     suspend fun updateSlot(id: String, recipeId: String, servings: Int)
 
     /** Inserta si el hueco `(date, slot)` (y el id) están libres; -1 si no. Nunca pisa otro plato. */
+    /** Suma [delta] a las porciones del hueco, entre [min] y [max], en la base de datos (dos toques seguidos suman dos). */
+    @Query("UPDATE meal_plan SET servings = MAX(:min, MIN(:max, servings + :delta)) WHERE date = :date AND slot = :slot")
+    suspend fun addServings(date: String, slot: String, delta: Int, min: Int, max: Int)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIfFree(item: MealPlanEntity): Long
 

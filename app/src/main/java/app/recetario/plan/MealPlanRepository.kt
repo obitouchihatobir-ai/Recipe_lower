@@ -21,6 +21,9 @@ interface MealPlanRepository {
     /** Pone [recipeId] en el hueco; si ya estaba ocupado, lo sustituye conservando su id. Sin receta, no hace nada. */
     suspend fun set(date: LocalDate, slot: MealSlot, recipeId: String, servings: Int)
 
+    /** Suma [delta] porciones al plato del hueco (entre 1 y 99); sin plato, no hace nada. */
+    suspend fun changeServings(date: LocalDate, slot: MealSlot, delta: Int)
+
     /** Vacía el hueco y devuelve el plato que había (para «Deshacer»). */
     suspend fun clear(date: LocalDate, slot: MealSlot): PlannedMeal?
 
@@ -52,6 +55,9 @@ class RoomMealPlanRepository(private val db: AppDatabase) : MealPlanRepository {
             }
         }
     }
+
+    override suspend fun changeServings(date: LocalDate, slot: MealSlot, delta: Int) =
+        dao.addServings(date.toString(), slot.key, delta, MIN_SERVINGS, MAX_SERVINGS)
 
     override suspend fun clear(date: LocalDate, slot: MealSlot): PlannedMeal? = db.withTransaction {
         val row = dao.getSlot(date.toString(), slot.key) ?: return@withTransaction null

@@ -135,10 +135,9 @@ fun WeekRoute(container: AppContainer, tabs: @Composable () -> Unit) {
             open = null
             scope.launch { vm.set(date, slot, choice.id, choice.servings) }
         },
-        onServings = { servings ->
+        onServings = { delta ->
             val (date, slot) = selected ?: return@WeekContent
-            val meal = state.slot(date, slot)?.meal ?: return@WeekContent
-            scope.launch { vm.set(date, slot, meal.recipeId, servings) }
+            scope.launch { vm.changeServings(date, slot, delta) }
         },
         onRemove = {
             val (date, slot) = selected ?: return@WeekContent
@@ -181,6 +180,7 @@ fun WeekContent(
     onDismissPanel: () -> Unit,
     onQuery: (String) -> Unit,
     onPick: (WeekRecipeChoice) -> Unit,
+    /** «−/+»: cuánto sumar a las porciones (−1 o 1). */
     onServings: (Int) -> Unit,
     onRemove: () -> Unit,
     onFill: () -> Unit,
@@ -367,8 +367,8 @@ private fun SlotPanel(
             tag = "week-servings",
             minusDescription = "Quitar una porción",
             plusDescription = "Añadir una porción",
-            onMinus = { onServings(meal.servings - 1) },
-            onPlus = { onServings(meal.servings + 1) },
+            onMinus = { onServings(-1) },
+            onPlus = { onServings(1) },
             minusEnabled = meal.servings > RoomMealPlanRepository.MIN_SERVINGS,
             plusEnabled = meal.servings < RoomMealPlanRepository.MAX_SERVINGS,
         )
