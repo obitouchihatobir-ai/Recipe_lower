@@ -1,71 +1,104 @@
 package app.recetario.share
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.recetario.R
 import app.recetario.RecetarioApp
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.GraphicsMode
+import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayOutputStream
 import kotlin.math.roundToInt
 
+/**
+ * El PDF de la ficha. Robolectric no implementa `PdfDocument`, así que se escribe con [FakePdfDocument]: se
+ * comprueba qué páginas pide `writeCardPdf` (cuántas, de qué tamaño y en qué orden) y se dibuja cada una con el
+ * mismo pintor. Que el `PdfDocument` real se abra bien solo se comprueba en un teléfono.
+ */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PdfRendererTest {
     private val context = ApplicationProvider.getApplicationContext<RecetarioApp>()
-    private val painter = CardPainter(CardFonts(context))
     private val pdfFormats = CardFormat.entries.filter { it.isPdf }
 
-    private fun pages(format: CardFormat, design: CardDesign, long: Boolean = true): List<PdfPage> {
+    private fun pages(painter: CardPainter, format: CardFormat, design: CardDesign, long: Boolean = true): List<PdfPage> {
         val recipe = if (long) CardSamples.long() else CardSamples.short()
         val content = cardContent(recipe, recipe.servings, "🍲", CardOptions(format, design))
         return paginatePdf(content, format, design, painter.measurer(CardLook(design)))
     }
 
-    private fun pdfBytes(pages: List<PdfPage>, design: CardDesign): ByteArray =
-        ByteArrayOutputStream().also { writeCardPdf(pages, CardLook(design), painter, CardSamples.photo(), it) }.toByteArray()
-
-    /** Páginas del PDF (los diccionarios `/Type /Page`, no `/Pages`) y sus `MediaBox`. */
-    private fun pageCount(pdf: String) = Regex("""/Type\s*/Page(?![a-zA-Z])""").findAll(pdf).count()
-
     @Test
     fun share_pdf_pageCountAndSize() {
         for (format in pdfFormats) for (design in CardDesign.entries) {
-            val pages = pages(format, design)
+            val fake = FakePdfDocument()
+            val painter = CardPainter(CardFonts(context), newPdf = { fake })
+            val pages = pages(painter, format, design)
             assertWithMessage("$format $design").that(pages.size).isGreaterThan(1)
-            val bytes = pdfBytes(pages, design)
-            val text = String(bytes, Charsets.ISO_8859_1)
-            assertThat(text).startsWith("%PDF-")
-            assertWithMessage("$format $design").that(pageCount(text)).isEqualTo(pages.size)
+            val out = ByteArrayOutputStream()
+            writeCardPdf(pages, CardLook(design), painter, CardSamples.photo(), out)
             val w = format.width.roundToInt()
             val h = format.height.roundToInt()
-            assertWithMessage("$format $design").that(Regex("""/MediaBox\s*\[\s*0\s+0\s+$w\s+$h\s*]""").findAll(text).count())
-                .isEqualTo(pages.size)
+            assertWithMessage("$format $design").that(fake.pages.map { Triple(it.width, it.height, it.number) })
+                .isEqualTo((1..pages.size).map { Triple(w, h, it) })
+            assertThat(fake.closed).isTrue()
+            assertThat(out.toString(Charsets.UTF_8.name())).startsWith("%PDF-")
+            // Cada página tiene algo dibujado además del fondo (el pie, al menos).
+            val bg = CardLook(design).palette.bg
+            for (p in fake.pages) {
+                val px = IntArray(p.bitmap.width * p.bitmap.height)
+                p.bitmap.getPixels(px, 0, p.bitmap.width, 0, 0, p.bitmap.width, p.bitmap.height)
+                assertWithMessage("$format $design p${p.number}").that(px.count { it != bg }).isGreaterThan(100)
+            }
         }
     }
 
     @Test
-    fun shortRecipe_onePage() {
-        val pages = pages(CardFormat.PDF_A4, CardDesign.CLASSIC, long = false)
+    fun shortRecipe_onePage_closedEvenIfDrawingFails() {
+        val fake = FakePdfDocument()
+        val painter = CardPainter(CardFonts(context), newPdf = { fake })
+        val pages = pages(painter, CardFormat.PDF_A4, CardDesign.CLASSIC, long = false)
         assertThat(pages).hasSize(1)
-        assertThat(pageCount(String(pdfBytes(pages, CardDesign.CLASSIC), Charsets.ISO_8859_1))).isEqualTo(1)
+        val failing = object : java.io.OutputStream() {
+            override fun write(b: Int) = throw java.io.IOException("disco lleno")
+        }
+        runCatching { writeCardPdf(pages, CardLook(CardDesign.CLASSIC), painter, null, failing) }
+        assertThat(fake.pages).hasSize(1)
+        assertThat(fake.closed).isTrue()
+    }
+
+    @Test
+    fun appUsesPdfDocument() {
+        assertThat(CardPainter(CardFonts(context)).newPdf()).isInstanceOf(AndroidPdfDocument::class.java)
+    }
+
+    /** El `FileProvider` publica `cacheDir/fichas/` (y nada más que lo de la cámara). */
+    @Test
+    fun fileProvider_sharesTheCardFolder() {
+        val parser = context.resources.getXml(R.xml.file_paths)
+        val paths = mutableListOf<Triple<String, String?, String?>>()
+        while (parser.next() != XmlPullParser.END_DOCUMENT) {
+            if (parser.eventType == XmlPullParser.START_TAG && parser.name != "paths") {
+                paths += Triple(parser.name, parser.getAttributeValue(null, "name"), parser.getAttributeValue(null, "path"))
+            }
+        }
+        assertThat(paths).containsExactly(
+            Triple("cache-path", "camera", "camera/"),
+            Triple("cache-path", "fichas", "$CARD_FILES_DIR/"),
+        )
     }
 
     /** Las páginas se dibujan a PNG (con el mismo pintor que el PDF) para revisarlas a ojo. */
     @Test
     fun pdfPages_renders() {
         for (format in pdfFormats) for (design in CardDesign.entries) {
-            val pages = pages(format, design)
-            for (page in pages.take(2)) {
-                val scale = 2f
-                val bitmap = Bitmap.createBitmap((format.width * scale).roundToInt(), (format.height * scale).roundToInt(), Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap).apply { scale(scale, scale) }
-                painter.draw(canvas, format, page.blocks, CardLook(design), CardSamples.photo())
-                CardSamples.saveRender("pdf-${format.name.lowercase()}-${design.name.lowercase()}-p${page.number}", bitmap)
+            val fake = FakePdfDocument(scale = 2f)
+            val painter = CardPainter(CardFonts(context), newPdf = { fake })
+            writeCardPdf(pages(painter, format, design), CardLook(design), painter, CardSamples.photo(), ByteArrayOutputStream())
+            fake.pages.take(2).forEach {
+                CardSamples.saveRender("pdf-${format.name.lowercase()}-${design.name.lowercase()}-p${it.number}", it.bitmap)
             }
         }
     }

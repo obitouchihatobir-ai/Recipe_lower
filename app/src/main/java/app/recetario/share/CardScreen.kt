@@ -3,6 +3,7 @@ package app.recetario.share
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
@@ -70,6 +71,7 @@ import app.recetario.core.ui.theme.LocalRecetarioColors
 import app.recetario.core.ui.theme.ThemeChoice
 import app.recetario.core.ui.theme.paletteFor
 import app.recetario.settings.SettingsPage
+import java.io.File
 
 /** Lo que dura el giro de la vista previa al cambiar de formato o de diseño (diseño de la etapa 2, §8). */
 const val CARD_FLIP_MS = 300
@@ -89,11 +91,20 @@ fun currentThemeChoice(): ThemeChoice {
 }
 
 @Composable
-fun CardRoute(container: AppContainer, recipeId: String, servings: Int, onBack: () -> Unit) {
+fun CardRoute(
+    container: AppContainer,
+    recipeId: String,
+    servings: Int,
+    onBack: () -> Unit,
+    /** Dibuja la ficha y crea el PDF (las pruebas pasan uno con un PDF falso). */
+    painter: CardPainter? = null,
+    /** El `content://` del archivo que se comparte (las pruebas pasan uno falso). */
+    uriFor: ((File) -> Uri)? = null,
+) {
     val context = LocalContext.current
     val app = context.applicationContext
-    val painter = remember(app) { CardPainter(CardFonts(app)) }
-    val vm: CardViewModel = viewModel(factory = CardViewModel.factory(container, painter, app.cacheDir, recipeId, servings))
+    val cardPainter = remember(app, painter) { painter ?: CardPainter(CardFonts(app)) }
+    val vm: CardViewModel = viewModel(factory = CardViewModel.factory(container, cardPainter, app.cacheDir, recipeId, servings))
     val state by vm.state.collectAsStateWithLifecycle()
     val theme = currentThemeChoice()
     LaunchedEffect(theme) { vm.setTheme(theme) }
@@ -108,7 +119,12 @@ fun CardRoute(container: AppContainer, recipeId: String, servings: Int, onBack: 
     LaunchedEffect(vm) {
         vm.events.collect { e ->
             when (e) {
-                is CardEvent.ShareFile -> startChooser(context, cardShareIntent(context, e.file, e.mimeType))
+                is CardEvent.ShareFile -> {
+                    val intent = runCatching {
+                        cardShareIntent(context, e.file, e.mimeType, uriFor ?: { cardFileUri(context, it) })
+                    }.getOrNull()
+                    if (intent == null) snackbar.showSnackbar(CARD_SHARE_FAILED) else startChooser(context, intent)
+                }
                 is CardEvent.ShareText -> startChooser(context, textShareIntent(e.text))
                 is CardEvent.Message -> snackbar.showSnackbar(e.text)
             }

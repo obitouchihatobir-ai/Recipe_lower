@@ -12,6 +12,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
+import android.net.Uri
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
@@ -36,7 +37,11 @@ fun clearCardFiles(cacheDir: File) {
  * unidades del formato (px o pt). Lo usan la vista previa, la imagen PNG y el PDF, y el medidor de la maquetación
  * ([measurer]) parte las líneas con el mismo `StaticLayout` y la misma fuente: lo medido es lo dibujado.
  */
-class CardPainter(private val fonts: CardFonts) {
+class CardPainter(
+    private val fonts: CardFonts,
+    /** Crea el documento del PDF ([AndroidPdfDocument]; las pruebas pasan uno falso). */
+    val newPdf: () -> CardPdfDocument = { AndroidPdfDocument() },
+) {
 
     fun paint(look: CardLook, style: CardTextStyle): TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = fonts.get(look.font(style.role))
@@ -203,8 +208,8 @@ internal fun downscale(bitmap: Bitmap, maxSide: Int): Bitmap {
  * Lo que abre el selector de «Compartir» para un archivo de `cacheDir/fichas/`: `ACTION_SEND` con su `content://`
  * del `FileProvider`, el tipo y permiso de lectura (en el intent, en su `ClipData` y en el selector).
  */
-fun cardShareIntent(context: Context, file: File, mimeType: String): Intent {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+fun cardShareIntent(context: Context, file: File, mimeType: String, uriFor: (File) -> Uri = { cardFileUri(context, it) }): Intent {
+    val uri = uriFor(file)
     val send = Intent(Intent.ACTION_SEND).apply {
         type = mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -213,6 +218,10 @@ fun cardShareIntent(context: Context, file: File, mimeType: String): Intent {
     }
     return Intent.createChooser(send, SHARE_TITLE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 }
+
+/** El `content://` del `FileProvider` (ruta «fichas» de `res/xml/file_paths.xml`) para un archivo de `cacheDir/fichas/`. */
+fun cardFileUri(context: Context, file: File): Uri =
+    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
 
 /** El texto de la etapa 1, con el selector de siempre. */
 fun textShareIntent(text: String): Intent {

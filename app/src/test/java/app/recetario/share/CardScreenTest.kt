@@ -108,9 +108,9 @@ class CardScreenTest {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides picker) {
                 RecetarioTheme(ThemeChoice.CALIDO) {
                     if (reduced == null) {
-                        CardRoute(container, "r1", servings, onBack = {})
+                        Route(servings)
                     } else {
-                        CompositionLocalProvider(LocalReducedMotion provides reduced) { CardRoute(container, "r1", servings, onBack = {}) }
+                        CompositionLocalProvider(LocalReducedMotion provides reduced) { Route(servings) }
                     }
                 }
             }
@@ -118,6 +118,17 @@ class CardScreenTest {
         rule.waitFor(hasTestTag("card-preview"))
         return picker
     }
+
+    /** Robolectric no implementa `PdfDocument` ni lee los `meta-data` del `FileProvider`: PDF y `content://` falsos. */
+    private val painter = CardPainter(CardFonts(RuntimeEnvironment.getApplication()), newPdf = { FakePdfDocument() })
+    private val authority = "${RuntimeEnvironment.getApplication().packageName}.fileprovider"
+
+    @androidx.compose.runtime.Composable
+    private fun Route(servings: Int) = CardRoute(
+        container, "r1", servings, onBack = {},
+        painter = painter,
+        uriFor = { Uri.parse("content://$authority/fichas/${it.name}") },
+    )
 
     private fun previewSays(text: String) = hasTestTag("card-preview") and hasContentDescription(text, substring = true)
 
@@ -183,7 +194,7 @@ class CardScreenTest {
         @Suppress("DEPRECATION")
         val uri = checkNotNull(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
         assertThat(uri.scheme).isEqualTo("content")
-        assertThat(uri.authority).isEqualTo("${RuntimeEnvironment.getApplication().packageName}.fileprovider")
+        assertThat(uri.authority).isEqualTo(authority)
         assertThat(uri.path).endsWith("/Sazon-crema-de-calabaza.pdf")
         assertThat(send.clipData?.getItemAt(0)?.uri).isEqualTo(uri)
         val pdf = File(RuntimeEnvironment.getApplication().cacheDir, "fichas/Sazon-crema-de-calabaza.pdf")
