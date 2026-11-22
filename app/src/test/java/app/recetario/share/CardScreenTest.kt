@@ -147,6 +147,9 @@ class CardScreenTest {
             found != null
         }
         val chooser = checkNotNull(found)
+        // Ni publicar el archivo ni abrir el selector fallaron (la pantalla lo anota y sigue).
+        val errors = org.robolectric.shadows.ShadowLog.getLogsForTag("Ficha").map { "${it.msg}: ${it.throwable}" }
+        assertWithMessage(errors.joinToString()).that(errors).isEmpty()
         assertThat(chooser.action).isEqualTo(Intent.ACTION_CHOOSER)
         @Suppress("DEPRECATION")
         return checkNotNull(chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT))
