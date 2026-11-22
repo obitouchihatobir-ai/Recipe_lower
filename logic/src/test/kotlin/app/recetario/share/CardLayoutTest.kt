@@ -287,6 +287,21 @@ class CardLayoutTest {
         }
     }
 
+    @Test fun classic_noIngredients_stepsUseFullWidth() {
+        val c = cardContent(recipe(ingredients = emptyList(), notes = "Mejor al día siguiente."), 4, "🍲", allOn)
+        for (format in CardFormat.entries) {
+            val blocks = firstPageOrImage(c, format, CardDesign.CLASSIC)
+            val title = blocks.single { it.kind == CardBlockKind.TITLE }
+            val body = blocks.filter { it.kind == CardBlockKind.STEP || it.kind == CardBlockKind.NOTES || it.kind == CardBlockKind.HEADING }
+            assertWithMessage("$format").that(body).isNotEmpty()
+            for (b in body) {
+                assertWithMessage("$format ${b.text}").that(b.x).isEqualTo(title.x)
+                assertWithMessage("$format ${b.text}").that(b.width).isEqualTo(title.width)
+            }
+            assertSane(blocks, format)
+        }
+    }
+
     /** Textos de ingredientes, pasos y notas, cada uno con sus continuaciones unidas por su separador. */
     private fun flowTexts(pages: List<PdfPage>): Map<CardBlockKind, List<String>> {
         val out = mutableMapOf<CardBlockKind, MutableList<String>>()

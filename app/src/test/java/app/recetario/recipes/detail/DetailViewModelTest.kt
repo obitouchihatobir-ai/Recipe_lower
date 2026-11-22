@@ -174,16 +174,6 @@ class DetailViewModelTest {
         vm.await { it.servings == 29 }
     }
 
-    @Test
-    fun shareText_usesTheChosenServings() {
-        save(ingredient("i1", "Calabaza", 800.0, MeasureUnit.GRAM))
-        val vm = vm()
-        vm.loaded()
-        vm.setServings(6)
-        vm.await { it.servings == 6 }
-        assertThat(vm.shareText()).contains("• Calabaza — 1,2 kg")
-    }
-
     /** Cuenta cuántas veces se escucha `observeRecipe` (cada suscripción es una consulta más a Room). */
     private class CountingRecipes(private val real: RecipeRepository) : RecipeRepository by real {
         val subscriptions = AtomicInteger()

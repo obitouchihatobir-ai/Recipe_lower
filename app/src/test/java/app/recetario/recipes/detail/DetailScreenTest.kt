@@ -56,6 +56,7 @@ class DetailScreenTest {
     private var backs = 0
     private var edits = 0
     private var cookingServings: Int? = null
+    private var shareServings: Int? = null
 
     @Before
     fun setUp() {
@@ -69,6 +70,7 @@ class DetailScreenTest {
                 onBack = { backs++ },
                 onEdit = { edits++ },
                 onCooking = { cookingServings = it },
+                onShare = { shareServings = it },
             )
         }
     }
@@ -191,6 +193,21 @@ class DetailScreenTest {
         rule.onNodeWithContentDescription("Más opciones").performClick()
         rule.onNodeWithText("Editar").performClick()
         assertThat(edits).isEqualTo(1)
+    }
+
+    /** «Compartir» ya no abre el texto directamente: abre la Ficha con las porciones elegidas. */
+    @Test
+    fun menu_share_opensTheCardWithTheChosenServings() {
+        save()
+        launch()
+        rule.waitFor(hasText("800 g"))
+        rule.onNodeWithContentDescription("Añadir una porción").performClick()
+        rule.onNodeWithContentDescription("Añadir una porción").performClick()
+        rule.waitFor(hasText("1,2 kg"))
+        rule.onNodeWithContentDescription("Más opciones").performClick()
+        rule.onNodeWithText("Compartir").performClick()
+        rule.waitUntil(5_000) { shareServings != null }
+        assertThat(shareServings).isEqualTo(6)
     }
 
     @Test

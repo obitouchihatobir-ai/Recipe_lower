@@ -27,6 +27,7 @@ import app.recetario.pantry.PantryRepository
 import app.recetario.plan.MealPlanRepository
 import app.recetario.plan.RoomMealPlanRepository
 import app.recetario.pantry.RoomPantryRepository
+import app.recetario.share.clearCardFiles
 import app.recetario.shopping.RoomShoppingRepository
 import app.recetario.shopping.ShoppingRepository
 import androidx.datastore.core.DataStore
@@ -71,6 +72,8 @@ class RecetarioApp : Application() {
             clock = Clock.systemDefaultZone(),
         ).prepare()
         container = AppContainer(this)
+        // Las fichas compartidas la vez anterior ya no hacen falta (las apps que las recibieron ya las copiaron).
+        clearCardFiles(cacheDir)
         // WorkManager se inicia solo (androidx.startup) antes de onCreate. En las pruebas de Robolectric no se
         // ejecutan los proveedores del manifiesto: ahí no está iniciado y no se programa nada.
         if (WorkManager.isInitialized()) {

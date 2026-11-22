@@ -10,10 +10,10 @@ package app.recetario.share
 /** Escala mínima legible de la letra en las imágenes. */
 const val MIN_CARD_SCALE = 0.75f
 
-/** Alto de línea respecto al tamaño de la letra. */
 /** Líneas máximas del título; uno más largo se corta con «…» (también en el PDF). */
 const val MAX_TITLE_LINES = 3
 
+/** Alto de línea respecto al tamaño de la letra. */
 const val CARD_LINE_SPACING = 1.3f
 
 private val IMAGE_SCALES = listOf(1f, 0.95f, 0.9f, 0.85f, 0.8f, MIN_CARD_SCALE)
@@ -264,7 +264,8 @@ private fun start(content: CardContent, geo: Geo, m: TextMeasurer, bottom: Float
     }
     s.place(Item(CardBlockKind.META, content.servingsLine, CardTextRole.META))
     content.flavorLine?.let { s.place(Item(CardBlockKind.FLAVOR, it, CardTextRole.META)) }
-    if (!geo.twoColumns) return Start(s, top, s, null)
+    // Sin ingredientes, la columna izquierda quedaría vacía: los pasos van a todo el ancho.
+    if (!geo.twoColumns || content.ingredients.isEmpty()) return Start(s, top, s, null)
     val y0 = s.y + geo.sectionGap
     return Start(
         s, top,

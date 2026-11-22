@@ -37,6 +37,7 @@ import androidx.navigation.toRoute
 import app.recetario.AppContainer
 import app.recetario.backup.BackupRoute
 import app.recetario.cooking.CookingRoute
+import app.recetario.share.CardRoute
 import app.recetario.converter.ConverterRoute
 import app.recetario.core.ui.components.LocalNavAnimatedVisibilityScope
 import app.recetario.core.ui.components.LocalSharePhotos
@@ -218,6 +219,7 @@ fun AppNavHost(
                                     onBack = { navController.from(from) { popBackStack() } },
                                     onEdit = { navController.from(from) { navigate(RecipeEditor(id = route.id)) } },
                                     onCooking = { servings -> navController.from(from) { navigate(Cooking(route.id, servings)) } },
+                                    onShare = { servings -> navController.from(from) { navigate(Card(route.id, servings)) } },
                                     onMorePairings = { navController.from(from) { openPairingFor(route.id) } },
                                     onComparePairing = { other ->
                                         navController.from(from) { navigate(PairingCompare("RECIPE", route.id, other.kind, other.id)) }
@@ -227,6 +229,10 @@ fun AppNavHost(
                         }
                         composable<Cooking> { from ->
                             CookingRoute(container, onClose = { navController.from(from) { popBackStack() } })
+                        }
+                        composable<Card> { from ->
+                            val route = from.toRoute<Card>()
+                            CardRoute(container, route.recipeId, route.servings, onBack = { navController.from(from) { popBackStack() } })
                         }
                         composable<Converter> { from ->
                             ConverterRoute(container, onBack = { navController.from(from) { popBackStack() } })
