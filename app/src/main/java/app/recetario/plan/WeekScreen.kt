@@ -226,16 +226,16 @@ fun WeekContent(
                 WeekHeader(state.title, onPrevious, onNext)
                 Button(
                     onClick = onFill,
-                    enabled = !working,
+                    enabled = !working && !state.isPast,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("week-fill"),
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
                 ) { Text("Rellenar con sugerencias") }
                 OutlinedButton(
                     onClick = onGenerate,
-                    enabled = !working,
+                    enabled = !working && !state.isPast,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("week-generate"),
                     border = BorderStroke(1.dp, c.accent),
-                ) { Text("Generar lista de compra", color = c.ink) }
+                ) { Text("Generar lista de compra", color = if (!working && !state.isPast) c.ink else c.muted) }
                 for (day in state.days) DayCard(day, onOpenSlot)
             }
         }

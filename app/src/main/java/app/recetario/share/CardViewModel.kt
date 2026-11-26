@@ -238,7 +238,13 @@ class CardViewModel(
                         // Una carpeta por vez: una app que aún lee la ficha anterior no ve cómo se sobrescribe.
                         val dir = File(File(cacheDir, CARD_FILES_DIR), UUID.randomUUID().toString()).apply { mkdirs() }
                         val file = File(dir, cardFileName(s.title, format))
-                        writeFile(file, bytes)
+                        try {
+                            writeFile(file, bytes)
+                        } catch (e: Exception) {
+                            // Sin archivo, la carpeta no sirve: no se deja a medias.
+                            dir.deleteRecursively()
+                            throw e
+                        }
                         CardEvent.ShareFile(file, format.mimeType)
                     }
                 }
@@ -256,14 +262,12 @@ class CardViewModel(
 
     /**
      * «Guardar» en el documento [uri] que acaba de crear el selector. La ficha se genera antes de abrirlo; si algo
-     * falla, se avisa y el documento, si quedó vacío, se borra.
+     * falla, se avisa y el documento, si quedó vacío, se borra. Si aún se está preparando otra ficha (p. ej.
+     * «Compartir»), espera a que termine: el documento elegido nunca se pierde sin avisar.
      */
     fun save(uri: String) {
-        if (!busy.compareAndSet(expect = false, update = true)) {
-            writeScope.launch { deleteDocumentIfEmpty(documents, uri) }
-            return
-        }
         viewModelScope.launch {
+            while (!busy.compareAndSet(expect = false, update = true)) busy.first { !it }
             val message = try {
                 // Al volver del selector la vista previa puede estar aún calculándose (o rehaciéndose si Android
                 // cerró el proceso): se espera un tiempo acotado.

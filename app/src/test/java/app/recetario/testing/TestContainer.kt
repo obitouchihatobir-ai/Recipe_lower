@@ -18,6 +18,10 @@ import app.recetario.RecetarioApp
 import app.recetario.backup.BackupDocuments
 import app.recetario.backup.ContentResolverDocuments
 import app.recetario.weather.LocationProvider
+import app.recetario.share.CardPdfDocument
+import app.recetario.share.FakePdfDocument
+import android.content.Context
+import android.net.Uri
 import java.io.IOException
 import java.net.URL
 import app.recetario.core.data.AppDatabase
@@ -56,6 +60,10 @@ fun installTestContainer(
     restartApp: () -> Unit = {},
     openMeteo: FakeOpenMeteo? = null,
     location: LocationProvider = LocationProvider { null },
+    /** Robolectric no implementa `PdfDocument`: por defecto, un PDF falso. */
+    cardPdf: () -> CardPdfDocument = { FakePdfDocument() },
+    /** El `content://` de las fichas compartidas; null: el `FileProvider` de verdad. */
+    cardUri: ((Context, File) -> Uri)? = null,
 ): AppContainer {
     val app = ApplicationProvider.getApplicationContext<RecetarioApp>()
     val db = database ?: Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
@@ -69,6 +77,8 @@ fun installTestContainer(
         restartApp = restartApp,
         openConnection = openMeteo?.let { fake -> { url: URL -> fake.open(url) } } ?: { _: URL -> throw IOException("Sin red en las pruebas") },
         locationProvider = location,
+        newCardPdf = cardPdf,
+        cardUri = cardUri ?: { context, file -> app.recetario.share.cardFileUri(context, file) },
     ).also { app.container = it }
 }
 

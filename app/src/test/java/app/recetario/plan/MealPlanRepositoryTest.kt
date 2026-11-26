@@ -92,8 +92,18 @@ class MealPlanRepositoryTest {
         val orphan = PlannedMeal("nuevo-3", friday, MealSlot.BREAKFAST, "no-existe", 2)
         assertThat(repo.addAll(listOf(clash, free, orphan))).containsExactly(free)
         assertThat(week()).containsExactly(kept, free)
-        repo.removeAll(listOf("nuevo-1", "nuevo-2", "nuevo-3"))
+        repo.removeAdded(listOf(clash, free, orphan))
         assertThat(week()).containsExactly(kept)
+    }
+
+    @Test
+    fun removeAdded_keepsASlotWhoseRecipeChanged() = runBlocking<Unit> {
+        val lunch = PlannedMeal("nuevo-1", friday, MealSlot.LUNCH, "r1", 4)
+        val dinner = PlannedMeal("nuevo-2", friday, MealSlot.DINNER, "r1", 4)
+        assertThat(repo.addAll(listOf(lunch, dinner))).hasSize(2)
+        repo.set(friday, MealSlot.DINNER, "r2", 4)
+        repo.removeAdded(listOf(lunch, dinner))
+        assertThat(week()).containsExactly(dinner.copy(recipeId = "r2"))
     }
 
     @Test

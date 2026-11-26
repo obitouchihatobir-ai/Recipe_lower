@@ -103,6 +103,22 @@ import app.recetario.core.data.createV1Database
 import app.recetario.diary.CookLogEntry
 import app.recetario.navigation.Diary
 import app.recetario.testing.testClock
+import android.graphics.BitmapFactory
+import app.recetario.backup.FakeDocuments
+import app.recetario.core.ui.motion.LocalReducedMotion
+import app.recetario.plan.MealSlot
+import app.recetario.plan.WEEK_EMPTY_TEXT
+import app.recetario.plan.weekSlotTag
+import app.recetario.share.CARD_SAVED
+import app.recetario.share.CardDesign
+import app.recetario.share.CardFonts
+import app.recetario.share.CardFormat
+import app.recetario.share.CardPainter
+import app.recetario.share.CardRoute
+import app.recetario.share.FakePdfDocument
+import app.recetario.share.label
+import app.recetario.shopping.ShoppingRoute
+import java.util.concurrent.CopyOnWriteArrayList
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -116,7 +132,8 @@ import java.time.LocalDate
  * Capturas de Inicio (también con la tarjeta de las copias), Recetas, el editor, el detalle (también con la línea del
  * diario y su historial), Ajustes, Acerca de, Apariencia, Categorías, Copias de seguridad (también con Google Drive y
  * la copia «Antes de actualizar»), el modo cocina (con la tarjeta del diario bajo «¡Listo!»), la compra, la despensa,
- * «¿Qué puedo hacer?», el Diario, la pantalla de error de la actualización y algunas animaciones a medias (porciones, tachado, confeti, «Receta guardada») en los tres temas, en `app/build/capturas/` (CI las sube como
+ * «¿Qué puedo hacer?», el Diario, la pestaña Semana (sin recetas, vacía, llena y con el panel de un hueco), la Ficha
+ * (cada formato, cada diseño en cuadrada con su PNG y una página del PDF), la pantalla de error de la actualización y algunas animaciones a medias (porciones, tachado, confeti, «Receta guardada») en los tres temas, en `app/build/capturas/` (CI las sube como
  * artefacto `capturas`). No comprueban píxeles: sirven para revisarlas a ojo frente a los bocetos.
  */
 @RunWith(AndroidJUnit4::class)
@@ -241,6 +258,141 @@ class CapturasTest {
         captureDiary(c, nav, name)
         capturePairing(c, nav, name)
         captureHomeWithoutWeather(c, nav, name)
+    }
+
+    /**
+     * La pestaña Semana en los tres temas: sin recetas, con recetas y la semana vacía, llena (también el final, el
+     * domingo) y con el panel de un hueco abierto. Viernes 13 de noviembre de 2026: el lunes ya pasó.
+     */
+    @Test
+    fun semana() {
+        val c = installTestContainer().also { container = it }
+        var theme by mutableStateOf(ThemeChoice.CALIDO)
+        rule.setContent { RecetarioTheme(theme) { ShoppingRoute(c) } }
+        rule.waitFor(hasTestTag("shopping-tab-week"))
+        rule.onNodeWithTag("shopping-tab-week").performClick()
+        val themes = ThemeChoice.entries
+        for (t in themes) {
+            rule.runOnIdle { theme = t }
+            rule.waitFor(hasText(WEEK_EMPTY_TEXT))
+            save("semana-sin-recetas-${t.name.lowercase()}")
+        }
+        runBlocking { sampleRecipes().forEach { c.recipeRepository.save(it) } }
+        for (t in themes) {
+            rule.runOnIdle { theme = t }
+            rule.waitFor(hasTestTag("week-fill"))
+            save("semana-vacia-${t.name.lowercase()}")
+        }
+        val monday = LocalDate.of(2026, 11, 9)
+        runBlocking {
+            val plan = c.mealPlanRepository
+            plan.set(monday, MealSlot.LUNCH, "tortilla", 4)
+            plan.set(monday.plusDays(2), MealSlot.DINNER, "calabaza", 2)
+            for (d in 4L..6L) {
+                plan.set(monday.plusDays(d), MealSlot.BREAKFAST, "chocolate", 2)
+                plan.set(monday.plusDays(d), MealSlot.LUNCH, if (d == 5L) "flan" else "calabaza", if (d == 4L) 6 else 4)
+                plan.set(monday.plusDays(d), MealSlot.DINNER, "tortilla", 4)
+            }
+        }
+        val friday = monday.plusDays(4)
+        for (t in themes) {
+            rule.runOnIdle { theme = t }
+            rule.waitFor(hasContentDescription("Viernes 13, comida: Crema de calabaza, 6 porciones"))
+            rule.onNodeWithTag("week-title").performScrollTo()
+            save("semana-llena-${t.name.lowercase()}")
+            rule.onNodeWithTag("week-day-${monday.plusDays(6)}").performScrollTo()
+            save("semana-llena-domingo-${t.name.lowercase()}")
+        }
+        rule.onNodeWithTag(weekSlotTag(friday, MealSlot.LUNCH)).performScrollTo().performClick()
+        rule.waitFor(hasTestTag("week-panel"))
+        for (t in themes) {
+            rule.runOnIdle { theme = t }
+            rule.waitFor(hasTestTag("week-panel-title"))
+            save("semana-panel-${t.name.lowercase()}")
+        }
+    }
+
+    /**
+     * La Ficha de la crema de calabaza en los tres temas: la pantalla con cada formato (Texto y los seis), cada diseño
+     * en cuadrada (la pantalla y el PNG que se comparte), las opciones y la primera página del PDF A4 con el diseño
+     * «Tema» dibujada a PNG. Sin animaciones: la vista previa no se captura a mitad del giro.
+     */
+    @Test
+    fun fichas() {
+        val documents = FakeDocuments()
+        val c = installTestContainer(documents = documents).also { container = it }
+        runBlocking { sampleRecipes().forEach { c.recipeRepository.save(it) } }
+        val pdfs = CopyOnWriteArrayList<FakePdfDocument>()
+        val painter = CardPainter(CardFonts(context), newPdf = { FakePdfDocument(scale = 2f).also { pdfs += it } })
+        val shared = CopyOnWriteArrayList<File>()
+        var theme by mutableStateOf(ThemeChoice.CALIDO)
+        rule.setContent {
+            CompositionLocalProvider(LocalActivityResultRegistryOwner provides FilePicker()) {
+                RecetarioTheme(theme) {
+                    CompositionLocalProvider(LocalReducedMotion provides true) {
+                        CardRoute(
+                            c, "calabaza", 4, onBack = {},
+                            painter = painter,
+                            uriFor = { Uri.fromFile(it) },
+                            startShare = { chooser ->
+                                @Suppress("DEPRECATION")
+                                val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                                @Suppress("DEPRECATION")
+                                send?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.path?.let { shared += File(it) }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        fun previewSays(text: String) = hasTestTag("card-preview") and hasContentDescription(text, substring = true)
+        fun choose(tag: String, says: String) {
+            rule.onNodeWithTag(tag).performScrollTo().performClick()
+            rule.waitFor(previewSays(says), 15_000)
+            rule.onNodeWithTag("card-preview").performScrollTo()
+        }
+        /** Espera dejando ocioso el hilo principal (las corrutinas del ViewModel vuelven de IO a Main). */
+        fun until(condition: () -> Boolean) {
+            val deadline = System.currentTimeMillis() + 30_000
+            while (!condition()) {
+                check(System.currentTimeMillis() < deadline) { "condición no cumplida" }
+                rule.waitForIdle()
+                Thread.sleep(10)
+            }
+        }
+        rule.waitFor(hasTestTag("card-preview"), 15_000)
+        for (t in ThemeChoice.entries) {
+            val n = t.name.lowercase()
+            rule.runOnIdle { theme = t }
+            choose("card-format-TEXT", "Texto")
+            save("ficha-texto-$n")
+            for (f in CardFormat.entries) {
+                choose("card-format-${f.name}", "${f.label}, ")
+                save("ficha-${f.name.lowercase()}-$n")
+            }
+            choose("card-format-SQUARE", "Cuadrada")
+            for (d in CardDesign.entries) {
+                choose("card-design-${d.name}", "Cuadrada, ${d.label}")
+                save("ficha-diseno-${d.name.lowercase()}-$n")
+                val before = shared.size
+                rule.onNodeWithTag("card-share").performScrollTo().performClick()
+                until { shared.size > before }
+                val png = checkNotNull(BitmapFactory.decodeFile(shared.last().path))
+                assertThat(png.width to png.height).isEqualTo(1080 to 1080)
+                saveImage("ficha-png-${d.name.lowercase()}-$n", png)
+            }
+            rule.onNodeWithTag("card-share").performScrollTo()
+            save("ficha-opciones-$n")
+            choose("card-format-PDF_A4", "PDF A4")
+            choose("card-design-THEME", "PDF A4, Tema")
+            val pdfsBefore = pdfs.size
+            rule.onNodeWithTag("card-save").performScrollTo().performClick()
+            until { pdfs.size > pdfsBefore && pdfs.last().closed }
+            rule.waitFor(hasText(CARD_SAVED), 15_000)
+            val page = pdfs.last().pages.first()
+            assertThat(page.width to page.height).isEqualTo(595 to 842)
+            saveImage("ficha-pdf-a4-tema-p1-$n", page.bitmap)
+        }
     }
 
     /** Sin recetas: la tarjeta Hoy vacía («Cuando tengas recetas…» y «+ Nueva receta»), en los tres temas. */
@@ -660,7 +812,11 @@ class CapturasTest {
         // La entrada escalonada espera con delay(): se adelanta el reloj para capturar el estado final.
         if (settleMs > 0) rule.mainClock.advanceTimeBy(settleMs)
         if (rule.mainClock.autoAdvance) rule.waitForIdle()
-        val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+        saveImage(name, rule.onRoot().captureToImage().asAndroidBitmap())
+    }
+
+    /** Guarda [bitmap] tal cual (la imagen o la página del PDF que genera la app). */
+    private fun saveImage(name: String, bitmap: Bitmap) {
         val dir = File(System.getProperty("user.dir"), "build/capturas").apply { mkdirs() }
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }

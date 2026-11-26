@@ -34,7 +34,9 @@ const val CARD_FILES_DIR = "fichas"
 fun clearCardFiles(cacheDir: File, olderThan: Long = Long.MAX_VALUE) {
     runCatching {
         File(cacheDir, CARD_FILES_DIR).listFiles()?.forEach { entry ->
-            val newest = entry.walkTopDown().filter { it.isFile }.maxOfOrNull { it.lastModified() } ?: 0L
+            // Lo que cuenta es el archivo más nuevo; una carpeta aún vacía (recién creada para compartir, con el
+            // archivo a punto de escribirse) cuenta por su propia fecha.
+            val newest = entry.walkTopDown().filter { it.isFile }.maxOfOrNull { it.lastModified() } ?: entry.lastModified()
             if (newest < olderThan) entry.deleteRecursively()
         }
     }

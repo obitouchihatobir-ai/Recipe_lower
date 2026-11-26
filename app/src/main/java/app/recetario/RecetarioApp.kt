@@ -27,6 +27,9 @@ import app.recetario.pantry.PantryRepository
 import app.recetario.plan.MealPlanRepository
 import app.recetario.plan.RoomMealPlanRepository
 import app.recetario.pantry.RoomPantryRepository
+import app.recetario.share.AndroidPdfDocument
+import app.recetario.share.CardPdfDocument
+import app.recetario.share.cardFileUri
 import app.recetario.share.clearCardFiles
 import app.recetario.shopping.RoomShoppingRepository
 import app.recetario.shopping.ShoppingRepository
@@ -46,6 +49,7 @@ import app.recetario.weather.LocationProvider
 import app.recetario.weather.OpenMeteoClient
 import app.recetario.weather.WeatherRepository
 import java.io.File
+import android.net.Uri
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Clock
@@ -110,6 +114,10 @@ class AppContainer(
     openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
     /** Ubicación aproximada del teléfono (sin Play Services); las pruebas pasan una falsa. */
     locationProvider: LocationProvider = AndroidLocationProvider(context),
+    /** Crea el PDF de las fichas; las pruebas pasan uno falso (Robolectric no implementa `PdfDocument`). */
+    val newCardPdf: () -> CardPdfDocument = { AndroidPdfDocument() },
+    /** El `content://` de una ficha que se comparte; las pruebas pasan uno falso (Robolectric no lee el `FileProvider`). */
+    val cardUri: (Context, File) -> Uri = ::cardFileUri,
 ) {
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")

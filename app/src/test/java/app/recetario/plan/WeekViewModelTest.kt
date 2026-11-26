@@ -82,7 +82,7 @@ class WeekViewModelTest {
         // Con calor, el desayuno y la comida son lo fresco.
         assertThat(firstTwo(hot)).containsExactly("gazpacho", "ensalada")
 
-        runBlocking { container.mealPlanRepository.removeAll(hot.map { it.id }) }
+        runBlocking { container.mealPlanRepository.removeAdded(hot) }
         val cold = runBlocking { vm(day(4.0, -2.0)).fill() }
         assertThat(firstTwo(cold)).containsExactly("caldo", "guiso")
     }

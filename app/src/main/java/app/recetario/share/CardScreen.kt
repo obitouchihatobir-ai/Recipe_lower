@@ -97,7 +97,7 @@ fun CardRoute(
 ) {
     val context = LocalContext.current
     val app = context.applicationContext
-    val cardPainter = remember(app, painter) { painter ?: CardPainter(CardFonts(app)) }
+    val cardPainter = remember(app, painter) { painter ?: CardPainter(CardFonts(app), newPdf = container.newCardPdf) }
     val vm: CardViewModel = viewModel(factory = CardViewModel.factory(container, cardPainter, app.cacheDir, recipeId, servings))
     val state by vm.state.collectAsStateWithLifecycle()
     val theme = LocalThemeChoice.current
@@ -117,7 +117,7 @@ fun CardRoute(
                     // Cualquier fallo al publicar el archivo o al abrir el selector se avisa (y se anota).
                     val opened = runCatching {
                         val intent = when (e) {
-                            is CardEvent.ShareFile -> cardShareIntent(context, e.file, e.mimeType, uriFor ?: { cardFileUri(context, it) })
+                            is CardEvent.ShareFile -> cardShareIntent(context, e.file, e.mimeType, uriFor ?: { container.cardUri(context, it) })
                             else -> textShareIntent((e as CardEvent.ShareText).text)
                         }
                         (startShare ?: { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) })(intent)
