@@ -245,13 +245,14 @@ class RecorridoEtapa2cTest {
         save("paso4-ficha-cuadrada")
 
         val shadow = shadowOf(activity)
-        while (shadow.nextStartedActivity != null) Unit
+        while (shadow.nextStartedActivity != null) { /* lo que se abrió antes no cuenta */ }
         rule.onNodeWithTag("card-share").performScrollTo().performClick()
-        var chooser: Intent? = null
-        until(30_000) { shadow.nextStartedActivity?.also { chooser = it } != null }
-        assertThat(chooser!!.action).isEqualTo(Intent.ACTION_CHOOSER)
+        var opened: Intent? = null
+        until(30_000) { shadow.nextStartedActivity?.also { opened = it } != null }
+        val chooser = checkNotNull(opened)
+        assertThat(chooser.action).isEqualTo(Intent.ACTION_CHOOSER)
         @Suppress("DEPRECATION")
-        val send = checkNotNull(chooser!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT))
+        val send = checkNotNull(chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT))
         assertThat(send.type).isEqualTo("image/png")
         @Suppress("DEPRECATION")
         val uri = checkNotNull(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
