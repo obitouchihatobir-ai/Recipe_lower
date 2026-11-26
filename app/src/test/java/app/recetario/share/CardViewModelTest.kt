@@ -15,6 +15,8 @@ import app.recetario.testing.sampleRecipe
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
@@ -24,6 +26,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.CountDownLatch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(AndroidJUnit4::class)
@@ -54,10 +58,12 @@ class CardViewModelTest {
         handle: SavedStateHandle = SavedStateHandle(),
         recipeId: String = "r1",
         pdf: () -> CardPdfDocument = { FakePdfDocument() },
+        writeFile: (File, ByteArray) -> Unit = { file, bytes -> file.writeBytes(bytes) },
     ) = main.track(
         CardViewModel(
             recipeId, 4, container.recipeRepository, container.settingsRepository, container.photoStore,
             CardPainter(CardFonts(app), newPdf = pdf), app.cacheDir, documents, container.applicationScope, handle,
+            writeFile = writeFile,
         ),
     )
 
@@ -189,5 +195,39 @@ class CardViewModelTest {
         assertThat(s.photoUnreadable).isTrue()
         assertThat(s.recipeHasPhoto).isTrue()
         assertThat(vm().loaded().photoUnreadable).isFalse()
+    }
+
+    /** Si falla escribir el archivo al compartir, no queda la carpeta que se acababa de crear. */
+    @Test
+    fun share_writeFails_leavesNoFolder() {
+        val vm = vm(writeFile = { _, _ -> throw IOException("disco lleno") })
+        vm.loaded()
+        val dir = File(app.cacheDir, CARD_FILES_DIR)
+        val before = dir.listFiles()?.toSet().orEmpty()
+        vm.share()
+        assertThat(vm.nextMessage()).isEqualTo(CARD_SHARE_FAILED)
+        assertThat(dir.listFiles()?.toSet().orEmpty()).isEqualTo(before)
+    }
+
+    /**
+     * «Guardar» llega mientras «Compartir» aún prepara la ficha: espera a que termine y escribe el documento (antes
+     * se borraba sin avisar).
+     */
+    @Test
+    fun save_whileSharing_waitsAndWrites() {
+        runBlocking { container.settingsRepository.setCardSettings(CardSettings(CardOptions(format = CardFormat.PDF_A4))) }
+        val gate = CountDownLatch(1)
+        val vm = vm(pdf = { FakePdfDocument(gate = gate) })
+        vm.loaded()
+        vm.share()
+        runBlocking { withTimeout(10_000) { vm.state.first { it.busy } } }
+        val pdfUri = "content://prueba/Sazon-crema-de-calabaza.pdf"
+        vm.save(pdfUri)
+        gate.countDown()
+        val events = runBlocking { withTimeout(30_000) { vm.events.take(2).toList() } }
+        assertThat(events.first()).isInstanceOf(CardEvent.ShareFile::class.java)
+        assertThat(events.last()).isEqualTo(CardEvent.Message(CARD_SAVED))
+        assertThat(isPdf(checkNotNull(documents.files[pdfUri]))).isTrue()
+        assertThat(documents.deleted).doesNotContain(pdfUri)
     }
 }

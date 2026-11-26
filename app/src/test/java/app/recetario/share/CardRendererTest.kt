@@ -203,4 +203,15 @@ class CardRendererTest {
         assertThat(old.exists()).isFalse()
         assertThat(fresh.exists()).isTrue()
     }
+
+    /** Una carpeta de compartir recién creada (aún vacía, con el archivo a punto de escribirse) no se borra. */
+    @Test
+    fun clearCardFiles_keepsAnEmptyFolderNewerThanStart() {
+        val dir = File(context.cacheDir, CARD_FILES_DIR)
+        val fresh = File(dir, "recien").apply { mkdirs(); setLastModified(9_000) }
+        val stale = File(dir, "vieja").apply { mkdirs(); setLastModified(1_000) }
+        clearCardFiles(context.cacheDir, olderThan = 5_000)
+        assertThat(fresh.exists()).isTrue()
+        assertThat(stale.exists()).isFalse()
+    }
 }

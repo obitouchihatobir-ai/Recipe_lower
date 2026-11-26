@@ -1,6 +1,8 @@
 package app.recetario.plan
 
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -238,5 +240,24 @@ class WeekScreenTest {
         rule.onNodeWithTag("week-generate").performClick()
         rule.waitFor(hasText("No falta nada para esta semana"))
         assertThat(shopping()).isEmpty()
+    }
+
+    /** En una semana pasada no hay nada que rellenar ni que comprar: los dos botones van apagados. */
+    @Test
+    fun pastWeek_fillAndGenerateAreDisabled() {
+        seedRecipes()
+        launch()
+        rule.waitFor(hasText("Esta semana"))
+        rule.onNodeWithTag("week-fill").assertIsEnabled()
+        rule.onNodeWithTag("week-generate").assertIsEnabled()
+        rule.onNodeWithTag("week-previous").performClick()
+        rule.waitFor(hasText("Semana pasada"))
+        rule.onNodeWithTag("week-fill").assertIsNotEnabled()
+        rule.onNodeWithTag("week-generate").assertIsNotEnabled()
+        rule.onNodeWithTag("week-next").performClick()
+        rule.onNodeWithTag("week-next").performClick()
+        rule.waitFor(hasText("Semana que viene"))
+        rule.onNodeWithTag("week-fill").assertIsEnabled()
+        rule.onNodeWithTag("week-generate").assertIsEnabled()
     }
 }

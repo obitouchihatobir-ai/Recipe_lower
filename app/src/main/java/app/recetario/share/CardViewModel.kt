@@ -119,6 +119,8 @@ class CardViewModel(
     private val writeScope: CoroutineScope,
     /** Lo elegido en esta pantalla y el tema: sobreviven a que Android cierre el proceso en el selector. */
     private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
+    /** Escribe el archivo que se comparte (las pruebas pasan uno que falla). */
+    private val writeFile: (File, ByteArray) -> Unit = { file, bytes -> file.writeBytes(bytes) },
 ) : ViewModel() {
     private val servings = servings.coerceAtLeast(1)
     private val recipe: Flow<Recipe?> = repo.observeRecipe(recipeId)
@@ -236,7 +238,7 @@ class CardViewModel(
                         // Una carpeta por vez: una app que aún lee la ficha anterior no ve cómo se sobrescribe.
                         val dir = File(File(cacheDir, CARD_FILES_DIR), UUID.randomUUID().toString()).apply { mkdirs() }
                         val file = File(dir, cardFileName(s.title, format))
-                        file.writeBytes(bytes)
+                        writeFile(file, bytes)
                         CardEvent.ShareFile(file, format.mimeType)
                     }
                 }
