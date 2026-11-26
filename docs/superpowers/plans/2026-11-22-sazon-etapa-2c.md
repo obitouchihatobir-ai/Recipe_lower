@@ -10,6 +10,7 @@
   - el repositorio del menú, sobre la tabla `meal_plan`, que ya existe;
   - la pestaña Semana;
   - la pantalla Ficha, con vista previa en Compose, imagen capturada con `GraphicsLayer` y PDF con `PdfDocument` + `StaticLayout`, y compartir con `FileProvider`.
+    - **Cambiado al implementar (Task 5):** no se captura con `GraphicsLayer`. Un solo `CardPainter` (`StaticLayout`) dibuja la vista previa (en un `Canvas` de Compose), el PNG y las páginas del PDF, y mide para la maquetación. El PDF va detrás de `CardPdfDocument`, sustituible en las pruebas (`FakePdfDocument`).
 - **Sin cambios de esquema de Room ni de copias de seguridad.** `meal_plan` y su copia ya existen desde la 2A.
 
 **Tecnología:** Kotlin, Compose, Room, DataStore y `android.graphics.pdf.PdfDocument`. Sin bibliotecas nuevas.
@@ -203,7 +204,7 @@
   - interruptores: Foto, Pasos, Notas, Sabor.
 - **Texto** usa `formatRecipeAsText`, el de la etapa 1, con vista previa de texto.
 - **Imagen:**
-  - el mismo Composable de la vista previa, a tamaño real fuera de la pantalla, capturado con `GraphicsLayer.toImageBitmap()`;
+  - ~~el mismo Composable de la vista previa, a tamaño real fuera de la pantalla, capturado con `GraphicsLayer.toImageBitmap()`~~ (cambiado: el mismo `CardPainter` que la vista previa, en un `Bitmap` del tamaño del formato);
   - PNG en `cacheDir/fichas/`.
 - **PDF:**
   - `PdfDocument` con `StaticLayout` y las fuentes de la app (`ResourcesCompat.getFont`);

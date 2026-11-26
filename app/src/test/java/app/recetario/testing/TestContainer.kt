@@ -20,6 +20,7 @@ import app.recetario.backup.ContentResolverDocuments
 import app.recetario.weather.LocationProvider
 import app.recetario.share.CardPdfDocument
 import app.recetario.share.FakePdfDocument
+import app.recetario.share.cardFileUri
 import android.content.Context
 import android.net.Uri
 import java.io.IOException
@@ -78,7 +79,7 @@ fun installTestContainer(
         openConnection = openMeteo?.let { fake -> { url: URL -> fake.open(url) } } ?: { _: URL -> throw IOException("Sin red en las pruebas") },
         locationProvider = location,
         newCardPdf = cardPdf,
-        cardUri = cardUri ?: { context, file -> app.recetario.share.cardFileUri(context, file) },
+        cardUri = cardUri ?: { context, file -> cardFileUri(context, file) },
     ).also { app.container = it }
 }
 
