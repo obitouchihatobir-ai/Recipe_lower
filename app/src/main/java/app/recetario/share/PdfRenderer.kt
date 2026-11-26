@@ -15,6 +15,9 @@ interface CardPdfDocument {
     fun close()
 }
 
+fun isPdf(bytes: ByteArray): Boolean =
+    bytes.size > 4 && bytes.copyOfRange(0, 4).contentEquals("%PDF".toByteArray(Charsets.US_ASCII))
+
 /** `android.graphics.pdf.PdfDocument`. */
 class AndroidPdfDocument : CardPdfDocument {
     private val doc = PdfDocument()

@@ -7,9 +7,9 @@ import java.io.OutputStream
 /**
  * PDF falso para las pruebas: Robolectric no implementa `PdfDocument` («document is closed!» al abrir la primera
  * página). Anota cada página y la dibuja en un `Bitmap` a [scale] (para comprobarla y guardarla); escribe un texto
- * que empieza por «%PDF-» con una línea por página.
+ * que empieza por «%PDF-» con una línea por página (o, con `garbage`, algo que no es un PDF).
  */
-class FakePdfDocument(private val scale: Float = 1f) : CardPdfDocument {
+class FakePdfDocument(private val scale: Float = 1f, private val garbage: Boolean = false) : CardPdfDocument {
     data class Page(val width: Int, val height: Int, val number: Int, val bitmap: Bitmap)
 
     val pages = mutableListOf<Page>()
@@ -24,6 +24,8 @@ class FakePdfDocument(private val scale: Float = 1f) : CardPdfDocument {
     }
 
     override fun writeTo(out: OutputStream) {
+        // Con [garbage], lo que escribiría un PdfDocument roto: algo que no es un PDF.
+        if (garbage) return out.write("basura".toByteArray())
         out.write("%PDF-falso\n".toByteArray())
         pages.forEach { out.write("pagina ${it.number} ${it.width}x${it.height}\n".toByteArray()) }
     }

@@ -82,6 +82,7 @@ val CardFlipAngle = SemanticsPropertyKey<Float>("CardFlipAngle")
 private var SemanticsPropertyReceiver.cardFlipAngle by CardFlipAngle
 
 const val PHOTO_DROPPED_TEXT = "La foto no cabe con tanto texto"
+const val PHOTO_UNREADABLE_TEXT = "No se pudo leer la foto"
 const val NO_PHOTO_TEXT = "La receta no tiene foto"
 
 /** El tema con el que se compone ahora (para el diseño «Tema»). */
@@ -101,6 +102,7 @@ fun CardRoute(
     painter: CardPainter? = null,
     /** El `content://` del archivo que se comparte (las pruebas pasan uno falso). */
     uriFor: ((File) -> Uri)? = null,
+    @Suppress("UNUSED_PARAMETER") startShare: ((Intent) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext

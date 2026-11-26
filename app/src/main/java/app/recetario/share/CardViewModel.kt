@@ -79,6 +79,7 @@ data class CardUiState(
     val preview: CardPreview? = null,
     /** Generando el archivo: «Preparando…». */
     val busy: Boolean = false,
+    val photoUnreadable: Boolean = false,
 )
 
 sealed interface CardEvent {
@@ -107,6 +108,7 @@ class CardViewModel(
     private val cacheDir: File,
     private val documents: BackupDocuments,
     private val writeScope: CoroutineScope,
+    @Suppress("unused") private val savedStateHandle: androidx.lifecycle.SavedStateHandle = androidx.lifecycle.SavedStateHandle(),
 ) : ViewModel() {
     private val servings = servings.coerceAtLeast(1)
     private val recipe: Flow<Recipe?> = repo.observeRecipe(recipeId)

@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
 const val CARD_FILES_DIR = "fichas"
 
 /** Vacía `cacheDir/fichas/` (al iniciar la app): lo compartido antes ya no hace falta. No falla nunca. */
-fun clearCardFiles(cacheDir: File) {
+fun clearCardFiles(cacheDir: File, @Suppress("UNUSED_PARAMETER") olderThan: Long = Long.MAX_VALUE) {
     runCatching { File(cacheDir, CARD_FILES_DIR).listFiles()?.forEach { it.deleteRecursively() } }
 }
 

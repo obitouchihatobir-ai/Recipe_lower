@@ -12,6 +12,8 @@ import androidx.compose.ui.graphics.lerp
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.motion.rememberSystemReducedMotion
 
+val LocalThemeChoice = androidx.compose.runtime.staticCompositionLocalOf { ThemeChoice.CALIDO }
+
 @Composable
 fun RecetarioTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
     val colors = paletteFor(choice)

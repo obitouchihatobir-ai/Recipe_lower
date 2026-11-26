@@ -128,8 +128,17 @@ class CardScreenTest {
     private fun Route(servings: Int) = CardRoute(
         container, "r1", servings, onBack = {},
         painter = painter,
-        uriFor = { Uri.parse("content://$authority/fichas/${it.name}") },
+        uriFor = { Uri.parse("content://$authority/" + it.relativeTo(cacheDir).invariantSeparatorsPath) },
+        startShare = startShare,
     )
+
+    private val cacheDir get() = RuntimeEnvironment.getApplication().cacheDir
+
+    /** Abre el selector; null: el de verdad (`startActivity`). */
+    private var startShare: ((Intent) -> Unit)? = null
+
+    /** El archivo detrás de un `content://` falso de [Route]. */
+    private fun fileOf(uri: Uri) = File(cacheDir, checkNotNull(uri.path).removePrefix("/"))
 
     private fun previewSays(text: String) = hasTestTag("card-preview") and hasContentDescription(text, substring = true)
 
@@ -139,14 +148,24 @@ class CardScreenTest {
 
     private fun nextChooser(): Intent? = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
 
-    private fun awaitChooser(): Intent {
+    /**
+     * Espera al selector. Causa de los fallos de la primera ronda: `waitUntil` con una condición que solo mira
+     * Robolectric (`nextStartedActivity`) no hace avanzar el `Looper` principal (en pausa), así que la corrutina del
+     * ViewModel nunca volvía de `Dispatchers.IO` ni el `LaunchedEffect` recibía el evento. Generar el PNG tarda
+     * décimas (ver `tiempos.txt`). Aquí cada vuelta deja ocioso el hilo principal (`waitForIdle`).
+     */
+    private fun awaitChooser(timeoutMs: Long = 30_000): Intent {
+        val start = System.currentTimeMillis()
         var found: Intent? = null
-        rule.waitUntil(10_000) {
+        while (found == null) {
+            check(System.currentTimeMillis() - start < timeoutMs) { "No se abrió el selector en $timeoutMs ms" }
+            rule.waitForIdle()
             check(rule.onAllNodes(hasText(CARD_SHARE_FAILED), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) { CARD_SHARE_FAILED }
             found = nextChooser()
-            found != null
+            if (found == null) Thread.sleep(10)
         }
         val chooser = checkNotNull(found)
+        CardTimes.record("pantalla: tocar «Compartir» → selector", System.currentTimeMillis() - start)
         // Ni publicar el archivo ni abrir el selector fallaron (la pantalla lo anota y sigue).
         val errors = org.robolectric.shadows.ShadowLog.getLogsForTag("Ficha").map { "${it.msg}: ${it.throwable}" }
         assertWithMessage(errors.joinToString()).that(errors).isEmpty()
@@ -170,22 +189,68 @@ class CardScreenTest {
         assertThat(text).contains("1,2 kg")
     }
 
-    @Test
-    fun share_png_writesFileOfExactSize() {
+    private fun sharePng(format: CardFormat, w: Int, h: Int) {
         save()
         launch()
-        for ((tag, w, h) in listOf(Triple("STORY", 1080, 1920), Triple("SQUARE", 1080, 1080), Triple("LANDSCAPE", 1500, 1000))) {
-            click("card-format-$tag")
-            rule.waitFor(previewSays(CardFormat.valueOf(tag).label))
-            click("card-share")
-            val send = awaitChooser()
-            assertThat(send.type).isEqualTo("image/png")
-            val file = File(RuntimeEnvironment.getApplication().cacheDir, "fichas/Sazon-crema-de-calabaza.png")
-            assertThat(file.isFile).isTrue()
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.path, bounds)
-            assertWithMessage(tag).that(bounds.outWidth to bounds.outHeight).isEqualTo(w to h)
-        }
+        click("card-format-${format.name}")
+        rule.waitFor(previewSays(format.label))
+        click("card-share")
+        val send = awaitChooser()
+        assertThat(send.type).isEqualTo("image/png")
+        @Suppress("DEPRECATION")
+        val file = fileOf(checkNotNull(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)))
+        assertThat(file.name).isEqualTo("Sazon-crema-de-calabaza.png")
+        assertThat(file.parentFile?.parentFile).isEqualTo(File(cacheDir, CARD_FILES_DIR))
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        assertWithMessage("$format").that(bounds.outWidth to bounds.outHeight).isEqualTo(w to h)
+    }
+
+    @Test
+    fun share_png_writesFileOfExactSize() = sharePng(CardFormat.SQUARE, 1080, 1080)
+
+    @Test
+    fun share_png_story_writesFileOfExactSize() = sharePng(CardFormat.STORY, 1080, 1920)
+
+    @Test
+    fun share_png_landscape_writesFileOfExactSize() = sharePng(CardFormat.LANDSCAPE, 1500, 1000)
+
+    /** Si no se puede abrir el selector (o publicar el archivo), se avisa: no se queda en silencio. */
+    @Test
+    fun share_launchFailure_showsMessage() {
+        save()
+        startShare = { throw SecurityException("sin permiso") }
+        launch()
+        click("card-share")
+        rule.waitFor(hasText(CARD_SHARE_FAILED), 30_000)
+        assertThat(org.robolectric.shadows.ShadowLog.getLogsForTag("Ficha")).isNotEmpty()
+    }
+
+    @Test
+    fun share_launchFailure_activityNotFound_showsMessage() {
+        save()
+        startShare = { throw android.content.ActivityNotFoundException() }
+        launch()
+        click("card-format-TEXT")
+        rule.waitFor(previewSays("Texto"))
+        click("card-share")
+        rule.waitFor(hasText(CARD_SHARE_FAILED), 30_000)
+    }
+
+    @Test
+    fun unreadablePhoto_saysSo() {
+        runBlocking { container.recipeRepository.save(recipe("no-existe.jpg")) }
+        launch()
+        rule.waitFor(hasText(PHOTO_UNREADABLE_TEXT), 10_000)
+    }
+
+    /** El diseño «Tema» usa el tema ya resuelto que le pasa `RecetarioTheme`. */
+    @Test
+    fun themeChoice_isPassedDown() {
+        var seen: ThemeChoice? = null
+        rule.setContent { RecetarioTheme(ThemeChoice.NOCTURNO) { seen = app.recetario.core.ui.theme.LocalThemeChoice.current } }
+        rule.waitForIdle()
+        assertThat(seen).isEqualTo(ThemeChoice.NOCTURNO)
     }
 
     @Test
@@ -205,8 +270,7 @@ class CardScreenTest {
         assertThat(uri.authority).isEqualTo(authority)
         assertThat(uri.path).endsWith("/Sazon-crema-de-calabaza.pdf")
         assertThat(send.clipData?.getItemAt(0)?.uri).isEqualTo(uri)
-        val pdf = File(RuntimeEnvironment.getApplication().cacheDir, "fichas/Sazon-crema-de-calabaza.pdf")
-        assertThat(pdf.readBytes().copyOfRange(0, 5).decodeToString()).isEqualTo("%PDF-")
+        assertThat(isPdf(fileOf(uri).readBytes())).isTrue()
     }
 
     @Test
