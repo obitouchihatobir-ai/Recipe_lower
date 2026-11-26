@@ -39,6 +39,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import app.recetario.weather.AndroidLocationProvider
 import app.recetario.weather.DefaultWeatherRepository
 import app.recetario.weather.LocationProvider
@@ -73,7 +74,9 @@ class RecetarioApp : Application() {
         ).prepare()
         container = AppContainer(this)
         // Las fichas compartidas la vez anterior ya no hacen falta (las apps que las recibieron ya las copiaron).
-        clearCardFiles(cacheDir)
+        // Fuera del hilo principal, y solo las de antes de arrancar: nunca una que se acaba de compartir.
+        val startedAt = System.currentTimeMillis()
+        container.applicationScope.launch(Dispatchers.IO) { clearCardFiles(cacheDir, olderThan = startedAt) }
         // WorkManager se inicia solo (androidx.startup) antes de onCreate. En las pruebas de Robolectric no se
         // ejecutan los proveedores del manifiesto: ahí no está iniciado y no se programa nada.
         if (WorkManager.isInitialized()) {

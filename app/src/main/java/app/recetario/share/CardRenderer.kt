@@ -27,9 +27,17 @@ import kotlin.math.roundToInt
 /** Carpeta de las fichas que se comparten (`cacheDir/fichas/`, publicada por el `FileProvider`). */
 const val CARD_FILES_DIR = "fichas"
 
-/** Vacía `cacheDir/fichas/` (al iniciar la app): lo compartido antes ya no hace falta. No falla nunca. */
-fun clearCardFiles(cacheDir: File, @Suppress("UNUSED_PARAMETER") olderThan: Long = Long.MAX_VALUE) {
-    runCatching { File(cacheDir, CARD_FILES_DIR).listFiles()?.forEach { it.deleteRecursively() } }
+/**
+ * Vacía `cacheDir/fichas/` (al iniciar la app): lo compartido antes ya no hace falta. Solo borra lo modificado antes
+ * de [olderThan] (una ficha recién compartida se respeta). No falla nunca.
+ */
+fun clearCardFiles(cacheDir: File, olderThan: Long = Long.MAX_VALUE) {
+    runCatching {
+        File(cacheDir, CARD_FILES_DIR).listFiles()?.forEach { entry ->
+            val newest = entry.walkTopDown().filter { it.isFile }.maxOfOrNull { it.lastModified() } ?: 0L
+            if (newest < olderThan) entry.deleteRecursively()
+        }
+    }
 }
 
 /**

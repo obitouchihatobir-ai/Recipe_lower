@@ -1,7 +1,9 @@
 package app.recetario.share
 
 import android.graphics.Bitmap
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -32,12 +34,15 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import java.io.IOException
+import java.util.UUID
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -79,6 +84,7 @@ data class CardUiState(
     val preview: CardPreview? = null,
     /** Generando el archivo: «Preparando…». */
     val busy: Boolean = false,
+    /** La receta tiene foto, pero no se pudo leer: la ficha sale sin ella. */
     val photoUnreadable: Boolean = false,
 )
 
@@ -90,7 +96,10 @@ sealed interface CardEvent {
 
 const val CARD_SAVE_FAILED = "No se pudo guardar la ficha."
 const val CARD_SAVED = "Ficha guardada."
-const val CARD_SHARE_FAILED = "No se pudo preparar la ficha."
+const val CARD_SHARE_FAILED = "No se pudo compartir la ficha."
+
+/** Cuánto espera «Guardar» a que vuelva la vista previa (al volver del selector tras morir el proceso). */
+const val CARD_SAVE_WAIT_MS = 15_000L
 
 /**
  * Pantalla Ficha (diseño de la etapa 2, §7.7): la receta [recipeId] con [servings] porciones como texto, imagen o
@@ -108,7 +117,8 @@ class CardViewModel(
     private val cacheDir: File,
     private val documents: BackupDocuments,
     private val writeScope: CoroutineScope,
-    @Suppress("unused") private val savedStateHandle: androidx.lifecycle.SavedStateHandle = androidx.lifecycle.SavedStateHandle(),
+    /** Lo elegido en esta pantalla y el tema: sobreviven a que Android cierre el proceso en el selector. */
+    private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
     private val servings = servings.coerceAtLeast(1)
     private val recipe: Flow<Recipe?> = repo.observeRecipe(recipeId)
@@ -120,9 +130,10 @@ class CardViewModel(
         .flowOn(Dispatchers.IO)
 
     /** Lo elegido en esta pantalla: manda sobre lo guardado mientras se escribe. */
-    private val chosen = MutableStateFlow<CardSettings?>(null)
-    private val current: Flow<CardSettings> = combine(settings.cardSettings, chosen) { saved, mine -> mine ?: saved }
-    private val theme = MutableStateFlow(ThemeChoice.CALIDO)
+    private val chosen: StateFlow<String?> = savedStateHandle.getStateFlow(CHOSEN_KEY, null)
+    private val current: Flow<CardSettings> = combine(settings.cardSettings, chosen) { saved, mine -> mine?.let(::decodeChosen) ?: saved }
+    private val theme: Flow<ThemeChoice> = savedStateHandle.getStateFlow(THEME_KEY, ThemeChoice.CALIDO.name)
+        .map { name -> ThemeChoice.entries.firstOrNull { it.name == name } ?: ThemeChoice.CALIDO }
     private val busy = MutableStateFlow(false)
 
     private data class Inputs(val recipe: Recipe?, val emoji: String, val photo: Bitmap?, val settings: CardSettings, val theme: ThemeChoice)
@@ -137,11 +148,16 @@ class CardViewModel(
             settings = i.settings,
             recipeHasPhoto = r.coverPhoto != null,
             preview = buildPreview(r, i.emoji, i.photo, i.settings, i.theme),
+            photoUnreadable = r.coverPhoto != null && i.photo == null && i.settings.options.photo && !i.settings.asText,
         )
     }.flowOn(Dispatchers.Default)
 
-    val state: StateFlow<CardUiState> = combine(built.onStart { emit(CardUiState()) }, busy) { s, b -> s.copy(busy = b) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CardUiState())
+    /**
+     * Se calcula mientras viva el ViewModel (no solo con la pantalla a la vista): al volver del selector de
+     * «Compartir» o de «Guardar» la vista previa sigue ahí, sin parpadear ni volver a cargarse.
+     */
+    val state: StateFlow<CardUiState> = combine(built, busy) { s, b -> s.copy(busy = b) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, CardUiState())
 
     private val _events = Channel<CardEvent>(Channel.BUFFERED)
     val events: Flow<CardEvent> = _events.receiveAsFlow()
@@ -165,13 +181,16 @@ class CardViewModel(
     }
 
     fun setTheme(choice: ThemeChoice) {
-        theme.value = choice
+        savedStateHandle[THEME_KEY] = choice.name
     }
 
+    /** Hasta que llegan las opciones guardadas los toques no cuentan: las de serie nunca las pisan. */
     private fun update(transform: (CardSettings) -> CardSettings) {
-        val base = chosen.value ?: state.value.settings
+        val s = state.value
+        if (s.loading) return
+        val base = chosen.value?.let(::decodeChosen) ?: s.settings
         val next = transform(base)
-        chosen.value = next
+        savedStateHandle[CHOSEN_KEY] = encodeChosen(next)
         writeScope.launch {
             try {
                 settings.setCardSettings(next)
@@ -212,10 +231,12 @@ class CardViewModel(
                 when (preview) {
                     is CardPreview.Text -> CardEvent.ShareText(preview.text)
                     else -> withContext(Dispatchers.IO) {
-                        val dir = File(cacheDir, CARD_FILES_DIR).apply { mkdirs() }
                         val format = formatOf(preview)
+                        val bytes = render(preview)
+                        // Una carpeta por vez: una app que aún lee la ficha anterior no ve cómo se sobrescribe.
+                        val dir = File(File(cacheDir, CARD_FILES_DIR), UUID.randomUUID().toString()).apply { mkdirs() }
                         val file = File(dir, cardFileName(s.title, format))
-                        file.outputStream().use { render(preview, it) }
+                        file.writeBytes(bytes)
                         CardEvent.ShareFile(file, format.mimeType)
                     }
                 }
@@ -236,21 +257,26 @@ class CardViewModel(
      * falla, se avisa y el documento, si quedó vacío, se borra.
      */
     fun save(uri: String) {
-        val preview = state.value.preview
-        if (preview == null || preview is CardPreview.Text || !busy.compareAndSet(expect = false, update = true)) {
+        if (!busy.compareAndSet(expect = false, update = true)) {
             writeScope.launch { deleteDocumentIfEmpty(documents, uri) }
             return
         }
         viewModelScope.launch {
             val message = try {
+                // Al volver del selector la vista previa puede estar aún calculándose (o rehaciéndose si Android
+                // cerró el proceso): se espera un tiempo acotado.
+                val ready = withTimeoutOrNull(CARD_SAVE_WAIT_MS) { state.first { !it.loading && (it.preview != null || it.missing) } }
+                val preview = ready?.preview
+                if (preview == null || preview is CardPreview.Text) throw IOException("La ficha no está lista")
                 withContext(Dispatchers.IO) {
-                    val bytes = ByteArrayOutputStream().also { render(preview, it) }.toByteArray()
+                    val bytes = render(preview)
                     documents.openOutput(uri).use { it.write(bytes) }
                 }
                 CARD_SAVED
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.e("Ficha", "No se pudo guardar la ficha", e)
                 withContext(Dispatchers.IO) { deleteDocumentIfEmpty(documents, uri) }
                 CARD_SAVE_FAILED
             } finally {
@@ -266,22 +292,30 @@ class CardViewModel(
         is CardPreview.Text -> error("El texto no es un archivo")
     }
 
-    private fun render(p: CardPreview, out: java.io.OutputStream) {
-        when (p) {
-            is CardPreview.Image -> {
-                val bitmap = renderCardImage(p.layout, p.look, painter, p.photo)
-                try {
-                    writePng(bitmap, out)
-                } finally {
-                    bitmap.recycle()
-                }
+    /** El archivo entero en memoria: se comprueba antes de tocar ningún archivo ni documento. */
+    private fun render(p: CardPreview): ByteArray = when (p) {
+        is CardPreview.Image -> {
+            val bitmap = renderCardImage(p.layout, p.look, painter, p.photo)
+            try {
+                ByteArrayOutputStream().also { writePng(bitmap, it) }.toByteArray()
+            } finally {
+                bitmap.recycle()
             }
-            is CardPreview.Pdf -> writeCardPdf(p.pages, p.look, painter, p.photo, out)
-            is CardPreview.Text -> out.write(p.text.toByteArray())
         }
+        is CardPreview.Pdf -> cardPdfBytes(p.pages, p.look, painter, p.photo)
+        is CardPreview.Text -> p.text.toByteArray()
     }
 
     companion object {
+        private const val CHOSEN_KEY = "card-chosen"
+        private const val THEME_KEY = "card-theme"
+        private const val TEXT_PREFIX = "TEXT>"
+
+        private fun encodeChosen(s: CardSettings) = (if (s.asText) TEXT_PREFIX else "") + s.options.encode()
+
+        private fun decodeChosen(text: String) =
+            CardSettings(CardOptions.decode(text.removePrefix(TEXT_PREFIX)), asText = text.startsWith(TEXT_PREFIX))
+
         fun factory(container: AppContainer, painter: CardPainter, cacheDir: File, recipeId: String, servings: Int): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
@@ -295,6 +329,7 @@ class CardViewModel(
                         cacheDir = cacheDir,
                         documents = container.backupDocuments,
                         writeScope = container.applicationScope,
+                        savedStateHandle = createSavedStateHandle(),
                     )
                 }
             }
