@@ -82,7 +82,7 @@ class WeekViewModelTest {
         // Con calor, el desayuno y la comida son lo fresco.
         assertThat(firstTwo(hot)).containsExactly("gazpacho", "ensalada")
 
-        runBlocking { container.mealPlanRepository.removeAll(hot.map { it.id }) }
+        runBlocking { container.mealPlanRepository.removeAdded(hot) }
         val cold = runBlocking { vm(day(4.0, -2.0)).fill() }
         assertThat(firstTwo(cold)).containsExactly("caldo", "guiso")
     }
@@ -101,5 +101,25 @@ class WeekViewModelTest {
         assertThat(state.offset).isEqualTo(2)
         assertThat(state.title).isEqualTo("Semana del 23 de noviembre")
         assertThat(state.days.first().date).isEqualTo(LocalDate.of(2026, 11, 23))
+    }
+
+    /**
+     * «Deshacer» de «Rellenar» después de cambiar a mano la receta de un hueco recién rellenado: ese hueco se queda
+     * con lo elegido; los demás se quitan.
+     */
+    @Test
+    fun undoFill_keepsASlotChangedByHand() {
+        container = installTestContainer(clock = sundayClock)
+        seed()
+        val vm = vm(day(20.0, 12.0))
+        val added = runBlocking { vm.fill() }
+        assertThat(added).isNotEmpty()
+        val changed = added.first()
+        val other = if (changed.recipeId == "caldo") "guiso" else "caldo"
+        runBlocking { vm.set(changed.date, changed.slot, other, 3) }
+
+        runBlocking { vm.undoFill(added) }
+        val left = runBlocking { container.mealPlanRepository.observeWeek(sunday.minusDays(6)).first() }
+        assertThat(left).containsExactly(PlannedMeal(changed.id, changed.date, changed.slot, other, 3))
     }
 }

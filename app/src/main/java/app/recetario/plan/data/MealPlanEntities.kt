@@ -68,16 +68,17 @@ interface MealPlanDao {
     @Query("UPDATE meal_plan SET recipeId = :recipeId, servings = :servings WHERE id = :id")
     suspend fun updateSlot(id: String, recipeId: String, servings: Int)
 
-    /** Inserta si el hueco `(date, slot)` (y el id) están libres; -1 si no. Nunca pisa otro plato. */
     /** Suma [delta] a las porciones del hueco, entre [min] y [max], en la base de datos (dos toques seguidos suman dos). */
     @Query("UPDATE meal_plan SET servings = MAX(:min, MIN(:max, servings + :delta)) WHERE date = :date AND slot = :slot")
     suspend fun addServings(date: String, slot: String, delta: Int, min: Int, max: Int)
 
+    /** Inserta si el hueco `(date, slot)` (y el id) están libres; -1 si no. Nunca pisa otro plato. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIfFree(item: MealPlanEntity): Long
 
-    @Query("DELETE FROM meal_plan WHERE id IN (:ids)")
-    suspend fun deleteIds(ids: List<String>)
+    /** Quita el plato [id] solo si aún tiene la receta [recipeId] (si se cambió a mano, se queda). */
+    @Query("DELETE FROM meal_plan WHERE id = :id AND recipeId = :recipeId")
+    suspend fun deleteIfStill(id: String, recipeId: String)
 
     @Query("SELECT EXISTS(SELECT 1 FROM recipes WHERE id = :recipeId)")
     suspend fun recipeExists(recipeId: String): Boolean

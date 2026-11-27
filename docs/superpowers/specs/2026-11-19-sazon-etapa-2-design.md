@@ -57,7 +57,7 @@ El usuario vive en **México**. Por eso las estaciones, el calendario de tempora
 | Cómo se entrega | A) Toda la etapa 2 de una vez · B) Cuatro entregas con APK | **B** (aprobada por el usuario) | Es unas tres veces la etapa 1. Con B el usuario prueba antes y los errores salen pronto. |
 | Estaciones en el trópico | A) Cuatro estaciones astronómicas · B) Secas y lluvias | **B** (decisión de Claude) | En México (\|lat\| < 23,5° en gran parte, y clima tropical o subtropical en casi todo el país) lo que cambia de verdad la comida es la lluvia y el calor, no la primavera o el otoño. Fuera del trópico se siguen usando las 4 estaciones meteorológicas del diseño general. |
 | Red | A) Ktor/Retrofit · B) `HttpURLConnection` | **B** (decisión de Claude) | Son dos llamadas GET a una API sin clave; una biblioteca solo añadiría peso. |
-| Imagen de la ficha | A) Dibujar a mano en un `Canvas` · B) Componer la ficha en Compose y capturarla | **B** (decisión de Claude) | La vista previa y la imagen son la misma composición: lo que se ve es lo que se comparte. |
+| Imagen de la ficha | A) Dibujar a mano en un `Canvas` · B) Componer la ficha en Compose y capturarla | **A** (cambiada al implementar la 2C; antes, B) | Un solo pintor (`CardPainter`, con `StaticLayout`) dibuja la vista previa, el PNG y el PDF, y el mismo `StaticLayout` mide para la maquetación: lo medido es lo dibujado y lo que se ve es lo que se comparte. Es determinista y no necesita componer fuera de la pantalla. |
 | PDF de la ficha | A) Capturar una imagen y meterla en el PDF · B) `android.graphics.pdf.PdfDocument` dibujando texto | **B** (decisión de Claude) | Con B el texto es nítido a cualquier tamaño, se puede seleccionar y el archivo pesa poco. Las páginas largas se parten. |
 | Widget | A) `RemoteViews` clásico · B) Jetpack Glance | **B** (decisión de Claude) | Glance se escribe como Compose y es la vía oficial actual. |
 | Manos libres | A) Solo voz · B) Solo gesto · C) Gesto (sensor de proximidad) y voz en el teléfono | **C** (decisión de Claude) | El gesto funciona en cualquier móvil y con ruido. La voz sin internet solo es fiable desde Android 12 (`createOnDeviceSpeechRecognizer`). Así nadie se queda sin manos libres. |
@@ -292,8 +292,8 @@ Sustituyen a «compartir como imagen» del diseño general.
 - **Memoria:** las últimas opciones elegidas se recuerdan (§6.3).
 - **Implementación:**
   - la maquetación es lógica pura donde se pueda (qué cabe, qué se recorta, cómo se parte en páginas), en `logic/.../share/`, con pruebas;
-  - la imagen se compone en Compose fuera de la pantalla y se captura con `GraphicsLayer`;
-  - el PDF se dibuja con `PdfDocument` y `StaticLayout`.
+  - ~~la imagen se compone en Compose fuera de la pantalla y se captura con `GraphicsLayer`~~ (cambiado en la 2C): la vista previa, la imagen PNG y el PDF se dibujan con un solo `CardPainter` (`StaticLayout` y las fuentes de la app), que también mide para la maquetación (§4);
+  - el PDF se dibuja con `PdfDocument` y `StaticLayout`, detrás de la interfaz `CardPdfDocument` (las pruebas la sustituyen: Robolectric no implementa `PdfDocument`).
 
 ### 7.8 Widgets (2D)
 

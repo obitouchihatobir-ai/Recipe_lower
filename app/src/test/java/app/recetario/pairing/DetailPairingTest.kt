@@ -64,7 +64,7 @@ class DetailPairingTest {
     private fun launchDetail(id: String) = rule.setContent {
         RecetarioTheme(ThemeChoice.CALIDO) {
             DetailRoute(
-                container, id, onBack = {}, onEdit = {}, onCooking = {},
+                container, id, onBack = {}, onEdit = {}, onCooking = {}, onShare = {},
                 onMorePairings = { more++ },
                 onComparePairing = { compared = it },
             )

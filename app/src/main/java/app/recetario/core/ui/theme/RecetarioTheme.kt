@@ -8,9 +8,13 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.lerp
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.motion.rememberSystemReducedMotion
+
+/** El tema con el que se compone (ya resuelto: Automático, sol…). Lo usa el diseño «Tema» de la ficha. */
+val LocalThemeChoice = staticCompositionLocalOf { ThemeChoice.CALIDO }
 
 @Composable
 fun RecetarioTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
@@ -23,6 +27,7 @@ fun RecetarioTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
         LocalRecetarioColors provides colors,
         LocalRecetarioShapes provides shapes,
         LocalReducedMotion provides reducedMotion,
+        LocalThemeChoice provides choice,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

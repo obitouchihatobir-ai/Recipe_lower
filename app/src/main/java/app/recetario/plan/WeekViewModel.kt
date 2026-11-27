@@ -60,6 +60,9 @@ data class WeekState(
 ) {
     val hasRecipes: Boolean get() = recipes.isNotEmpty()
 
+    /** Una semana ya pasada: «Rellenar» y «Generar lista» solo miran desde hoy, así que no hay nada que hacer. */
+    val isPast: Boolean get() = offset < 0
+
     fun slot(date: LocalDate, slot: MealSlot): WeekSlotView? =
         days.firstOrNull { it.date == date }?.slots?.firstOrNull { it.slot == slot }
 }
@@ -194,8 +197,11 @@ class WeekViewModel(
         plan.addAll(proposed)
     }
 
-    /** «Deshacer» de «Rellenar con sugerencias»: quita exactamente lo que se añadió. */
-    suspend fun undoFill(added: List<PlannedMeal>) = plan.removeAll(added.map { it.id })
+    /**
+     * «Deshacer» de «Rellenar con sugerencias»: quita lo que se añadió, salvo los huecos a los que se les cambió la
+     * receta a mano desde entonces.
+     */
+    suspend fun undoFill(added: List<PlannedMeal>) = plan.removeAdded(added)
 
     /**
      * «Generar lista de compra»: los ingredientes de la semana que se ve, desde hoy, sin la despensa ni los básicos,

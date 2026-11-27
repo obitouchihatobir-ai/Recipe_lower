@@ -1,7 +1,5 @@
 package app.recetario.share
 
-import android.content.ActivityNotFoundException
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
@@ -69,8 +67,7 @@ import app.recetario.AppContainer
 import app.recetario.core.ui.components.ChoiceChip
 import app.recetario.core.ui.motion.LocalReducedMotion
 import app.recetario.core.ui.theme.LocalRecetarioColors
-import app.recetario.core.ui.theme.ThemeChoice
-import app.recetario.core.ui.theme.paletteFor
+import app.recetario.core.ui.theme.LocalThemeChoice
 import app.recetario.settings.SettingsPage
 import java.io.File
 
@@ -82,14 +79,8 @@ val CardFlipAngle = SemanticsPropertyKey<Float>("CardFlipAngle")
 private var SemanticsPropertyReceiver.cardFlipAngle by CardFlipAngle
 
 const val PHOTO_DROPPED_TEXT = "La foto no cabe con tanto texto"
+const val PHOTO_UNREADABLE_TEXT = "No se pudo leer la foto"
 const val NO_PHOTO_TEXT = "La receta no tiene foto"
-
-/** El tema con el que se compone ahora (para el diseño «Tema»). */
-@Composable
-fun currentThemeChoice(): ThemeChoice {
-    val colors = LocalRecetarioColors.current
-    return ThemeChoice.entries.firstOrNull { paletteFor(it) === colors } ?: ThemeChoice.CALIDO
-}
 
 @Composable
 fun CardRoute(
@@ -101,13 +92,15 @@ fun CardRoute(
     painter: CardPainter? = null,
     /** El `content://` del archivo que se comparte (las pruebas pasan uno falso). */
     uriFor: ((File) -> Uri)? = null,
+    /** Abre el selector de compartir (las pruebas pasan uno que falla). */
+    startShare: ((Intent) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext
-    val cardPainter = remember(app, painter) { painter ?: CardPainter(CardFonts(app)) }
+    val cardPainter = remember(app, painter) { painter ?: CardPainter(CardFonts(app), newPdf = container.newCardPdf) }
     val vm: CardViewModel = viewModel(factory = CardViewModel.factory(container, cardPainter, app.cacheDir, recipeId, servings))
     val state by vm.state.collectAsStateWithLifecycle()
-    val theme = currentThemeChoice()
+    val theme = LocalThemeChoice.current
     LaunchedEffect(theme) { vm.setTheme(theme) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -120,13 +113,17 @@ fun CardRoute(
     LaunchedEffect(vm) {
         vm.events.collect { e ->
             when (e) {
-                is CardEvent.ShareFile -> {
-                    val intent = runCatching {
-                        cardShareIntent(context, e.file, e.mimeType, uriFor ?: { cardFileUri(context, it) })
-                    }.onFailure { Log.e("Ficha", "No se pudo publicar la ficha", it) }.getOrNull()
-                    if (intent == null) snackbar.showSnackbar(CARD_SHARE_FAILED) else startChooser(context, intent)
+                is CardEvent.ShareFile, is CardEvent.ShareText -> {
+                    // Cualquier fallo al publicar el archivo o al abrir el selector se avisa (y se anota).
+                    val opened = runCatching {
+                        val intent = when (e) {
+                            is CardEvent.ShareFile -> cardShareIntent(context, e.file, e.mimeType, uriFor ?: { container.cardUri(context, it) })
+                            else -> textShareIntent((e as CardEvent.ShareText).text)
+                        }
+                        (startShare ?: { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) })(intent)
+                    }.onFailure { Log.e("Ficha", "No se pudo abrir el selector para compartir", it) }.isSuccess
+                    if (!opened) snackbar.showSnackbar(CARD_SHARE_FAILED)
                 }
-                is CardEvent.ShareText -> startChooser(context, textShareIntent(e.text))
                 is CardEvent.Message -> snackbar.showSnackbar(e.text)
             }
         }
@@ -151,17 +148,6 @@ fun CardRoute(
     )
 }
 
-private fun startChooser(context: Context, intent: Intent) {
-    try {
-        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (_: ActivityNotFoundException) {
-        // Sin apps para compartir: no hay nada que hacer.
-    } catch (e: RuntimeException) {
-        // Un selector que no se puede abrir (p. ej. SecurityException) no cierra la app.
-        Log.e("Ficha", "No se pudo abrir el selector para compartir", e)
-    }
-}
-
 /** La pantalla Ficha sin ViewModel (la usan la ruta y las capturas). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -184,6 +170,8 @@ fun CardContent(
     val c = LocalRecetarioColors.current
     val s = state.settings
     val o = s.options
+    // Hasta que llegan las opciones guardadas, los chips no se tocan (las de serie no las pisan).
+    val ready = !state.loading
     SettingsPage(title = "Ficha", onBack = onBack, tag = "card-screen", modifier = modifier, snackbar = snackbar) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 18.dp, vertical = 8.dp),
@@ -197,22 +185,27 @@ fun CardContent(
             Box(Modifier.fillMaxWidth().heightIn(min = 120.dp), contentAlignment = Alignment.Center) {
                 if (preview != null) FlippingPreview(preview, painter)
             }
-            if ((preview as? CardPreview.Image)?.layout?.photoDropped == true) {
-                Text(PHOTO_DROPPED_TEXT, color = c.muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("card-photo-dropped"))
+            val hint = when {
+                state.photoUnreadable -> PHOTO_UNREADABLE_TEXT
+                (preview as? CardPreview.Image)?.layout?.photoDropped == true -> PHOTO_DROPPED_TEXT
+                else -> null
+            }
+            if (hint != null) {
+                Text(hint, color = c.muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("card-photo-hint"))
             }
 
             Group("Formato")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ChoiceChip("Texto", s.asText, onText, Modifier.testTag("card-format-TEXT"), role = Role.RadioButton)
+                ChoiceChip("Texto", s.asText, onText, Modifier.testTag("card-format-TEXT"), role = Role.RadioButton, enabled = ready)
                 CardFormat.entries.forEach { f ->
-                    ChoiceChip(f.label, !s.asText && o.format == f, { onFormat(f) }, Modifier.testTag("card-format-${f.name}"), role = Role.RadioButton)
+                    ChoiceChip(f.label, !s.asText && o.format == f, { onFormat(f) }, Modifier.testTag("card-format-${f.name}"), role = Role.RadioButton, enabled = ready)
                 }
             }
             if (!s.asText) {
                 Group("Diseño")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     CardDesign.entries.forEach { d ->
-                        ChoiceChip(d.label, o.design == d, { onDesign(d) }, Modifier.testTag("card-design-${d.name}"), role = Role.RadioButton)
+                        ChoiceChip(d.label, o.design == d, { onDesign(d) }, Modifier.testTag("card-design-${d.name}"), role = Role.RadioButton, enabled = ready)
                     }
                 }
                 Group("Incluir")
@@ -223,20 +216,20 @@ fun CardContent(
                         onClick = { onPhoto(!o.photo) },
                         modifier = Modifier.testTag("card-photo"),
                         role = Role.Switch,
-                        enabled = state.recipeHasPhoto,
+                        enabled = ready && state.recipeHasPhoto,
                         stateDescription = if (state.recipeHasPhoto) null else NO_PHOTO_TEXT,
                     )
-                    ChoiceChip("Pasos", o.steps, { onSteps(!o.steps) }, Modifier.testTag("card-steps"), role = Role.Switch)
-                    ChoiceChip("Notas", o.notes, { onNotes(!o.notes) }, Modifier.testTag("card-notes"), role = Role.Switch)
-                    ChoiceChip("Sabor", o.flavor, { onFlavor(!o.flavor) }, Modifier.testTag("card-flavor"), role = Role.Switch)
+                    ChoiceChip("Pasos", o.steps, { onSteps(!o.steps) }, Modifier.testTag("card-steps"), role = Role.Switch, enabled = ready)
+                    ChoiceChip("Notas", o.notes, { onNotes(!o.notes) }, Modifier.testTag("card-notes"), role = Role.Switch, enabled = ready)
+                    ChoiceChip("Sabor", o.flavor, { onFlavor(!o.flavor) }, Modifier.testTag("card-flavor"), role = Role.Switch, enabled = ready)
                 }
             }
 
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val ready = preview != null && !state.busy
+                val canAct = preview != null && !state.busy
                 Button(
                     onClick = onShare,
-                    enabled = ready,
+                    enabled = canAct,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("card-share"),
                     colors = ButtonDefaults.buttonColors(containerColor = c.accent, contentColor = c.onAccent),
                 ) {
@@ -250,7 +243,7 @@ fun CardContent(
                 if (!s.asText) {
                     OutlinedButton(
                         onClick = onSave,
-                        enabled = ready,
+                        enabled = canAct,
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("card-save"),
                         border = BorderStroke(1.dp, c.accent),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = c.accent),

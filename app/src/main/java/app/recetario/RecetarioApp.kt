@@ -27,6 +27,9 @@ import app.recetario.pantry.PantryRepository
 import app.recetario.plan.MealPlanRepository
 import app.recetario.plan.RoomMealPlanRepository
 import app.recetario.pantry.RoomPantryRepository
+import app.recetario.share.AndroidPdfDocument
+import app.recetario.share.CardPdfDocument
+import app.recetario.share.cardFileUri
 import app.recetario.share.clearCardFiles
 import app.recetario.shopping.RoomShoppingRepository
 import app.recetario.shopping.ShoppingRepository
@@ -39,12 +42,14 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import app.recetario.weather.AndroidLocationProvider
 import app.recetario.weather.DefaultWeatherRepository
 import app.recetario.weather.LocationProvider
 import app.recetario.weather.OpenMeteoClient
 import app.recetario.weather.WeatherRepository
 import java.io.File
+import android.net.Uri
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Clock
@@ -73,7 +78,9 @@ class RecetarioApp : Application() {
         ).prepare()
         container = AppContainer(this)
         // Las fichas compartidas la vez anterior ya no hacen falta (las apps que las recibieron ya las copiaron).
-        clearCardFiles(cacheDir)
+        // Fuera del hilo principal, y solo las de antes de arrancar: nunca una que se acaba de compartir.
+        val startedAt = System.currentTimeMillis()
+        container.applicationScope.launch(Dispatchers.IO) { clearCardFiles(cacheDir, olderThan = startedAt) }
         // WorkManager se inicia solo (androidx.startup) antes de onCreate. En las pruebas de Robolectric no se
         // ejecutan los proveedores del manifiesto: ahí no está iniciado y no se programa nada.
         if (WorkManager.isInitialized()) {
@@ -107,6 +114,10 @@ class AppContainer(
     openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
     /** Ubicación aproximada del teléfono (sin Play Services); las pruebas pasan una falsa. */
     locationProvider: LocationProvider = AndroidLocationProvider(context),
+    /** Crea el PDF de las fichas; las pruebas pasan uno falso (Robolectric no implementa `PdfDocument`). */
+    val newCardPdf: () -> CardPdfDocument = { AndroidPdfDocument() },
+    /** El `content://` de una ficha que se comparte; las pruebas pasan uno falso (Robolectric no lee el `FileProvider`). */
+    val cardUri: (Context, File) -> Uri = ::cardFileUri,
 ) {
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")

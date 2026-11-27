@@ -33,8 +33,11 @@ interface MealPlanRepository {
      */
     suspend fun addAll(meals: List<PlannedMeal>): List<PlannedMeal>
 
-    /** Quita los platos con esos ids (deshacer «Rellenar con sugerencias»). */
-    suspend fun removeAll(ids: Collection<String>)
+    /**
+     * Deshace «Rellenar con sugerencias»: quita esos platos, pero solo los que siguen con la receta que se añadió (un
+     * hueco cambiado a mano desde entonces se queda con lo elegido).
+     */
+    suspend fun removeAdded(meals: Collection<PlannedMeal>)
 }
 
 class RoomMealPlanRepository(private val db: AppDatabase) : MealPlanRepository {
@@ -71,10 +74,9 @@ class RoomMealPlanRepository(private val db: AppDatabase) : MealPlanRepository {
         }
     }
 
-    override suspend fun removeAll(ids: Collection<String>) {
-        if (ids.isEmpty()) return
-        // SQLite admite 999 variables por consulta: de 500 en 500.
-        db.withTransaction { ids.chunked(500).forEach { dao.deleteIds(it) } }
+    override suspend fun removeAdded(meals: Collection<PlannedMeal>) {
+        if (meals.isEmpty()) return
+        db.withTransaction { meals.forEach { dao.deleteIfStill(it.id, it.recipeId) } }
     }
 
     companion object {

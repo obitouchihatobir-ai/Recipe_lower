@@ -57,7 +57,7 @@ class DetailDiaryTest {
 
     private fun launch() = rule.setContent {
         RecetarioTheme(ThemeChoice.CALIDO) {
-            DetailRoute(container, "r1", onBack = {}, onEdit = {}, onCooking = {})
+            DetailRoute(container, "r1", onBack = {}, onEdit = {}, onCooking = {}, onShare = {})
         }
     }
 

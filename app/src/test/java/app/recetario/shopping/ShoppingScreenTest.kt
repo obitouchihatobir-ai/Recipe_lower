@@ -250,6 +250,9 @@ class ShoppingScreenTest {
         rule.waitFor(hasText("Arroz"))
         rule.onNodeWithText("Arroz").performClick()
         rule.waitFor(hasText("A la despensa"))
+        // El aviso sale al tocar, pero la marca llega de Room en otro hilo. Sin esperarla, el segundo toque podía ver
+        // aún «Arroz» sin marcar y tomarse por otro «marcar» (vuelve a ofrecer «A la despensa»): intermitente en CI.
+        rule.waitFor(hasText("Vaciar marcados"))
 
         // Con el reloj quieto: si se cerrara solo por tiempo (4 s), seguiría ahí tras medio segundo.
         rule.mainClock.autoAdvance = false

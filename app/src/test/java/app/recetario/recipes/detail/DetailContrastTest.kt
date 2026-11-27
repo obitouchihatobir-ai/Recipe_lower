@@ -71,7 +71,7 @@ class DetailContrastTest {
 
     private fun checkContrast(theme: ThemeChoice) {
         rule.setContent {
-            RecetarioTheme(theme) { DetailRoute(container, "r1", onBack = {}, onEdit = {}, onCooking = {}) }
+            RecetarioTheme(theme) { DetailRoute(container, "r1", onBack = {}, onEdit = {}, onCooking = {}, onShare = {}) }
         }
         rule.waitFor(hasText("Mantequilla"))
         rule.onNodeWithText("Mantequilla").performClick() // marcado: tachado

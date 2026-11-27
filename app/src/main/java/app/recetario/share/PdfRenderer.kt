@@ -61,3 +61,17 @@ fun writeCardPdf(
         if (scaled !== photo) scaled?.recycle()
     }
 }
+
+/**
+ * El PDF entero en memoria, comprobado: si `PdfDocument` no escribe nada o no escribe un PDF (empieza por «%PDF»),
+ * lanza `IOException` y no se comparte ni se guarda nada.
+ */
+fun cardPdfBytes(pages: List<PdfPage>, look: CardLook, painter: CardPainter, photo: Bitmap?): ByteArray {
+    val bytes = java.io.ByteArrayOutputStream().also { writeCardPdf(pages, look, painter, photo, it) }.toByteArray()
+    if (!isPdf(bytes)) throw java.io.IOException("El PDF de la ficha salió vacío o dañado (${bytes.size} bytes)")
+    return bytes
+}
+
+/** Si [bytes] empieza como un PDF. */
+fun isPdf(bytes: ByteArray): Boolean =
+    bytes.size > 4 && bytes.copyOfRange(0, 4).contentEquals("%PDF".toByteArray(Charsets.US_ASCII))

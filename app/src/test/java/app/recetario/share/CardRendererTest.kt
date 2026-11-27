@@ -66,6 +66,16 @@ internal object CardSamples {
     }
 }
 
+/** Tiempos medidos en las pruebas: se imprimen y se apuntan en `build/capturas/fichas/tiempos.txt` (artefacto de CI). */
+internal object CardTimes {
+    fun record(label: String, millis: Long) {
+        val line = "$label: $millis ms"
+        println("[tiempos-ficha] $line")
+        val dir = File(System.getProperty("user.dir"), "build/capturas/fichas").apply { mkdirs() }
+        File(dir, "tiempos.txt").appendText(line + "\n")
+    }
+}
+
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class CardRendererTest {
@@ -84,8 +94,12 @@ class CardRendererTest {
     fun share_png_writesFileOfExactSize() {
         val sizes = mapOf(CardFormat.SQUARE to (1080 to 1080), CardFormat.STORY to (1080 to 1920), CardFormat.LANDSCAPE to (1500 to 1000))
         for (format in imageFormats) {
+            val start = System.nanoTime()
             val (_, bitmap) = image(CardSamples.short(), format, CardDesign.CLASSIC, CardSamples.photo())
+            val drawn = System.nanoTime()
             val bytes = ByteArrayOutputStream().also { writePng(bitmap, it) }.toByteArray()
+            CardTimes.record("maquetar y dibujar $format", (drawn - start) / 1_000_000)
+            CardTimes.record("codificar PNG $format (${bytes.size} bytes)", (System.nanoTime() - drawn) / 1_000_000)
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             assertWithMessage("$format").that(bounds.outWidth to bounds.outHeight).isEqualTo(sizes.getValue(format))
@@ -166,10 +180,38 @@ class CardRendererTest {
     @Test
     fun cacheFichas_clearedOnStart() {
         val dir = File(context.cacheDir, CARD_FILES_DIR).apply { mkdirs() }
-        val old = File(dir, "Sazon-vieja.png").apply { writeText("x") }
+        val old = File(File(dir, "vieja").apply { mkdirs() }, "Sazon-vieja.png").apply {
+            writeText("x")
+            setLastModified(System.currentTimeMillis() - 60_000)
+        }
         val other = File(context.cacheDir, "otra-cosa.txt").apply { writeText("y") }
         context.onCreate()
+        // Se vacía en segundo plano (no en el hilo principal).
+        val deadline = System.currentTimeMillis() + 10_000
+        while (old.exists() && System.currentTimeMillis() < deadline) Thread.sleep(10)
         assertThat(old.exists()).isFalse()
         assertThat(other.exists()).isTrue()
+    }
+
+    /** Una ficha compartida después de arrancar (más nueva que el arranque) no se borra. */
+    @Test
+    fun clearCardFiles_keepsNewerThanStart() {
+        val dir = File(context.cacheDir, CARD_FILES_DIR)
+        val old = File(File(dir, "a").apply { mkdirs() }, "vieja.png").apply { writeText("x"); setLastModified(1_000) }
+        val fresh = File(File(dir, "b").apply { mkdirs() }, "nueva.png").apply { writeText("y"); setLastModified(9_000) }
+        clearCardFiles(context.cacheDir, olderThan = 5_000)
+        assertThat(old.exists()).isFalse()
+        assertThat(fresh.exists()).isTrue()
+    }
+
+    /** Una carpeta de compartir recién creada (aún vacía, con el archivo a punto de escribirse) no se borra. */
+    @Test
+    fun clearCardFiles_keepsAnEmptyFolderNewerThanStart() {
+        val dir = File(context.cacheDir, CARD_FILES_DIR)
+        val fresh = File(dir, "recien").apply { mkdirs(); setLastModified(9_000) }
+        val stale = File(dir, "vieja").apply { mkdirs(); setLastModified(1_000) }
+        clearCardFiles(context.cacheDir, olderThan = 5_000)
+        assertThat(fresh.exists()).isTrue()
+        assertThat(stale.exists()).isFalse()
     }
 }

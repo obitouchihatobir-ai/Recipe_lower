@@ -98,7 +98,7 @@ fun DetailRoute(
     onEdit: () -> Unit,
     onCooking: (servings: Int) -> Unit,
     /** «Compartir»: la pantalla Ficha con las porciones elegidas. */
-    onShare: (servings: Int) -> Unit = {},
+    onShare: (servings: Int) -> Unit,
     /** «Ver más» del maridaje (null: sin el botón). */
     onMorePairings: (() -> Unit)? = null,
     /** Tocar una pareja del maridaje: la rueda comparativa. */
