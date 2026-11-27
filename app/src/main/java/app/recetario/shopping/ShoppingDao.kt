@@ -41,6 +41,9 @@ interface ShoppingDao {
     @Query("UPDATE shopping_items SET checked = NOT checked WHERE id = :id")
     suspend fun toggle(id: String)
 
+    @Query("UPDATE shopping_items SET checked = 1 WHERE id = :id")
+    suspend fun check(id: String)
+
     @Query("SELECT * FROM shopping_items WHERE id = :id")
     suspend fun get(id: String): ShoppingItemEntity?
 

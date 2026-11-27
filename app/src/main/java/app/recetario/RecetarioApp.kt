@@ -38,6 +38,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import app.recetario.settings.SettingsRepository
 import app.recetario.settings.createSettingsDataStore
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,8 @@ import app.recetario.weather.DefaultWeatherRepository
 import app.recetario.weather.LocationProvider
 import app.recetario.weather.OpenMeteoClient
 import app.recetario.weather.WeatherRepository
+import app.recetario.widget.GlanceWidgetUpdates
+import app.recetario.widget.WidgetUpdates
 import java.io.File
 import android.net.Uri
 import java.net.HttpURLConnection
@@ -67,6 +70,14 @@ class RecetarioApp : Application() {
      */
     @Volatile
     var upgrade: GuardResult = GuardResult.Ready
+
+    /**
+     * Se completa al final de [onCreate], con la guarda ya pasada y [container] creado. Los widgets y sus trabajos lo
+     * esperan ([awaitStarted]) antes de mirar [upgrade]: así nunca leen el `Ready` inicial de antes de la guarda.
+     */
+    private val started = CompletableDeferred<Unit>()
+
+    suspend fun awaitStarted() = started.await()
 
     override fun onCreate() {
         super.onCreate()
@@ -88,6 +99,7 @@ class RecetarioApp : Application() {
         } else {
             Log.w("RecetarioApp", "WorkManager no está iniciado: no se programa la copia semanal")
         }
+        started.complete(Unit)
     }
 }
 
@@ -118,6 +130,8 @@ class AppContainer(
     val newCardPdf: () -> CardPdfDocument = { AndroidPdfDocument() },
     /** El `content://` de una ficha que se comparte; las pruebas pasan uno falso (Robolectric no lee el `FileProvider`). */
     val cardUri: (Context, File) -> Uri = ::cardFileUri,
+    /** Avisa a los widgets de que cambió lo que muestran; las pruebas pasan uno que solo cuenta. */
+    val widgetUpdates: WidgetUpdates = GlanceWidgetUpdates(context.applicationContext),
 ) {
     val photoStore = PhotoStore(File(context.filesDir, "photos"))
     val draftsDir = File(context.filesDir, "drafts")
@@ -146,7 +160,8 @@ class AppContainer(
         DefaultWeatherRepository(settingsRepository, OpenMeteoClient(openConnection), locationProvider, clock)
 
     /** El tamaño de la taza sale de los ajustes. */
-    val shoppingRepository: ShoppingRepository = RoomShoppingRepository(database, clock, settingsRepository.cupMl)
+    val shoppingRepository: ShoppingRepository =
+        RoomShoppingRepository(database, clock, settingsRepository.cupMl, onChanged = widgetUpdates::shoppingChanged)
 
     /** Valoraciones de maridaje (👍/👎) y lo que necesitan sus pantallas (recetas propias y catálogo). */
     val pairingRepository: PairingRepository = RoomPairingRepository(database, recipeRepository, clock)

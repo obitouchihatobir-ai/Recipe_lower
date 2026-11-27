@@ -27,6 +27,9 @@ interface ShoppingRepository {
     suspend fun addLines(lines: List<ShoppingItem>): Int
     suspend fun toggle(id: String)
 
+    /** Lo marca (si ya lo estaba, lo deja así): el círculo del widget «Compra», que puede verse con un dato viejo. */
+    suspend fun check(id: String)
+
     /** Borra el artículo y devuelve su estado actual (leído en la misma transacción) para poder deshacerlo. */
     suspend fun delete(id: String): ShoppingItem?
 
@@ -40,10 +43,15 @@ interface ShoppingRepository {
     suspend fun restore(items: List<ShoppingItem>)
 }
 
+/**
+ * La lista en Room. [onChanged] se llama tras cada cambio que se escribe (avisa a los widgets «Compra», diseño 2,
+ * §7.8); no debe bloquear.
+ */
 class RoomShoppingRepository(
     private val db: AppDatabase,
     private val clock: Clock,
     private val cupMl: Flow<Int>,
+    private val onChanged: () -> Unit = {},
 ) : ShoppingRepository {
     private val dao = db.shoppingDao()
 
@@ -103,23 +111,33 @@ class RoomShoppingRepository(
             val changed = mergeInto(existing, incoming, cup).filter { before[it.id] != it }
             dao.upsert(changed.map { it.toEntity() })
         }
+        onChanged()
     }
 
-    override suspend fun toggle(id: String) = dao.toggle(id)
+    override suspend fun toggle(id: String) = changing { dao.toggle(id) }
 
-    override suspend fun delete(id: String): ShoppingItem? = db.withTransaction {
-        val row = dao.get(id)?.toModel()
-        dao.delete(id)
-        row
+    override suspend fun check(id: String) = changing { dao.check(id) }
+
+    override suspend fun delete(id: String): ShoppingItem? = changing {
+        db.withTransaction {
+            val row = dao.get(id)?.toModel()
+            dao.delete(id)
+            row
+        }
     }
 
-    override suspend fun setSection(id: String, section: ShopSection) = dao.setSection(id, section)
+    override suspend fun setSection(id: String, section: ShopSection) = changing { dao.setSection(id, section) }
 
-    override suspend fun clearChecked(): List<ShoppingItem> = db.withTransaction {
-        val checked = dao.getAll().filter { it.checked }.map { it.toModel() }
-        dao.deleteChecked()
-        checked
+    override suspend fun clearChecked(): List<ShoppingItem> = changing {
+        db.withTransaction {
+            val checked = dao.getAll().filter { it.checked }.map { it.toModel() }
+            dao.deleteChecked()
+            checked
+        }
     }
 
-    override suspend fun restore(items: List<ShoppingItem>) = dao.upsert(items.map { it.toEntity() })
+    override suspend fun restore(items: List<ShoppingItem>) = changing { dao.upsert(items.map { it.toEntity() }) }
+
+    /** Escribe y, si salió bien, avisa a los widgets. */
+    private suspend inline fun <T> changing(write: () -> T): T = write().also { onChanged() }
 }

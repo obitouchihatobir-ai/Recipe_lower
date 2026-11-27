@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Sazón</string>
+    <string name="widget_today_label">Hoy</string>
+    <string name="widget_today_description">El plato que te propone Sazón para este momento del día.</string>
+    <string name="widget_shopping_label">Compra</string>
+    <string name="widget_shopping_description">Lo que falta en tu lista de la compra.</string>
 </resources>

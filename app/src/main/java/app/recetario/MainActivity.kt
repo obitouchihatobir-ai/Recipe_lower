@@ -33,6 +33,8 @@ import app.recetario.core.ui.theme.ThemeRevealHost
 import app.recetario.navigation.AppNavHost
 import app.recetario.settings.rememberResolvedTheme
 import app.recetario.settings.themeInputs
+import app.recetario.widget.AppOpen
+import app.recetario.widget.requestTodayWidgetUpdate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -57,6 +59,9 @@ class MainActivity : ComponentActivity() {
     /** Null hasta abrir la base de datos (o saber que no se puede): hasta entonces no se pinta nada. */
     private var startup by mutableStateOf<Startup?>(null)
 
+    /** Lo que pidió abrir un widget (el detalle de un plato o Compra), hasta que la navegación lo abre. */
+    private var widgetOpen by mutableStateOf<AppOpen?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // La pantalla de arranque se queda mientras se leen los ajustes (antes no se pinta nada). Al irse, el icono
         // sube y se desvanece; sin animaciones del sistema, se quita sin más.
@@ -80,6 +85,8 @@ class MainActivity : ComponentActivity() {
         // Abierta desde un aviso «⏱ ¡Tiempo!»: ese temporizador se apaga (solo la primera vez, no al girar; nunca
         // si Android repite el intent al reabrir desde Recientes, ni si ese paso vuelve a estar en marcha).
         if (savedInstanceState == null) TimerNotifications.dismissFromIntent(intent, container.timerManager)
+        // Abierta desde un widget: solo la primera vez (al girar ya se abrió).
+        if (savedInstanceState == null) widgetOpen = AppOpen.from(intent)
         // Lista en cuanto se leen los ajustes (los mismos que espera el tema). Se mira el flujo, fuera del hilo
         // principal, y no la composición: mientras la pantalla de arranque cancela los dibujados, el hilo principal
         // no para (en las pruebas, además, es el que mueve el reloj de Compose).
@@ -88,6 +95,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 startup = openDatabase(app, container)
+                // Con la base de datos lista, el widget «Hoy» (si hay alguno) se pone al día.
+                if (startup == Startup.Ready) requestTodayWidgetUpdate(applicationContext)
                 // Los mismos datos que espera el tema (ajustes y, con el tema según el sol, la previsión guardada).
                 container.themeInputs().first()
             } finally {
@@ -118,7 +127,7 @@ class MainActivity : ComponentActivity() {
                 ThemeRevealHost(theme, origin, onOriginConsumed = { origin = null }) { shown ->
                     RecetarioTheme(shown) {
                         when (started) {
-                            Startup.Ready -> AppNavHost(container)
+                            Startup.Ready -> AppNavHost(container, open = widgetOpen, onOpenHandled = { widgetOpen = null })
                             is Startup.Error -> UpgradeErrorRoute(container, started.message, started.copyFileName, started.saveDatabase)
                         }
                     }
@@ -150,5 +159,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         TimerNotifications.dismissFromIntent(intent, (application as RecetarioApp).container.timerManager)
+        AppOpen.from(intent)?.let { widgetOpen = it }
+    }
+
+    override fun onRestart() {
+        super.onRestart()
+        // Al volver a la app (no en el primer arranque, que lo hace tras abrir la base de datos).
+        if (startup == Startup.Ready) requestTodayWidgetUpdate(applicationContext)
     }
 }

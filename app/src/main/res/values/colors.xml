@@ -2,4 +2,6 @@
 <resources>
     <!-- El fondo (bg) del tema Cálido, como el crema del icono. -->
     <color name="arranque_fondo">#F6EFE6</color>
+    <!-- El círculo de los artículos del widget «Compra»: el acento de Cálido (y el de Nocturno en values-night). -->
+    <color name="widget_check">#A64932</color>
 </resources>

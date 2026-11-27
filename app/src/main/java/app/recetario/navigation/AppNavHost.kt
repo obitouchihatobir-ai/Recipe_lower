@@ -66,6 +66,7 @@ import app.recetario.pantry.WhatCanIMakeRoute
 import app.recetario.settings.PantryBasicsRoute
 import app.recetario.settings.LocationWeatherRoute
 import app.recetario.settings.MealTimesRoute
+import app.recetario.widget.AppOpen
 
 private const val FADE_MS = 250
 
@@ -80,7 +81,18 @@ fun AppNavHost(
     navController: NavHostController = rememberNavController(),
     // Guardar una receta: aviso «✓ Receta guardada» y rebote de su tarjeta al volver (Inicio o Recetas).
     saveCelebration: SaveCelebration = remember { SaveCelebration() },
+    // Un toque en un widget (el plato de «Hoy» o el título de «Compra»): se abre una vez y se avisa con [onOpenHandled].
+    open: AppOpen? = null,
+    onOpenHandled: () -> Unit = {},
 ) {
+    LaunchedEffect(open) {
+        when (open) {
+            null -> return@LaunchedEffect
+            is AppOpen.Recipe -> navController.navigate(RecipeDetail(open.id)) { launchSingleTop = true }
+            AppOpen.Shopping -> navController.navigateToTab(Tab.SHOPPING)
+        }
+        onOpenHandled()
+    }
     val reduced = LocalReducedMotion.current
     val entry by navController.currentBackStackEntryAsState()
     val currentTab = Tab.entries.firstOrNull { tab ->

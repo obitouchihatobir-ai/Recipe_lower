@@ -23,9 +23,7 @@ import app.recetario.today.momentAt
 import app.recetario.today.nextExclude
 import app.recetario.today.planToday
 import app.recetario.today.recipeIn
-import app.recetario.today.todayContext
 import app.recetario.today.todayEyebrow
-import app.recetario.today.todayInputs
 import app.recetario.today.todaySeed
 import app.recetario.today.todaySlots
 import app.recetario.today.weatherChipDescription
@@ -98,29 +96,8 @@ data class TodayState(
  */
 private data class TodayPick(val key: String, val exclude: List<String>, val round: Int)
 
-private data class TodayPrefs(
-    val pantry: List<String>,
-    val basics: List<String>,
-    val mealTimes: MealTimes,
-    val thresholds: ThermalThresholds,
-)
-
 /** Lo que decide el menú: los datos, el día, el momento y «Otra idea» (el minuto exacto no cuenta). */
-private data class TodayKey(val data: TodayData, val day: LocalDate, val moment: Moment, val pick: TodayPick)
-
-/** Todo lo que el motor de Hoy necesita, ya leído. */
-private data class TodayData(
-    val summaries: List<RecipeSummary>,
-    val categories: List<Category>,
-    val stats: Map<String, CookStats>,
-    val pantry: List<String>,
-    val basics: List<String>,
-    val mealTimes: MealTimes,
-    val thresholds: ThermalThresholds,
-    val weather: WeatherSnapshot?,
-    val place: Place?,
-    val ratings: Map<String, Boolean>,
-)
+private data class TodayKey(val data: TodaySources, val day: LocalDate, val moment: Moment, val pick: TodayPick)
 
 /**
  * La tarjeta Hoy de Inicio (diseño 2, §7.3). El menú se calcula en [dispatcher] (fuera del hilo principal) cada vez que
@@ -156,13 +133,10 @@ class TodayViewModel(
 
     private val now: Flow<Instant> = ticks.onStart { emit(Unit) }.map { clock.instant() }
 
-    private val data: Flow<TodayData> = combine(
-        combine(summaries, categories, stats) { s, c, st -> Triple(s, c, st) },
-        combine(pantry, basics, mealTimes, thresholds) { p, b, m, t -> TodayPrefs(p.map { it.name }, b, m, t) },
-        combine(weather, place, ratings) { w, pl, r -> Triple(w, pl, r) },
-    ) { (s, c, st), prefs, (w, pl, r) ->
-        TodayData(s, c, st, prefs.pantry, prefs.basics, prefs.mealTimes, prefs.thresholds, w, pl, r)
-    }
+    private val data: Flow<TodaySources> = todaySources(
+        summaries, categories, stats, pantry.map { items -> items.map { it.name } }, basics, mealTimes, thresholds,
+        weather, place, ratings,
+    )
 
     /**
      * El reloj solo cuenta por el día y el momento: el motor no usa más de `ctx.now` que la fecha, así que con el mismo
@@ -212,11 +186,9 @@ class TodayViewModel(
         // Otro día u otro momento: empieza de cero.
         val p = stored.takeIf { it.key == key } ?: TodayPick(key, emptyList(), 0)
         val current = d.weather?.current
-        val ctx = todayContext(k.day, moment, d.place?.latitude, d.thresholds, current)
+        val (ctx, menu) = planTodayFor(d, k.day, moment, p.exclude, p.round, plan)
         val season = ctx.season
         val byCategory = d.categories.associateBy { it.id }
-        val inputs = todayInputs(d.summaries, d.categories, d.stats, d.pantry, d.basics, d.ratings)
-        val menu = plan(ctx, inputs, p.exclude, Random(todaySeed(k.day, moment, p.round)))
         val byId = d.summaries.associateBy { it.id }
         val items = todaySlots(moment).map { slot ->
             TodayCardItem(
@@ -273,8 +245,7 @@ class TodayViewModel(
                     thresholds = container.settingsRepository.thermalThresholds,
                     weather = container.weatherRepository.snapshot,
                     place = container.weatherRepository.location(),
-                    ratings = container.database.pairingRatingDao().observeAll()
-                        .map { rows -> rows.associate { it.pairKey to it.liked } },
+                    ratings = container.pairingLikes(),
                     refresh = { container.weatherRepository.refresh() },
                     clock = container.clock,
                     handle = createSavedStateHandle(),

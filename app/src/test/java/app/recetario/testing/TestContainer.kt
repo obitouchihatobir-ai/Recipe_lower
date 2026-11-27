@@ -18,6 +18,7 @@ import app.recetario.RecetarioApp
 import app.recetario.backup.BackupDocuments
 import app.recetario.backup.ContentResolverDocuments
 import app.recetario.weather.LocationProvider
+import app.recetario.widget.WidgetUpdates
 import app.recetario.share.CardPdfDocument
 import app.recetario.share.FakePdfDocument
 import app.recetario.share.cardFileUri
@@ -65,6 +66,8 @@ fun installTestContainer(
     cardPdf: () -> CardPdfDocument = { FakePdfDocument() },
     /** El `content://` de las fichas compartidas; null: el `FileProvider` de verdad. */
     cardUri: ((Context, File) -> Uri)? = null,
+    /** Los avisos a los widgets: por defecto, solo se cuentan (Robolectric no tiene widgets ni WorkManager). */
+    widgetUpdates: WidgetUpdates = RecordingWidgetUpdates(),
 ): AppContainer {
     val app = ApplicationProvider.getApplicationContext<RecetarioApp>()
     val db = database ?: Room.inMemoryDatabaseBuilder(app, AppDatabase::class.java)
@@ -80,7 +83,20 @@ fun installTestContainer(
         locationProvider = location,
         newCardPdf = cardPdf,
         cardUri = cardUri ?: { context, file -> cardFileUri(context, file) },
+        widgetUpdates = widgetUpdates,
     ).also { app.container = it }
+}
+
+/** Cuenta los avisos a los widgets «Compra» (cada cambio de la lista). */
+class RecordingWidgetUpdates : WidgetUpdates {
+    @Volatile
+    var shoppingChanges = 0
+        private set
+
+    @Synchronized
+    override fun shoppingChanged() {
+        shoppingChanges++
+    }
 }
 
 /** Ajustes (o estado del teléfono) en un archivo temporal propio de cada contenedor de prueba. */

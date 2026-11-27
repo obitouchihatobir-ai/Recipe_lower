@@ -54,6 +54,30 @@
             android:name=".cooking.TimerDismissReceiver"
             android:exported="false" />
 
+        <!-- Widgets «Hoy» y «Compra» (Glance, diseño 2 §7.8). Los avisos de los widgets los envía el sistema. -->
+        <receiver
+            android:name=".widget.TodayWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_today_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.ShoppingWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_shopping_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/shopping_widget_info" />
+        </receiver>
+
         <!-- La cámara guarda la foto en cacheDir/camera/ (file_paths.xml) a través de este proveedor. -->
         <provider
             android:name="androidx.core.content.FileProvider"
