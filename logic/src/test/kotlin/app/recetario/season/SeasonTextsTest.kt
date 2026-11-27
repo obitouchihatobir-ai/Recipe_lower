@@ -34,4 +34,26 @@ class SeasonTextsTest {
             "noviembre", "diciembre",
         ).inOrder()
     }
+
+    @Test
+    fun monthLabel_capitalized() {
+        assertThat(seasonMonthLabel(1)).isEqualTo("Enero")
+        assertThat(seasonMonthLabel(11)).isEqualTo("Noviembre")
+    }
+
+    @Test
+    fun recipeCount_text() {
+        assertThat(seasonRecipeCount(0)).isEqualTo("Sin recetas")
+        assertThat(seasonRecipeCount(1)).isEqualTo("1 receta")
+        assertThat(seasonRecipeCount(3)).isEqualTo("3 recetas")
+    }
+
+    @Test
+    fun kindTitle_andDescription() {
+        assertThat(ProduceKind.entries.map { produceKindTitle(it) })
+            .containsExactly("Frutas", "Verduras", "Chiles", "Hierbas").inOrder()
+        // TalkBack lee el nombre del producto, nunca el del emoji (🍈 de la guayaba se leería «melón»).
+        assertThat(produceDescription(p("g", "Guayaba", "BBBBBBBBBBBB"), 2)).isEqualTo("Guayaba, 2 recetas")
+        assertThat(produceDescription(p("g", "Guayaba", "BBBBBBBBBBBB"), 0)).isEqualTo("Guayaba, sin recetas")
+    }
 }

@@ -53,10 +53,16 @@ class TodayViewModelTest {
         Category(DefaultCategories.DESSERT_ID, "Postres", "🍮", "#B5733A", BaseType.DESSERT, 2, true),
     )
 
-    private fun summary(id: String, title: String, category: String = DefaultCategories.FOOD_ID, sweet: Int = 0) = RecipeSummary(
+    private fun summary(
+        id: String,
+        title: String,
+        category: String = DefaultCategories.FOOD_ID,
+        sweet: Int = 0,
+        ingredients: List<String> = emptyList(),
+    ) = RecipeSummary(
         id = id, title = title, categoryId = category, coverPhoto = null, totalMinutes = 30,
         flavor = FlavorProfile(sweet = sweet), serveTemp = ServeTemp.HOT, moments = emptySet(), alcoholic = null,
-        difficulty = Difficulty.EASY, favorite = false, tags = emptyList(), ingredientNames = emptyList(),
+        difficulty = Difficulty.EASY, favorite = false, tags = emptyList(), ingredientNames = ingredients,
         updatedAt = Instant.EPOCH, servings = 4,
     )
 
@@ -183,5 +189,24 @@ class TodayViewModelTest {
         ratings.value = mapOf(listOf("RECIPE:sopa", "RECIPE:$before").sorted().joinToString("|") to false)
         runCurrent()
         assertThat(drink()).isEqualTo(other)
+    }
+    @Test
+    fun today_inSeasonRecipe_preferred() = runTest(dispatcher) {
+        // Tres platos iguales salvo los ingredientes: la crema lleva calabaza y chayote, en su mejor momento en
+        // noviembre (+8, más que el azar del motor, 6 como mucho).
+        val recipes = listOf(
+            summary("crema", "Crema de calabaza", ingredients = listOf("calabaza", "chayote", "leche")),
+            summary("tacos", "Tacos de canasta", ingredients = listOf("tortillas", "frijoles")),
+            summary("arroz", "Arroz blanco", ingredients = listOf("arroz", "agua")),
+        )
+        val vm = vm(recipes)
+        collect(vm)
+        // Cinco cenas seguidas (cada una con su semilla): siempre manda la de temporada.
+        for (day in 13..17) {
+            clock.now = Instant.parse("2026-11-${day}T20:40:00Z")
+            ticks.emit(Unit)
+            runCurrent()
+            assertThat(vm.state.value.lead!!.id).isEqualTo("crema")
+        }
     }
 }

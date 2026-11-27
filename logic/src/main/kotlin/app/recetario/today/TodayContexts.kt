@@ -4,6 +4,9 @@ import app.recetario.diary.CookStats
 import app.recetario.recipes.model.Category
 import app.recetario.recipes.model.Moment
 import app.recetario.recipes.model.RecipeSummary
+import app.recetario.season.Produce
+import app.recetario.season.SeasonCalendar
+import app.recetario.season.inSeasonBonus
 import app.recetario.weather.CurrentWeather
 import app.recetario.weather.DailyForecast
 import app.recetario.weather.weatherKind
@@ -12,7 +15,9 @@ import java.time.LocalDate
 
 /**
  * Lo que el motor de Hoy necesita de las recetas y la casa, ya leído (lo comparten la tarjeta Hoy y «Rellenar con
- * sugerencias» de la Semana). Una receta sin categoría cuenta como comida.
+ * sugerencias» de la Semana). Una receta sin categoría cuenta como comida. Con [seasonMonth] (1–12, el mes del
+ * contexto), las recetas con productos de temporada de ese mes reciben el empujón de [inSeasonBonus] (diseño de la
+ * etapa 2, §7.10); sin él, ninguno.
  */
 fun todayInputs(
     summaries: List<RecipeSummary>,
@@ -21,6 +26,8 @@ fun todayInputs(
     pantry: List<String>,
     basics: List<String>,
     ratings: Map<String, Boolean>,
+    seasonMonth: Int? = null,
+    calendar: List<Produce> = SeasonCalendar.load(),
 ): TodayInputs {
     val baseTypes = categories.associate { it.id to it.baseType }
     return TodayInputs(
@@ -28,6 +35,11 @@ fun todayInputs(
         stats = stats,
         pantry = pantry,
         basics = basics,
+        inSeasonBonus = if (seasonMonth == null) {
+            { 0.0 }
+        } else {
+            { recipe -> inSeasonBonus(recipe, seasonMonth, calendar) }
+        },
         ratings = ratings,
     )
 }

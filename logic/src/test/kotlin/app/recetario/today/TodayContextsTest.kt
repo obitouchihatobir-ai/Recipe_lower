@@ -95,4 +95,23 @@ class TodayContextsTest {
         assertEquals(listOf("sal"), inputs.basics)
         assertEquals(mapOf("k" to true), inputs.ratings)
     }
+    @Test
+    fun todayInputs_seasonMonth_givesTheSeasonBonus() {
+        fun summary(id: String, vararg ingredients: String) = RecipeSummary(
+            id, id, "comidas", null, null, FlavorProfile(), null, emptySet(), null, Difficulty.EASY, false,
+            emptyList(), ingredients.toList(), Instant.EPOCH,
+        )
+        val recipes = listOf(summary("crema", "calabaza", "chayote"), summary("arroz", "arroz"))
+        val november = todayInputs(recipes, emptyList(), emptyMap(), emptyList(), emptyList(), emptyMap(), seasonMonth = 11)
+        val (crema, arroz) = november.recipes
+        // Calabaza y chayote, en su mejor momento en noviembre: +4 cada uno (tope +8).
+        assertEquals(8.0, november.inSeasonBonus(crema), 0.0)
+        assertEquals(0.0, november.inSeasonBonus(arroz), 0.0)
+        // En julio solo «hay» las dos: +1 cada una.
+        val july = todayInputs(recipes, emptyList(), emptyMap(), emptyList(), emptyList(), emptyMap(), seasonMonth = 7)
+        assertEquals(2.0, july.inSeasonBonus(july.recipes[0]), 0.0)
+        // Sin mes (por defecto), sin empujón.
+        val none = todayInputs(recipes, emptyList(), emptyMap(), emptyList(), emptyList(), emptyMap())
+        assertEquals(0.0, none.inSeasonBonus(none.recipes[0]), 0.0)
+    }
 }

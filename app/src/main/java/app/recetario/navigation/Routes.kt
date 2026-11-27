@@ -85,3 +85,7 @@ data object LocationWeather
 /** Ajustes › Horarios de comidas. */
 @Serializable
 data object MealTimesSettings
+
+/** «De temporada» (desde la tarjeta pequeña de Inicio). */
+@Serializable
+data object Season

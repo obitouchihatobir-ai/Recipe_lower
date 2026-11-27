@@ -38,6 +38,13 @@ fun recipesUsing(produce: Produce, recipes: List<RecipeSummary>, calendar: List<
     return recipes.count { produce.id in producesIn(it.ingredientNames, all) }
 }
 
+/**
+ * Cuántas recetas usan cada producto (id → recetas; los que no usa ninguna no salen). Da lo mismo que [recipesUsing]
+ * con cada producto, pero mira cada receta una sola vez.
+ */
+fun seasonRecipeCounts(recipes: List<RecipeSummary>, calendar: List<Produce>): Map<String, Int> =
+    recipes.flatMap { producesIn(it.ingredientNames, calendar) }.groupingBy { it }.eachCount()
+
 const val SEASON_BEST_BONUS = 4.0
 const val SEASON_AVAILABLE_BONUS = 1.0
 const val SEASON_MAX_BONUS = 8.0

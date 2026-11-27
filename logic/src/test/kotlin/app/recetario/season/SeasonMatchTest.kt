@@ -136,4 +136,20 @@ class SeasonMatchTest {
         val cal = listOf(p("a", "Guayaba"), p("b", "Mandarina"), p("c", "Calabaza"))
         assertThat(inSeasonBonus(today("guayaba", "mandarina", "calabaza"), 3, cal)).isEqualTo(8.0)
     }
+
+    @Test
+    fun recipeCounts_sameAsRecipesUsing() {
+        val recipes = listOf(
+            summary("crema", "calabacitas", "elote"),
+            summary("quesadillas", "flores de calabaza", "queso"),
+            summary("salsa", "tomate verde", "chile poblano"),
+            summary("arroz", "arroz", "jitomate"),
+        )
+        val counts = seasonRecipeCounts(recipes, small)
+        for (produce in small) {
+            assertWithMessage(produce.id).that(counts[produce.id] ?: 0).isEqualTo(recipesUsing(produce, recipes, small))
+        }
+        assertThat(counts["calabaza"]).isEqualTo(1)
+        assertThat(counts).doesNotContainKey("cana")
+    }
 }

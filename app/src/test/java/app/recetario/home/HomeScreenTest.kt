@@ -7,6 +7,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.isSelected
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.recetario.AppContainer
 import app.recetario.core.ui.theme.RecetarioTheme
@@ -121,5 +123,21 @@ class HomeScreenTest {
         assertThat(recent.top).isGreaterThan(card.bottom - 1.dp)
         // Al entrar se pidió el tiempo una vez (en segundo plano).
         assertThat(fake.forecastRequests).hasSize(1)
+    }
+    @Test
+    fun homeTeaser_opensSeason() {
+        recipes("sopa" to "Sopa de tortilla")
+        launch()
+
+        // La tarjeta pequeña de temporada (el reloj de prueba es el 13 de noviembre).
+        rule.waitFor(hasTestTag("home-season"))
+        rule.onNodeWithTag("home-grid").performScrollToNode(hasTestTag("home-season"))
+        rule.waitFor(hasText("De temporada en noviembre: guayaba, mandarina, calabaza…"))
+        // Toda la tarjeta es un botón de 48 dp o más.
+        assertThat(rule.onNodeWithTag("home-season").getBoundsInRoot().let { it.bottom - it.top }).isAtLeast(48.dp)
+        rule.onNodeWithTag("home-season").performClick()
+
+        rule.waitFor(hasTestTag("season-screen"))
+        rule.waitFor(hasTestTag("season-month-11") and isSelected())
     }
 }
