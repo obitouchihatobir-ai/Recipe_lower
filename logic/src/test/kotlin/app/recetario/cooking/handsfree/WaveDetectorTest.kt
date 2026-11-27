@@ -89,4 +89,39 @@ class WaveDetectorTest {
         assertThat(d.onProximity(near = false, atMs = 500)).isFalse()
         assertThat(d.onProximity(near = false, atMs = 700)).isTrue()
     }
+
+    @Test
+    fun gesture_reset_forgetsEverything() {
+        // En pausa tras un gesto: reset la quita.
+        val d = WaveDetector()
+        d.onProximity(near = false, atMs = 0)
+        d.onProximity(near = true, atMs = 100)
+        assertThat(d.onProximity(near = false, atMs = 300)).isTrue()
+        d.reset()
+        d.onProximity(near = false, atMs = 400)
+        d.onProximity(near = true, atMs = 500)
+        assertThat(d.onProximity(near = false, atMs = 700)).isTrue()
+
+        // Tapado a medias: tras reset, destaparlo no completa un gesto (hay que leer «lejos» otra vez).
+        val e = WaveDetector()
+        e.onProximity(near = false, atMs = 0)
+        e.onProximity(near = true, atMs = 100)
+        e.reset()
+        assertThat(e.onProximity(near = false, atMs = 300)).isFalse()
+
+        // Sin «lejos» desde el reset: encender el sensor tapado no es un gesto.
+        val f = WaveDetector()
+        f.onProximity(near = false, atMs = 0)
+        f.reset()
+        assertThat(f.onProximity(near = true, atMs = 100)).isFalse()
+        assertThat(f.onProximity(near = false, atMs = 200)).isFalse()
+
+        // También olvida la última hora: tras reiniciar con otro reloj, una hora menor vale.
+        val g = WaveDetector()
+        g.onProximity(near = false, atMs = 10_000)
+        g.reset()
+        g.onProximity(near = false, atMs = 0)
+        g.onProximity(near = true, atMs = 100)
+        assertThat(g.onProximity(near = false, atMs = 200)).isTrue()
+    }
 }

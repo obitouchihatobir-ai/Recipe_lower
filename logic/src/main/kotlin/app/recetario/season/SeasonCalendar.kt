@@ -9,7 +9,10 @@ enum class Availability { BEST, AVAILABLE, OUT }
 
 enum class ProduceKind { FRUIT, VEGETABLE, CHILE, HERB }
 
-/** Un producto del calendario: [months] tiene 12 valores, de enero a diciembre. */
+/**
+ * Un producto del calendario: [months] tiene 12 valores, de enero a diciembre. [excludes]: frases que, si están en un
+ * ingrediente, hacen que ese ingrediente no cuente para el producto («leche de coco», «uva pasa»).
+ */
 data class Produce(
     val id: String,
     val name: String,
@@ -17,6 +20,7 @@ data class Produce(
     val kind: ProduceKind,
     val synonyms: List<String>,
     val months: List<Availability>,
+    val excludes: List<String> = emptyList(),
 ) {
     init {
         require(months.size == 12) { "$id: hacen falta 12 meses" }
@@ -30,7 +34,8 @@ data class Produce(
 
 /**
  * Calendario de temporada de los mercados del centro y el occidente de México (`season/mexico.json` del classpath),
- * en el orden del archivo. Los meses se escriben como 12 letras: `B` en su mejor momento, `A` hay, `-` no es temporada.
+ * en el orden del archivo. **El orden importa:** lo primero de cada mes es lo que nombra la tarjeta de Inicio
+ * ([seasonTeaser]); por eso guayaba, mandarina y calabaza van al principio. Los meses se escriben como 12 letras: `B` en su mejor momento, `A` hay, `-` no es temporada.
  */
 object SeasonCalendar {
     private val items: List<Produce> by lazy {
@@ -64,10 +69,11 @@ private data class ProduceEntry(
     val kind: ProduceKind,
     val synonyms: List<String> = emptyList(),
     val months: String,
+    val excludes: List<String> = emptyList(),
 ) {
     fun toProduce(): Produce {
         require(months.length == 12) { "$id: los meses deben ser 12 letras" }
-        return Produce(id, name, emoji, kind, synonyms, months.map {
+        return Produce(id, name, emoji, kind, synonyms, excludes = excludes, months = months.map {
             when (it) {
                 'B' -> Availability.BEST
                 'A' -> Availability.AVAILABLE

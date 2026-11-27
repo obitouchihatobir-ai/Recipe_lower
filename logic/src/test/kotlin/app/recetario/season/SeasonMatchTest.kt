@@ -6,6 +6,7 @@ import app.recetario.recipes.model.FlavorProfile
 import app.recetario.recipes.model.RecipeSummary
 import app.recetario.today.TodayRecipe
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import java.time.Instant
 import org.junit.Test
 
@@ -15,7 +16,7 @@ class SeasonMatchTest {
         months = months.map { if (it == 'B') Availability.BEST else if (it == 'A') Availability.AVAILABLE else Availability.OUT },
     )
 
-    private val elote = p("elote", "Elote", "maíz", "mazorca")
+    private val elote = p("elote", "Elote", "mazorca")
     private val jitomate = p("jitomate", "Jitomate", "tomate", "tomate rojo")
     private val tomateVerde = p("tomate-verde", "Tomate verde", "tomatillo", "tomate de cáscara")
     private val calabaza = p("calabaza", "Calabaza", "calabacita")
@@ -37,7 +38,7 @@ class SeasonMatchTest {
 
     @Test
     fun match_synonyms() {
-        assertThat(producesIn(listOf("Granos de MAÍZ"), small)).containsExactly("elote")
+        assertThat(producesIn(listOf("Mazorcas"), small)).containsExactly("elote")
         assertThat(producesIn(listOf("2 elotes tiernos"), small)).containsExactly("elote")
         assertThat(producesIn(listOf("Tomates maduros"), small)).containsExactly("jitomate")
         assertThat(producesIn(listOf("jitomate"), small)).containsExactly("jitomate")
@@ -75,9 +76,38 @@ class SeasonMatchTest {
     }
 
     @Test
+    fun match_looseWords_realCalendar() {
+        val cal = SeasonCalendar.load()
+        // El maíz seco, la harina o las tortillas no son elote.
+        for (i in listOf("Harina de maíz", "Tortillas de maíz", "maíz pozolero", "Fécula de maíz")) {
+            assertWithMessage(i).that(producesIn(listOf(i), cal)).isEmpty()
+        }
+        // Productos que no son el fresco de temporada.
+        for (i in listOf(
+            "Leche de coco", "Crema de coco", "Uvas pasas", "pasas", "Moras azules", "mora azul", "Col morada",
+            "Coles de Bruselas", "Pimienta", "pimienta negra molida", "Pimienta gorda",
+        )) assertWithMessage(i).that(producesIn(listOf(i), cal)).isEmpty()
+        // Lo fresco sigue contando.
+        assertThat(producesIn(listOf("Coco rallado"), cal)).containsExactly("coco")
+        assertThat(producesIn(listOf("Uvas verdes"), cal)).containsExactly("uva")
+        assertThat(producesIn(listOf("Moras"), cal)).containsExactly("zarzamora")
+        assertThat(producesIn(listOf("Col blanca"), cal)).containsExactly("col")
+        assertThat(producesIn(listOf("Pimiento rojo"), cal)).containsExactly("pimiento-morron")
+        assertThat(producesIn(listOf("Elote"), cal)).containsExactly("elote")
+    }
+
+    @Test
+    fun match_excludesPerIngredient() {
+        val coco = Produce("coco", "Coco", "🥥", ProduceKind.FRUIT, emptyList(), List(12) { Availability.BEST }, listOf("leche de coco"))
+        assertThat(producesIn(listOf("leche de coco"), listOf(coco))).isEmpty()
+        // La exclusión vale para ese ingrediente, no para la receta entera.
+        assertThat(producesIn(listOf("leche de coco", "coco fresco"), listOf(coco))).containsExactly("coco")
+    }
+
+    @Test
     fun recipesUsing_countsRecipes() {
         val recipes = listOf(
-            summary("1", "Elote", "Maíz"), summary("2", "Granos de elote"), summary("3", "Arroz"),
+            summary("1", "Elote", "Mazorca"), summary("2", "Granos de elote"), summary("3", "Arroz"),
             summary("4", "Maizena"),
         )
         assertThat(recipesUsing(elote, recipes, small)).isEqualTo(2)

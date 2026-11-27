@@ -57,6 +57,14 @@ class SeasonCalendarTest {
     }
 
     @Test
+    fun calendar_fileOrder_pinsNovemberTeaser() {
+        // El orden del archivo decide la tarjeta de Inicio: guayaba, mandarina y calabaza van primero.
+        assertThat(calendar.take(3).map { it.id }).containsExactly("guayaba", "mandarina", "calabaza").inOrder()
+        assertThat(SeasonCalendar.forMonth(11).first.take(3).map { it.id })
+            .containsExactly("guayaba", "mandarina", "calabaza").inOrder()
+    }
+
+    @Test
     fun forMonth_outOfRange_throws() {
         for (m in listOf(0, 13)) {
             val thrown = runCatching { SeasonCalendar.forMonth(m) }.exceptionOrNull()

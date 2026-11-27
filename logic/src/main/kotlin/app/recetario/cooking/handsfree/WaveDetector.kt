@@ -16,6 +16,14 @@ class WaveDetector(
     private var nearSince: Long? = null
     private var blockedUntil: Long = Long.MIN_VALUE
 
+    /** Lo olvida todo (lecturas, gesto a medias y pausa); el modo cocina lo llama cada vez que arranca el sensor. */
+    fun reset() {
+        lastAt = null
+        sawFar = false
+        nearSince = null
+        blockedUntil = Long.MIN_VALUE
+    }
+
     /** Una lectura del sensor; true si con ella se completa un gesto. */
     fun onProximity(near: Boolean, atMs: Long): Boolean {
         lastAt?.let { if (atMs < it) return false }

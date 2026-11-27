@@ -11,11 +11,13 @@ private fun Produce.terms(): List<String> = (listOf(name) + synonyms).filter { p
 /**
  * Productos del calendario que salen en un ingrediente: todas las palabras del nombre o de un sinónimo, completas
  * (con plural básico y sin tildes), en el ingrediente. Si dos coinciden y el término de uno contiene al del otro,
- * gana el más concreto: «tomate verde» es el tomate verde y no el jitomate («tomate»).
+ * gana el más concreto: «tomate verde» es el tomate verde y no el jitomate («tomate»). Un ingrediente que contiene
+ * una de las exclusiones del producto no cuenta para él («leche de coco» no es coco de temporada).
  */
 private fun producesInIngredient(ingredient: String, calendar: List<Produce>): List<Produce> {
     if (pantryKey(ingredient).isEmpty()) return emptyList()
     val matches = calendar.mapNotNull { p ->
+        if (p.excludes.any { wordsWithin(it, ingredient) }) return@mapNotNull null
         val term = p.terms().filter { wordsWithin(it, ingredient) }.maxByOrNull { pantryKey(it).split(' ').size }
         term?.let { p to it }
     }
