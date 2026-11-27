@@ -138,24 +138,26 @@ class TodayWidgetTest {
     )
 
     @Test
-    fun todayWidget_data_matchesCard() = runTest(dispatcher) {
+    fun todayWidget_data_matchesCard() {
         container = installTestContainer()
-        val vm = card()
-        backgroundScope.launch { vm.state.collect {} }
-        runCurrent()
-        val shown = vm.state.value
-        val lead = shown.lead!!
-
         val widget = todayWidgetContent(sources(), now, stored = null) as TodayWidgetContent.Dish
+        runTest(dispatcher) {
+            val vm = card()
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            val shown = vm.state.value
+            val lead = shown.lead!!
 
-        assertThat(widget.recipeId).isEqualTo(lead.id)
-        assertThat(widget.title).isEqualTo(lead.title)
-        assertThat(widget.emoji).isEqualTo(lead.emoji)
-        assertThat(widget.reason).isEqualTo(shown.reason)
-        assertThat(widget.eyebrow).isEqualTo(shown.eyebrow)
+            assertThat(widget.recipeId).isEqualTo(lead.id)
+            assertThat(widget.title).isEqualTo(lead.title)
+            assertThat(widget.emoji).isEqualTo(lead.emoji)
+            assertThat(widget.reason).isEqualTo(shown.reason)
+            assertThat(widget.eyebrow).isEqualTo(shown.eyebrow)
+        }
         assertThat(widget.pick).isEqualTo(WidgetPick("2026-11-13|DINNER", emptyList(), 0))
 
-        // El widget lo pinta: el momento, el plato (que abre su detalle en MainActivity) y su porqué.
+        // El widget lo pinta: el momento, el plato (que abre su detalle en MainActivity) y su porqué. Va fuera de
+        // runTest: la prueba de Glance lleva el suyo.
         runGlanceAppWidgetUnitTest {
             setContext(context)
             provideComposable { TodayWidgetBody(widget) }
@@ -170,21 +172,23 @@ class TodayWidgetTest {
     }
 
     @Test
-    fun todayWidget_anotherIdea() = runTest(dispatcher) {
+    fun todayWidget_anotherIdea() {
         container = installTestContainer()
-        val vm = card()
-        backgroundScope.launch { vm.state.collect {} }
-        runCurrent()
-
         val first = todayWidgetContent(sources(), now, stored = null) as TodayWidgetContent.Dish
         val second = todayWidgetAnotherIdea(sources(), now, first.pick) as TodayWidgetContent.Dish
 
         assertThat(second.recipeId).isNotEqualTo(first.recipeId)
         assertThat(second.pick).isEqualTo(WidgetPick(first.pick.key, listOf(first.recipeId), 1))
         // La misma propuesta que la tarjeta tras «Otra idea».
-        vm.anotherIdea()
-        runCurrent()
-        assertThat(vm.state.value.lead!!.id).isEqualTo(second.recipeId)
+        runTest(dispatcher) {
+            val vm = card()
+            backgroundScope.launch { vm.state.collect {} }
+            runCurrent()
+            assertThat(vm.state.value.lead!!.id).isEqualTo(first.recipeId)
+            vm.anotherIdea()
+            runCurrent()
+            assertThat(vm.state.value.lead!!.id).isEqualTo(second.recipeId)
+        }
 
         // La vuelta va en el estado de Glance: al volver a pintarse (o con el trabajo de cada hora) no salta.
         val prefs = mutablePreferencesOf()
